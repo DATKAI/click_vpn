@@ -8,17 +8,28 @@
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <style>
     [x-cloak] { display: none !important; }
-    .sidebar-link { @apply flex items-center gap-3 px-4 py-2.5 rounded-lg text-gray-300 hover:bg-gray-700 hover:text-white transition-colors cursor-pointer; }
-    .sidebar-link.active { @apply bg-indigo-600 text-white; }
-    .badge-green { @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800; }
-    .badge-red { @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800; }
-    .badge-gray { @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600; }
-    .btn { @apply px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50; }
-    .btn-primary { @apply btn bg-indigo-600 text-white hover:bg-indigo-700; }
-    .btn-danger { @apply btn bg-red-600 text-white hover:bg-red-700; }
-    .btn-gray { @apply btn bg-gray-200 text-gray-800 hover:bg-gray-300; }
-    .input { @apply w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500; }
-    .card { @apply bg-white rounded-xl shadow-sm border border-gray-200 p-6; }
+    .sidebar-link {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 16px; border-radius: 8px;
+      color: #d1d5db; transition: background 0.15s, color 0.15s; cursor: pointer;
+      text-decoration: none;
+    }
+    .sidebar-link:hover { background: #374151; color: #fff; }
+    .sidebar-link.active { background: #4f46e5; color: #fff; }
+    .badge-green { display:inline-flex; align-items:center; padding: 2px 8px; border-radius:4px; font-size:12px; font-weight:500; background:#dcfce7; color:#166534; }
+    .badge-red   { display:inline-flex; align-items:center; padding: 2px 8px; border-radius:4px; font-size:12px; font-weight:500; background:#fee2e2; color:#991b1b; }
+    .badge-gray  { display:inline-flex; align-items:center; padding: 2px 8px; border-radius:4px; font-size:12px; font-weight:500; background:#f3f4f6; color:#4b5563; }
+    .btn { padding: 8px 16px; border-radius: 8px; font-weight: 500; transition: background 0.15s; cursor: pointer; border: none; }
+    .btn:disabled { opacity: 0.5; }
+    .btn-primary { background: #4f46e5; color: #fff; }
+    .btn-primary:hover { background: #4338ca; }
+    .btn-danger  { background: #dc2626; color: #fff; }
+    .btn-danger:hover  { background: #b91c1c; }
+    .btn-gray    { background: #e5e7eb; color: #1f2937; }
+    .btn-gray:hover    { background: #d1d5db; }
+    .input { width:100%; border:1px solid #d1d5db; border-radius:8px; padding:8px 12px; font-size:14px; outline:none; }
+    .input:focus { box-shadow: 0 0 0 2px #6366f1; border-color: #6366f1; }
+    .card { background:#fff; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,0.08); border:1px solid #e5e7eb; padding:24px; }
   </style>
 </head>
 <body class="bg-gray-50 text-gray-900">
