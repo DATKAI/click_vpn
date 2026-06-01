@@ -17,8 +17,7 @@ services:
       - TOKEN_EXPIRE_MINUTES=480
     cap_add:
       - NET_ADMIN      # нужно для OpenVPN (tun устройства)
-    devices:
-      - /dev/net/tun:/dev/net/tun
+      - SYS_MODULE
     sysctls:
       - net.ipv4.ip_forward=1
 
