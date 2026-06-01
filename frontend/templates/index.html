@@ -335,13 +335,12 @@
                 <td style="color:#94a3b8;font-size:12px" x-text="u.cert_expires_at ? formatDate(u.cert_expires_at) : '—'"></td>
                 <td style="padding-right:20px">
                   <div style="display:flex;gap:6px">
-                    <a x-show="u.cert_status==='active'"
-                       :href="'/api/users/' + u.id + '/profile'"
-                       class="btn btn-primary btn-sm"
-                       style="text-decoration:none">
+                    <button x-show="u.cert_status==='active'"
+                       @click="downloadOvpn(u.id, u.username)"
+                       class="btn btn-primary btn-sm">
                       <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
                       .ovpn
-                    </a>
+                    </button>
                     <button x-show="u.cert_status==='active'" @click="revokeUser(u.id)" class="btn btn-danger btn-sm">Отозвать</button>
                   </div>
                 </td>
@@ -506,9 +505,23 @@
       </div>
     </div>
     <div x-show="formError" x-text="formError" class="alert alert-error" style="margin-top:14px"></div>
+
+    <!-- Прогресс генерации DH -->
+    <div x-show="serverCreating" style="margin-top:16px;padding:16px;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:12px;text-align:center">
+      <div style="display:flex;align-items:center;justify-content:center;gap:10px;color:#15803d;font-weight:600;margin-bottom:8px">
+        <svg class="spin" width="20" height="20" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-dasharray="31" stroke-dashoffset="10" opacity=".3"/><path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>
+        Генерация сертификатов... <span x-text="serverCreateTimer + 'с'"></span>
+      </div>
+      <p style="color:#166534;font-size:13px;margin:0">Пожалуйста, не закрывайте и не обновляйте страницу</p>
+    </div>
+
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
-      <button class="btn btn-gray" @click="showCreateServer=false;formError=''">Отмена</button>
-      <button class="btn btn-primary" @click="createServer()">Создать</button>
+      <button class="btn btn-gray" @click="showCreateServer=false;formError=''" :disabled="serverCreating">Отмена</button>
+      <button class="btn btn-primary" @click="createServer()" :disabled="serverCreating">
+        <svg x-show="serverCreating" class="spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-dasharray="31" stroke-dashoffset="10"/></svg>
+        <span x-show="!serverCreating">Создать</span>
+        <span x-show="serverCreating">Создаётся...</span>
+      </button>
     </div>
   </div>
 </div>
@@ -604,6 +617,9 @@ function app() {
     showCreateServer: false,
     showCreateUser: false,
     showCreateCA: false,
+    serverCreating: false,
+    serverCreateTimer: 0,
+    _timerInterval: null,
     serverForm: { name:'', ca_id:'', network:'10.8.0.0', netmask:'255.255.255.0', port:1194, protocol:'udp', dns_servers:'8.8.8.8,8.8.4.4', push_routes:'' },
     userForm: { username:'', email:'', server_id:'', valid_days:365 },
     caForm: { common_name:'', country:'RU', org:'', valid_days:3650 },
@@ -772,6 +788,9 @@ function app() {
     async createServer() {
       this.formError = '';
       if (!this.serverForm.ca_id) { this.formError = 'Выберите CA'; return; }
+      this.serverCreating = true;
+      this.serverCreateTimer = 0;
+      this._timerInterval = setInterval(() => this.serverCreateTimer++, 1000);
       try {
         await this.api('POST', '/servers', {
           ...this.serverForm,
@@ -781,7 +800,12 @@ function app() {
         await this.loadServers();
         this.showCreateServer = false;
         this.serverForm = { name:'', ca_id:'', network:'10.8.0.0', netmask:'255.255.255.0', port:1194, protocol:'udp', dns_servers:'8.8.8.8,8.8.4.4', push_routes:'' };
-      } catch(e) { this.formError = e.message; }
+      } catch(e) {
+        this.formError = e.message;
+      } finally {
+        this.serverCreating = false;
+        clearInterval(this._timerInterval);
+      }
     },
 
     async startServer(id) {
@@ -815,8 +839,30 @@ function app() {
         this.showCreateUser = false;
         this.userForm = { username:'', email:'', server_id:'', valid_days:365 };
         // Автоскачивание .ovpn
-        window.location.href = '/api/users/' + u.id + '/profile';
+        await this.downloadOvpn(u.id, u.username);
       } catch(e) { this.formError = e.message; }
+    },
+
+    async downloadOvpn(userId, username) {
+      try {
+        const res = await fetch(`/api/users/${userId}/profile`, {
+          headers: { 'Authorization': 'Bearer ' + this.token }
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          alert('Ошибка: ' + (err.detail || 'Не удалось скачать'));
+          return;
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${username}.ovpn`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch(e) {
+        alert('Ошибка скачивания: ' + e.message);
+      }
     },
 
     async revokeUser(id) {
