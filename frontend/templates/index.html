@@ -652,10 +652,49 @@ function app() {
 
     async init() {
       if (!this.token) return;
-      await Promise.all([this.loadSettings(), this.loadServers(), this.loadCA()]);
-      await this.loadDashboard();
-      await this.loadUsers();
+      // Мгновенно восстанавливаем данные из кеша
+      this._restoreCache();
+      // Фоново загружаем свежие данные
+      Promise.all([this.loadSettings(), this.loadServers(), this.loadCA()])
+        .then(() => { this.loadDashboard(); this.loadUsers(); });
       this._startRefresh();
+    },
+
+    _restoreCache() {
+      try {
+        const cache = JSON.parse(localStorage.getItem('cvpn_cache') || '{}');
+        if (cache.settings)    { this.settings = cache.settings; this.settingsLoaded = true; this._syncIspList(); }
+        if (cache.servers)     this.servers = cache.servers;
+        if (cache.users)       { this.users = cache.users; this.filterUsers(); }
+        if (cache.caList)      this.caList = cache.caList;
+        if (cache.summary)     this.summary = cache.summary;
+      } catch {}
+    },
+
+    _saveCache() {
+      try {
+        localStorage.setItem('cvpn_cache', JSON.stringify({
+          settings: this.settings,
+          servers: this.servers,
+          users: this.users,
+          caList: this.caList,
+          summary: this.summary,
+        }));
+      } catch {}
+    },
+
+    _syncIspList() {
+      const list = [];
+      for (let n = 1; n <= 4; n++) {
+        if (this.settings[`isp${n}_host`] || n === 1) {
+          list.push({
+            host: this.settings[`isp${n}_host`] || '',
+            port: this.settings[`isp${n}_port`] || 1194,
+            label: this.settings[`isp${n}_label`] || '',
+          });
+        }
+      }
+      this.ispList = list.length ? list : [{ host:'', port:1194, label:'' }];
     },
 
     _startRefresh() {
@@ -707,7 +746,9 @@ function app() {
 
     logout() {
       if (this._refreshTimer) clearInterval(this._refreshTimer);
-      this.token = ''; localStorage.removeItem('token');
+      this.token = '';
+      localStorage.removeItem('token');
+      localStorage.removeItem('cvpn_cache');
     },
 
     async loadDashboard() {
@@ -716,11 +757,12 @@ function app() {
           this.api('GET', '/status/summary'),
           this.api('GET', '/status'),
         ]);
+        this._saveCache();
       } catch {}
     },
 
     async loadServers() {
-      try { this.servers = await this.api('GET', '/servers') || []; } catch {}
+      try { this.servers = await this.api('GET', '/servers') || []; this._saveCache(); } catch {}
     },
 
     async loadUsers() {
@@ -729,6 +771,7 @@ function app() {
         const d = await this.api('GET', path);
         this.users = d?.users || [];
         this.filterUsers();
+        this._saveCache();
       } catch {}
     },
 
@@ -740,25 +783,15 @@ function app() {
     },
 
     async loadCA() {
-      try { this.caList = await this.api('GET', '/ca') || []; } catch {}
+      try { this.caList = await this.api('GET', '/ca') || []; this._saveCache(); } catch {}
     },
 
     async loadSettings() {
       try {
         this.settings = await this.api('GET', '/settings') || {};
         this.settingsLoaded = true;
-        // Восстанавливаем ispList из settings
-        const list = [];
-        for (let n = 1; n <= 4; n++) {
-          if (this.settings[`isp${n}_host`] || n === 1) {
-            list.push({
-              host: this.settings[`isp${n}_host`] || '',
-              port: this.settings[`isp${n}_port`] || 1194,
-              label: this.settings[`isp${n}_label`] || '',
-            });
-          }
-        }
-        this.ispList = list.length ? list : [{ host:'', port:1194, label:'' }];
+        this._syncIspList();
+        this._saveCache();
       } catch {}
     },
 
