@@ -103,14 +103,22 @@ def download_profile(
     server = db.query(VPNServer).filter(VPNServer.id == user.server_id).first()
     ca = db.query(CA).filter(CA.id == user.ca_id).first()
 
+    # Собираем все активные провайдеры
+    isps = []
+    for n in range(1, 5):
+        host = getattr(settings, f"isp{n}_host", None)
+        if host:
+            isps.append({
+                "host": host,
+                "port": getattr(settings, f"isp{n}_port", 1194),
+                "label": getattr(settings, f"isp{n}_label", f"ISP{n}"),
+            })
+
     ovpn = build_ovpn_profile(
         ca_cert_pem=ca.cert_pem,
         client_cert_pem=user.cert_pem,
         client_key_pem=user.key_pem,
-        isp1_host=settings.isp1_host,
-        isp1_port=settings.isp1_port,
-        isp2_host=settings.isp2_host,
-        isp2_port=settings.isp2_port,
+        isps=isps,
         protocol=server.protocol,
     )
 

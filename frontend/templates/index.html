@@ -405,57 +405,49 @@
         <input x-model="settings.server_name" class="input" placeholder="VPN Server"/>
       </div>
 
+      <!-- Провайдеры -->
       <div class="card" style="margin-bottom:16px">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
-          <div style="width:32px;height:32px;background:#dbeafe;border-radius:8px;display:flex;align-items:center;justify-content:center">
-            <svg width="16" height="16" fill="none" stroke="#2563eb" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"/></svg>
-          </div>
-          <div>
-            <div style="font-size:14px;font-weight:700" x-text="settings.isp1_label || 'Провайдер 1'"></div>
-            <div style="font-size:12px;color:#94a3b8">Основной канал</div>
-          </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+          <h3 style="font-size:14px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.05em;margin:0">Провайдеры</h3>
+          <span style="font-size:12px;color:#94a3b8">Все активные хосты попадут в .ovpn</span>
         </div>
-        <div style="display:grid;grid-template-columns:1fr auto;gap:10px;margin-bottom:10px">
-          <div>
-            <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5px">Хост / IP</label>
-            <input x-model="settings.isp1_host" class="input" placeholder="vpn.company.ru или 1.2.3.4"/>
-          </div>
-          <div style="width:90px">
-            <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5px">Порт</label>
-            <input x-model="settings.isp1_port" type="number" class="input" placeholder="1194"/>
-          </div>
-        </div>
-        <div>
-          <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5px">Метка</label>
-          <input x-model="settings.isp1_label" class="input" placeholder="Ростелеком"/>
-        </div>
-      </div>
 
-      <div class="card" style="margin-bottom:16px">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
-          <div style="width:32px;height:32px;background:#f0fdf4;border-radius:8px;display:flex;align-items:center;justify-content:center">
-            <svg width="16" height="16" fill="none" stroke="#16a34a" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"/></svg>
+        <template x-for="(isp, idx) in ispList" :key="idx">
+          <div style="border:1.5px solid #f1f5f9;border-radius:12px;padding:16px;margin-bottom:12px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <div :style="'width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:' + ispColors[idx]">
+                  <span style="font-weight:700;font-size:12px;color:#fff" x-text="idx+1"></span>
+                </div>
+                <span style="font-weight:600;font-size:14px" x-text="isp.label || ('Провайдер ' + (idx+1))"></span>
+                <span x-show="isp.host" class="badge badge-green" style="font-size:11px">Активен</span>
+                <span x-show="!isp.host" class="badge badge-gray" style="font-size:11px">Не настроен</span>
+              </div>
+              <button x-show="idx > 0" @click="removeIsp(idx)" style="background:none;border:none;cursor:pointer;color:#94a3b8;padding:4px" title="Удалить провайдера">
+                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 90px;gap:10px;margin-bottom:10px">
+              <div>
+                <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5px">Хост / IP</label>
+                <input x-model="isp.host" class="input" :placeholder="'vpn' + (idx>0?idx+1:'') + '.company.ru'"/>
+              </div>
+              <div>
+                <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5px">Порт</label>
+                <input x-model="isp.port" type="number" class="input" placeholder="1194"/>
+              </div>
+            </div>
+            <div>
+              <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5px">Метка провайдера</label>
+              <input x-model="isp.label" class="input" :placeholder="'Ростелеком, МТС...'"/>
+            </div>
           </div>
-          <div>
-            <div style="font-size:14px;font-weight:700" x-text="settings.isp2_label || 'Провайдер 2'"></div>
-            <div style="font-size:12px;color:#94a3b8">Резервный канал</div>
-          </div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr auto;gap:10px;margin-bottom:10px">
-          <div>
-            <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5px">Хост / IP</label>
-            <input x-model="settings.isp2_host" class="input" placeholder="vpn2.company.ru или 5.6.7.8"/>
-          </div>
-          <div style="width:90px">
-            <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5px">Порт</label>
-            <input x-model="settings.isp2_port" type="number" class="input" placeholder="1194"/>
-          </div>
-        </div>
-        <div>
-          <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5px">Метка</label>
-          <input x-model="settings.isp2_label" class="input" placeholder="МТС"/>
-        </div>
-        <p style="color:#94a3b8;font-size:12px;margin-top:12px;margin-bottom:0">Оба хоста автоматически попадут в .ovpn профили клиентов</p>
+        </template>
+
+        <button x-show="ispList.length < 4" @click="addIsp()" class="btn btn-gray" style="width:100%;justify-content:center">
+          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+          Добавить провайдера
+        </button>
       </div>
 
       <div x-show="settingsSaved" class="alert alert-success" style="margin-bottom:12px">Настройки сохранены</div>
@@ -604,7 +596,9 @@ function app() {
     users: [],
     filteredUsers: [],
     caList: [],
-    settings: { isp1_port: 1194, isp2_port: 1194 },
+    settings: { isp1_port:1194, isp2_port:1194, isp3_port:1194, isp4_port:1194 },
+    ispList: [{ host:'', port:1194, label:'' }],
+    ispColors: ['#6366f1','#10b981','#f59e0b','#ef4444'],
     settingsSaved: false,
     settingsError: '',
     showCreateServer: false,
@@ -718,11 +712,40 @@ function app() {
     },
 
     async loadSettings() {
-      try { this.settings = await this.api('GET', '/settings') || {}; } catch {}
+      try {
+        this.settings = await this.api('GET', '/settings') || {};
+        // Восстанавливаем ispList из settings
+        const list = [];
+        for (let n = 1; n <= 4; n++) {
+          if (this.settings[`isp${n}_host`] || n === 1) {
+            list.push({
+              host: this.settings[`isp${n}_host`] || '',
+              port: this.settings[`isp${n}_port`] || 1194,
+              label: this.settings[`isp${n}_label`] || '',
+            });
+          }
+        }
+        this.ispList = list.length ? list : [{ host:'', port:1194, label:'' }];
+      } catch {}
+    },
+
+    addIsp() {
+      if (this.ispList.length < 4) this.ispList.push({ host:'', port:1194, label:'' });
+    },
+
+    removeIsp(idx) {
+      this.ispList.splice(idx, 1);
     },
 
     async saveSettings() {
       this.settingsSaved = false; this.settingsError = '';
+      // Собираем ISP обратно в settings
+      for (let n = 1; n <= 4; n++) {
+        const isp = this.ispList[n-1];
+        this.settings[`isp${n}_host`] = isp?.host || null;
+        this.settings[`isp${n}_port`] = isp?.port || 1194;
+        this.settings[`isp${n}_label`] = isp?.label || `ISP${n}`;
+      }
       try {
         this.settings = await this.api('PUT', '/settings', this.settings);
         this.settingsSaved = true;

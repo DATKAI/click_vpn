@@ -35,6 +35,12 @@ class SettingsUpdate(BaseModel):
     isp2_host: Optional[str] = None
     isp2_port: Optional[int] = 1194
     isp2_label: Optional[str] = "ISP2"
+    isp3_host: Optional[str] = None
+    isp3_port: Optional[int] = 1194
+    isp3_label: Optional[str] = "ISP3"
+    isp4_host: Optional[str] = None
+    isp4_port: Optional[int] = 1194
+    isp4_label: Optional[str] = "ISP4"
     server_name: Optional[str] = None
 
 class SettingsOut(SettingsUpdate):

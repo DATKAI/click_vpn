@@ -5,28 +5,26 @@ def build_ovpn_profile(
     ca_cert_pem: str,
     client_cert_pem: str,
     client_key_pem: str,
-    isp1_host: str,
-    isp1_port: int,
-    isp2_host: str | None,
-    isp2_port: int,
+    isps: list[dict],   # [{"host": ..., "port": ..., "label": ...}, ...]
     protocol: str = "udp",
     tls_auth_key: str | None = None,
 ) -> str:
+    # Фильтруем только заполненные провайдеры
+    active_isps = [i for i in isps if i.get("host")]
+
     lines = [
         "client",
         "dev tun",
         f"proto {protocol}",
         "",
-        "# Основной провайдер",
-        f"remote {isp1_host} {isp1_port}",
     ]
 
-    if isp2_host:
-        lines += [
-            "# Резервный провайдер",
-            f"remote {isp2_host} {isp2_port}",
-            "remote-random-hostname",
-        ]
+    for isp in active_isps:
+        lines.append(f"# {isp.get('label', 'ISP')}")
+        lines.append(f"remote {isp['host']} {isp['port']}")
+
+    if len(active_isps) > 1:
+        lines.append("remote-random-hostname")
 
     lines += [
         "",

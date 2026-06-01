@@ -43,6 +43,14 @@ class Settings(Base):
     isp2_host = Column(String(256), nullable=True)
     isp2_port = Column(Integer, default=1194)
     isp2_label = Column(String(64), default="ISP2")
+    # Провайдер 3
+    isp3_host = Column(String(256), nullable=True)
+    isp3_port = Column(Integer, default=1194)
+    isp3_label = Column(String(64), default="ISP3")
+    # Провайдер 4
+    isp4_host = Column(String(256), nullable=True)
+    isp4_port = Column(Integer, default=1194)
+    isp4_label = Column(String(64), default="ISP4")
     # Общие
     server_name = Column(String(128), default="VPN Server")
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
