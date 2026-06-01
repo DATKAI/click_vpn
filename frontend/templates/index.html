@@ -281,9 +281,14 @@
               <span class="badge-dot"></span>
               <span x-text="s.status==='running'?'Работает':'Остановлен'"></span>
             </span>
-            <div style="display:flex;gap:8px">
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
               <button x-show="s.status!=='running'" @click="startServer(s.id)" class="btn btn-success btn-sm">Запустить</button>
               <button x-show="s.status==='running'" @click="stopServer(s.id)" class="btn btn-gray btn-sm">Стоп</button>
+              <button @click="openServerOrgs(s)" class="btn btn-sm" style="background:#ede9fe;color:#6d28d9;border:none">
+                <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+                Организации
+                <span x-show="s.org_ids && s.org_ids.length" x-text="'(' + s.org_ids.length + ')'" style="font-size:11px"></span>
+              </button>
               <button @click="openEditServer(s)" class="btn btn-gray btn-sm">
                 <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                 Изменить
@@ -724,6 +729,56 @@
   </div>
 </div>
 
+<!-- Modal: Server Organizations -->
+<div x-show="showServerOrgs" x-cloak class="modal-backdrop" @click.self="showServerOrgs=false">
+  <div class="modal fade-in">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+      <div style="width:40px;height:40px;background:#ede9fe;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <svg width="20" height="20" fill="none" stroke="#7c3aed" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+      </div>
+      <div>
+        <h3 style="font-size:18px;font-weight:700;margin:0" x-text="'Организации сервера: ' + serverOrgsForm.name"></h3>
+        <p style="color:#94a3b8;font-size:13px;margin:0">Выберите какие организации имеют доступ</p>
+      </div>
+    </div>
+
+    <template x-if="orgs.length === 0">
+      <div style="text-align:center;padding:32px;color:#94a3b8">
+        <p>Организаций нет.</p>
+        <button class="btn btn-primary" style="margin-top:8px" @click="showServerOrgs=false; navigate('orgs')">Создать организацию →</button>
+      </div>
+    </template>
+
+    <div style="display:flex;flex-direction:column;gap:8px" x-show="orgs.length > 0">
+      <template x-for="o in orgs" :key="o.id">
+        <label style="display:flex;align-items:center;gap:12px;padding:12px 14px;border:1.5px solid #e2e8f0;border-radius:12px;cursor:pointer;transition:all .15s"
+               :style="serverOrgsForm.org_ids.includes(o.id) ? 'border-color:#6366f1;background:#fafaff' : 'background:#fff'">
+          <input type="checkbox"
+            :checked="serverOrgsForm.org_ids.includes(o.id)"
+            @change="serverOrgsForm.org_ids.includes(o.id)
+              ? serverOrgsForm.org_ids.splice(serverOrgsForm.org_ids.indexOf(o.id), 1)
+              : serverOrgsForm.org_ids.push(o.id)"
+            style="width:18px;height:18px;accent-color:#4f46e5;flex-shrink:0"/>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;font-size:14px" x-text="o.name"></div>
+            <div style="color:#94a3b8;font-size:12px" x-text="o.description || ''"></div>
+          </div>
+          <div style="text-align:right;flex-shrink:0">
+            <div style="font-size:13px;font-weight:600;color:#4f46e5" x-text="o.user_count"></div>
+            <div style="font-size:11px;color:#94a3b8">клиентов</div>
+          </div>
+        </label>
+      </template>
+    </div>
+
+    <div x-show="serverOrgsError" x-text="serverOrgsError" class="alert alert-error" style="margin-top:14px"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+      <button class="btn btn-gray" @click="showServerOrgs=false">Отмена</button>
+      <button class="btn btn-primary" @click="saveServerOrgs()" x-show="orgs.length > 0">Сохранить</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal: Edit Server -->
 <div x-show="showEditServer" x-cloak class="modal-backdrop" @click.self="showEditServer=false">
   <div class="modal fade-in">
@@ -742,28 +797,6 @@
         <textarea x-model="editServerForm.push_routes" class="input" placeholder="192.168.1.0/24&#10;10.0.0.0/8"></textarea>
       </div>
 
-      <!-- Организации сервера -->
-      <div>
-        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:8px">Организации с доступом к серверу</label>
-        <template x-if="orgs.length === 0">
-          <p style="color:#94a3b8;font-size:13px">Организаций нет — создайте их в разделе «Организации»</p>
-        </template>
-        <div style="display:flex;flex-direction:column;gap:6px">
-          <template x-for="o in orgs" :key="o.id">
-            <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:10px;cursor:pointer"
-                   :style="editServerForm.org_ids.includes(o.id)?'border-color:#6366f1;background:#fafaff':''">
-              <input type="checkbox"
-                :checked="editServerForm.org_ids.includes(o.id)"
-                @change="editServerForm.org_ids.includes(o.id)
-                  ? editServerForm.org_ids.splice(editServerForm.org_ids.indexOf(o.id),1)
-                  : editServerForm.org_ids.push(o.id)"
-                style="width:16px;height:16px;accent-color:#4f46e5"/>
-              <span style="font-size:14px;font-weight:500" x-text="o.name"></span>
-              <span style="color:#94a3b8;font-size:12px;margin-left:auto" x-text="o.user_count + ' кл.'"></span>
-            </label>
-          </template>
-        </div>
-      </div>
 
       <div class="alert alert-warning">
         <svg style="flex-shrink:0" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
@@ -852,6 +885,9 @@ function app() {
     showEditServer: false,
     showEditUser: false,
     showEditOrg: false,
+    showServerOrgs: false,
+    serverOrgsForm: { id:null, name:'', org_ids:[] },
+    serverOrgsError: '',
     showEditPassword: false,
     editServerForm: { id:null, name:'', dns_servers:'', push_routes:'', org_ids:[] },
     editUserForm: { id:null, username:'', email:'', is_active:true, org_id:'', cert_password:null, new_password:'' },
@@ -1140,6 +1176,22 @@ function app() {
       if (!confirm('Удалить организацию?')) return;
       try { await this.api('DELETE', '/organizations/' + id); await this.loadOrgs(); }
       catch(e) { alert(e.message); }
+    },
+
+    openServerOrgs(s) {
+      this.serverOrgsForm = { id: s.id, name: s.name, org_ids: [...(s.org_ids || [])] };
+      this.serverOrgsError = '';
+      this.showServerOrgs = true;
+    },
+
+    async saveServerOrgs() {
+      this.serverOrgsError = '';
+      try {
+        await this.api('PUT', '/servers/' + this.serverOrgsForm.id, { org_ids: this.serverOrgsForm.org_ids });
+        await this.loadServers();
+        await this.loadOrgs();
+        this.showServerOrgs = false;
+      } catch(e) { this.serverOrgsError = e.message; }
     },
 
     openEditServer(s) {
