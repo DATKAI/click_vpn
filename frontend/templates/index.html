@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="ru" x-data="app()" x-init="init()">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title x-text="appTitle">VPN Manager</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    [x-cloak] { display: none !important; }
+    .sidebar-link { @apply flex items-center gap-3 px-4 py-2.5 rounded-lg text-gray-300 hover:bg-gray-700 hover:text-white transition-colors cursor-pointer; }
+    .sidebar-link.active { @apply bg-indigo-600 text-white; }
+    .badge-green { @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800; }
+    .badge-red { @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800; }
+    .badge-gray { @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600; }
+    .btn { @apply px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50; }
+    .btn-primary { @apply btn bg-indigo-600 text-white hover:bg-indigo-700; }
+    .btn-danger { @apply btn bg-red-600 text-white hover:bg-red-700; }
+    .btn-gray { @apply btn bg-gray-200 text-gray-800 hover:bg-gray-300; }
+    .input { @apply w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500; }
+    .card { @apply bg-white rounded-xl shadow-sm border border-gray-200 p-6; }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-900">
+
+<!-- Login Screen -->
+<div x-show="!token" x-cloak class="min-h-screen flex items-center justify-center">
+  <div class="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm">
+    <h1 class="text-2xl font-bold text-center mb-1">VPN Manager</h1>
+    <p class="text-gray-500 text-center text-sm mb-6">Войдите для продолжения</p>
+    <form @submit.prevent="login">
+      <div class="mb-4">
+        <label class="block text-sm font-medium mb-1">Логин</label>
+        <input x-model="loginForm.username" type="text" class="input" placeholder="admin" required/>
+      </div>
+      <div class="mb-6">
+        <label class="block text-sm font-medium mb-1">Пароль</label>
+        <input x-model="loginForm.password" type="password" class="input" placeholder="••••••••" required/>
+      </div>
+      <p x-show="loginError" x-text="loginError" class="text-red-500 text-sm mb-3"></p>
+      <button type="submit" class="btn-primary w-full" :disabled="loading">
+        <span x-show="!loading">Войти</span>
+        <span x-show="loading">Вход...</span>
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- Main App -->
+<div x-show="token" x-cloak class="flex h-screen overflow-hidden">
+
+  <!-- Sidebar -->
+  <aside class="w-64 bg-gray-900 flex flex-col">
+    <div class="p-5 border-b border-gray-700">
+      <h1 class="text-white font-bold text-lg">VPN Manager</h1>
+      <p class="text-gray-400 text-xs mt-0.5" x-text="settings.server_name || ''"></p>
+    </div>
+    <nav class="flex-1 p-3 space-y-1">
+      <a class="sidebar-link" :class="{active: page==='dashboard'}" @click="page='dashboard'; loadDashboard()">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7h18M3 12h18M3 17h18"/></svg>
+        Дашборд
+      </a>
+      <a class="sidebar-link" :class="{active: page==='servers'}" @click="page='servers'; loadServers()">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M12 5l7 7-7 7"/></svg>
+        Серверы
+      </a>
+      <a class="sidebar-link" :class="{active: page==='users'}" @click="page='users'; loadUsers()">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0"/></svg>
+        Пользователи
+      </a>
+      <a class="sidebar-link" :class="{active: page==='ca'}" @click="page='ca'; loadCA()">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+        Сертификаты (CA)
+      </a>
+      <a class="sidebar-link" :class="{active: page==='settings'}" @click="page='settings'; loadSettings()">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/></svg>
+        Настройки
+      </a>
+    </nav>
+    <div class="p-3 border-t border-gray-700">
+      <button @click="logout" class="sidebar-link w-full text-red-400 hover:text-red-300">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+        Выйти
+      </button>
+    </div>
+  </aside>
+
+  <!-- Content -->
+  <main class="flex-1 overflow-auto">
+
+    <!-- Dashboard -->
+    <div x-show="page==='dashboard'" class="p-8">
+      <h2 class="text-2xl font-bold mb-6">Дашборд</h2>
+      <div class="grid grid-cols-3 gap-6 mb-8">
+        <div class="card text-center">
+          <div class="text-4xl font-bold text-indigo-600" x-text="summary.total_users ?? '—'"></div>
+          <div class="text-gray-500 mt-1">Активных клиентов</div>
+        </div>
+        <div class="card text-center">
+          <div class="text-4xl font-bold text-indigo-600" x-text="summary.running_servers ?? '—'"></div>
+          <div class="text-gray-500 mt-1">Серверов онлайн</div>
+        </div>
+        <div class="card text-center">
+          <div class="text-4xl font-bold text-gray-800" x-text="summary.total_servers ?? '—'"></div>
+          <div class="text-gray-500 mt-1">Всего серверов</div>
+        </div>
+      </div>
+
+      <!-- Online clients table -->
+      <div class="card">
+        <h3 class="font-semibold mb-4">Подключённые клиенты</h3>
+        <template x-if="statusList.length === 0">
+          <p class="text-gray-400 text-sm">Нет активных подключений</p>
+        </template>
+        <template x-for="srv in statusList" :key="srv.server_id">
+          <div class="mb-6">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="font-medium" x-text="srv.server_name"></span>
+              <span :class="srv.status==='running' ? 'badge-green' : 'badge-gray'" x-text="srv.status==='running' ? 'Работает' : 'Остановлен'"></span>
+              <span class="text-gray-400 text-sm" x-text="'(' + srv.connected_clients.length + ' клиентов)'"></span>
+            </div>
+            <table x-show="srv.connected_clients.length > 0" class="w-full text-sm">
+              <thead class="text-gray-500 border-b">
+                <tr>
+                  <th class="text-left py-1">Имя</th>
+                  <th class="text-left py-1">Реальный IP</th>
+                  <th class="text-left py-1">VPN IP</th>
+                  <th class="text-left py-1">Подключён</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="c in srv.connected_clients" :key="c.common_name">
+                  <tr class="border-b border-gray-50">
+                    <td class="py-1.5 font-mono" x-text="c.common_name"></td>
+                    <td class="py-1.5" x-text="c.real_address"></td>
+                    <td class="py-1.5" x-text="c.virtual_address"></td>
+                    <td class="py-1.5 text-gray-500" x-text="c.connected_since"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- Servers -->
+    <div x-show="page==='servers'" class="p-8">
+      <div class="flex items-center justify-between mb-6">
+        <h2 class="text-2xl font-bold">OpenVPN Серверы</h2>
+        <button class="btn-primary" @click="showCreateServer=true">+ Добавить сервер</button>
+      </div>
+      <div class="card">
+        <template x-if="servers.length===0">
+          <p class="text-gray-400 text-sm">Серверов нет. Сначала создайте CA.</p>
+        </template>
+        <table x-show="servers.length>0" class="w-full text-sm">
+          <thead class="text-gray-500 border-b">
+            <tr>
+              <th class="text-left py-2">Название</th>
+              <th class="text-left py-2">Сеть</th>
+              <th class="text-left py-2">Порт/Протокол</th>
+              <th class="text-left py-2">Статус</th>
+              <th class="text-left py-2">Действия</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="s in servers" :key="s.id">
+              <tr class="border-b border-gray-50">
+                <td class="py-2 font-medium" x-text="s.name"></td>
+                <td class="py-2 font-mono text-xs" x-text="s.network + '/' + s.netmask"></td>
+                <td class="py-2" x-text="s.port + '/' + s.protocol.toUpperCase()"></td>
+                <td class="py-2">
+                  <span :class="s.status==='running' ? 'badge-green' : 'badge-gray'"
+                        x-text="s.status==='running' ? 'Работает' : 'Остановлен'"></span>
+                </td>
+                <td class="py-2 flex gap-2">
+                  <button x-show="s.status!=='running'" @click="startServer(s.id)"
+                          class="btn-primary text-xs py-1 px-2">Запустить</button>
+                  <button x-show="s.status==='running'" @click="stopServer(s.id)"
+                          class="btn-gray text-xs py-1 px-2">Стоп</button>
+                  <button @click="deleteServer(s.id)"
+                          class="btn-danger text-xs py-1 px-2">Удалить</button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Create Server Modal -->
+      <div x-show="showCreateServer" x-cloak class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-lg">
+          <h3 class="text-lg font-bold mb-4">Новый сервер</h3>
+          <div class="space-y-3">
+            <div>
+              <label class="block text-sm font-medium mb-1">Название</label>
+              <input x-model="serverForm.name" class="input" placeholder="Main Office"/>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">CA</label>
+              <select x-model="serverForm.ca_id" class="input">
+                <option value="">— выберите CA —</option>
+                <template x-for="ca in caList" :key="ca.id">
+                  <option :value="ca.id" x-text="ca.common_name"></option>
+                </template>
+              </select>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-sm font-medium mb-1">Подсеть</label>
+                <input x-model="serverForm.network" class="input" placeholder="10.8.0.0"/>
+              </div>
+              <div>
+                <label class="block text-sm font-medium mb-1">Маска</label>
+                <input x-model="serverForm.netmask" class="input" placeholder="255.255.255.0"/>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-sm font-medium mb-1">Порт</label>
+                <input x-model="serverForm.port" type="number" class="input" placeholder="1194"/>
+              </div>
+              <div>
+                <label class="block text-sm font-medium mb-1">Протокол</label>
+                <select x-model="serverForm.protocol" class="input">
+                  <option value="udp">UDP</option>
+                  <option value="tcp">TCP</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">DNS серверы (через запятую)</label>
+              <input x-model="serverForm.dns_servers" class="input" placeholder="8.8.8.8,8.8.4.4"/>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Push маршруты (каждый с новой строки, CIDR)</label>
+              <textarea x-model="serverForm.push_routes" class="input h-20" placeholder="192.168.1.0/24&#10;10.0.0.0/8"></textarea>
+            </div>
+          </div>
+          <p x-show="formError" x-text="formError" class="text-red-500 text-sm mt-3"></p>
+          <div class="flex gap-3 justify-end mt-5">
+            <button class="btn-gray" @click="showCreateServer=false; formError=''">Отмена</button>
+            <button class="btn-primary" @click="createServer()">Создать</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Users -->
+    <div x-show="page==='users'" class="p-8">
+      <div class="flex items-center justify-between mb-6">
+        <h2 class="text-2xl font-bold">Пользователи</h2>
+        <button class="btn-primary" @click="showCreateUser=true">+ Добавить пользователя</button>
+      </div>
+
+      <!-- Filter -->
+      <div class="flex gap-3 mb-4">
+        <select x-model="userFilter.server_id" @change="loadUsers()" class="input max-w-xs">
+          <option value="">Все серверы</option>
+          <template x-for="s in servers" :key="s.id">
+            <option :value="s.id" x-text="s.name"></option>
+          </template>
+        </select>
+        <input x-model="userFilter.search" @input="filterUsers()" class="input max-w-xs" placeholder="Поиск по имени..."/>
+      </div>
+
+      <div class="card">
+        <table class="w-full text-sm">
+          <thead class="text-gray-500 border-b">
+            <tr>
+              <th class="text-left py-2">Имя пользователя</th>
+              <th class="text-left py-2">Email</th>
+              <th class="text-left py-2">Сервер</th>
+              <th class="text-left py-2">Статус</th>
+              <th class="text-left py-2">Истекает</th>
+              <th class="text-left py-2">Действия</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="u in filteredUsers" :key="u.id">
+              <tr class="border-b border-gray-50">
+                <td class="py-2 font-medium" x-text="u.username"></td>
+                <td class="py-2 text-gray-500" x-text="u.email || '—'"></td>
+                <td class="py-2" x-text="serverName(u.server_id)"></td>
+                <td class="py-2">
+                  <span :class="u.cert_status==='active' ? 'badge-green' : 'badge-red'"
+                        x-text="u.cert_status==='active' ? 'Активен' : 'Отозван'"></span>
+                </td>
+                <td class="py-2 text-gray-500 text-xs" x-text="u.cert_expires_at ? formatDate(u.cert_expires_at) : '—'"></td>
+                <td class="py-2 flex gap-2">
+                  <a :href="'/api/users/' + u.id + '/profile'"
+                     class="btn-primary text-xs py-1 px-2 no-underline"
+                     x-show="u.cert_status==='active'">Скачать .ovpn</a>
+                  <button x-show="u.cert_status==='active'" @click="revokeUser(u.id)"
+                          class="btn-danger text-xs py-1 px-2">Отозвать</button>
+                </td>
+              </tr>
+            </template>
+            <tr x-show="filteredUsers.length===0">
+              <td colspan="6" class="py-4 text-center text-gray-400">Пользователей нет</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="mt-3 text-gray-400 text-sm" x-text="'Всего: ' + users.length"></div>
+      </div>
+
+      <!-- Create User Modal -->
+      <div x-show="showCreateUser" x-cloak class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-md">
+          <h3 class="text-lg font-bold mb-4">Новый пользователь</h3>
+          <div class="space-y-3">
+            <div>
+              <label class="block text-sm font-medium mb-1">Имя пользователя (CN сертификата)</label>
+              <input x-model="userForm.username" class="input" placeholder="ivanov"/>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Email (необязательно)</label>
+              <input x-model="userForm.email" type="email" class="input" placeholder="user@company.ru"/>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Сервер</label>
+              <select x-model="userForm.server_id" class="input">
+                <option value="">— выберите сервер —</option>
+                <template x-for="s in servers" :key="s.id">
+                  <option :value="s.id" x-text="s.name"></option>
+                </template>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Срок действия (дней)</label>
+              <input x-model="userForm.valid_days" type="number" class="input" placeholder="365"/>
+            </div>
+          </div>
+          <p x-show="formError" x-text="formError" class="text-red-500 text-sm mt-3"></p>
+          <div class="flex gap-3 justify-end mt-5">
+            <button class="btn-gray" @click="showCreateUser=false; formError=''">Отмена</button>
+            <button class="btn-primary" @click="createUser()">Создать</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CA -->
+    <div x-show="page==='ca'" class="p-8">
+      <div class="flex items-center justify-between mb-6">
+        <h2 class="text-2xl font-bold">Удостоверяющие центры (CA)</h2>
+        <button class="btn-primary" @click="showCreateCA=true">+ Создать CA</button>
+      </div>
+      <div class="card">
+        <template x-if="caList.length===0">
+          <p class="text-gray-400 text-sm">CA не создан. Начните с создания корневого сертификата.</p>
+        </template>
+        <table x-show="caList.length>0" class="w-full text-sm">
+          <thead class="text-gray-500 border-b">
+            <tr>
+              <th class="text-left py-2">Common Name</th>
+              <th class="text-left py-2">Создан</th>
+              <th class="text-left py-2">Истекает</th>
+              <th class="text-left py-2">Действия</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="ca in caList" :key="ca.id">
+              <tr class="border-b border-gray-50">
+                <td class="py-2 font-medium" x-text="ca.common_name"></td>
+                <td class="py-2 text-gray-500 text-xs" x-text="formatDate(ca.created_at)"></td>
+                <td class="py-2 text-gray-500 text-xs" x-text="formatDate(ca.expires_at)"></td>
+                <td class="py-2">
+                  <button @click="deleteCA(ca.id)" class="btn-danger text-xs py-1 px-2">Удалить</button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Create CA Modal -->
+      <div x-show="showCreateCA" x-cloak class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-md">
+          <h3 class="text-lg font-bold mb-4">Создать CA</h3>
+          <div class="space-y-3">
+            <div>
+              <label class="block text-sm font-medium mb-1">Common Name</label>
+              <input x-model="caForm.common_name" class="input" placeholder="My Company VPN CA"/>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-sm font-medium mb-1">Страна (2 буквы)</label>
+                <input x-model="caForm.country" class="input" placeholder="RU" maxlength="2"/>
+              </div>
+              <div>
+                <label class="block text-sm font-medium mb-1">Организация</label>
+                <input x-model="caForm.org" class="input" placeholder="My Company"/>
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Срок действия (дней)</label>
+              <input x-model="caForm.valid_days" type="number" class="input" placeholder="3650"/>
+            </div>
+          </div>
+          <p x-show="formError" x-text="formError" class="text-red-500 text-sm mt-3"></p>
+          <div class="flex gap-3 justify-end mt-5">
+            <button class="btn-gray" @click="showCreateCA=false; formError=''">Отмена</button>
+            <button class="btn-primary" @click="createCA()">Создать</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings -->
+    <div x-show="page==='settings'" class="p-8 max-w-2xl">
+      <h2 class="text-2xl font-bold mb-6">Настройки</h2>
+      <div class="card space-y-5">
+        <div>
+          <label class="block text-sm font-medium mb-1">Название сервиса</label>
+          <input x-model="settings.server_name" class="input" placeholder="VPN Server"/>
+        </div>
+
+        <hr/>
+        <h3 class="font-semibold text-gray-700">Провайдер 1 (основной)</h3>
+        <div class="grid grid-cols-3 gap-3">
+          <div class="col-span-2">
+            <label class="block text-sm font-medium mb-1">Хост / IP</label>
+            <input x-model="settings.isp1_host" class="input" placeholder="vpn.company.ru"/>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Порт</label>
+            <input x-model="settings.isp1_port" type="number" class="input" placeholder="1194"/>
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Метка (для отображения)</label>
+          <input x-model="settings.isp1_label" class="input" placeholder="Ростелеком"/>
+        </div>
+
+        <hr/>
+        <h3 class="font-semibold text-gray-700">Провайдер 2 (резервный)</h3>
+        <div class="grid grid-cols-3 gap-3">
+          <div class="col-span-2">
+            <label class="block text-sm font-medium mb-1">Хост / IP</label>
+            <input x-model="settings.isp2_host" class="input" placeholder="vpn2.company.ru"/>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Порт</label>
+            <input x-model="settings.isp2_port" type="number" class="input" placeholder="1194"/>
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Метка (для отображения)</label>
+          <input x-model="settings.isp2_label" class="input" placeholder="МТС"/>
+        </div>
+
+        <p class="text-gray-400 text-xs">Оба хоста будут автоматически добавлены в .ovpn профили клиентов. Клиент попробует ISP2, если ISP1 недоступен.</p>
+
+        <p x-show="settingsSaved" class="text-green-600 text-sm">Настройки сохранены</p>
+        <p x-show="settingsError" x-text="settingsError" class="text-red-500 text-sm"></p>
+        <button class="btn-primary" @click="saveSettings()">Сохранить</button>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+function app() {
+  return {
+    // State
+    token: localStorage.getItem('token') || '',
+    page: 'dashboard',
+    loading: false,
+    loginError: '',
+    formError: '',
+    loginForm: { username: '', password: '' },
+
+    // Data
+    summary: {},
+    statusList: [],
+    servers: [],
+    users: [],
+    filteredUsers: [],
+    caList: [],
+    settings: { isp1_port: 1194, isp2_port: 1194 },
+    settingsSaved: false,
+    settingsError: '',
+    appTitle: 'VPN Manager',
+
+    // Modals
+    showCreateServer: false,
+    showCreateUser: false,
+    showCreateCA: false,
+
+    // Forms
+    serverForm: { name: '', ca_id: '', network: '10.8.0.0', netmask: '255.255.255.0', port: 1194, protocol: 'udp', dns_servers: '8.8.8.8,8.8.4.4', push_routes: '' },
+    userForm: { username: '', email: '', server_id: '', valid_days: 365 },
+    caForm: { common_name: '', country: 'RU', org: '', valid_days: 3650 },
+    userFilter: { server_id: '', search: '' },
+
+    async init() {
+      if (this.token) {
+        await this.loadDashboard();
+        await this.loadSettings();
+        await this.loadServers();
+        await this.loadCA();
+      }
+    },
+
+    async api(method, path, body) {
+      const res = await fetch('/api' + path, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + this.token,
+        },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      if (res.status === 401) { this.logout(); return null; }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'Ошибка запроса');
+      }
+      if (res.status === 204) return null;
+      return res.json();
+    },
+
+    async login() {
+      this.loading = true;
+      this.loginError = '';
+      try {
+        const data = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(this.loginForm),
+        });
+        if (!data.ok) { this.loginError = 'Неверный логин или пароль'; return; }
+        const json = await data.json();
+        this.token = json.access_token;
+        localStorage.setItem('token', this.token);
+        await this.init();
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    logout() {
+      this.token = '';
+      localStorage.removeItem('token');
+    },
+
+    async loadDashboard() {
+      try {
+        [this.summary, this.statusList] = await Promise.all([
+          this.api('GET', '/status/summary'),
+          this.api('GET', '/status'),
+        ]);
+      } catch {}
+    },
+
+    async loadServers() {
+      try { this.servers = await this.api('GET', '/servers') || []; } catch {}
+    },
+
+    async loadUsers() {
+      try {
+        const path = this.userFilter.server_id ? '/users?server_id=' + this.userFilter.server_id : '/users';
+        const data = await this.api('GET', path);
+        this.users = data?.users || [];
+        this.filteredUsers = this.users;
+        this.filterUsers();
+      } catch {}
+    },
+
+    filterUsers() {
+      const q = (this.userFilter.search || '').toLowerCase();
+      this.filteredUsers = q
+        ? this.users.filter(u => u.username.toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q))
+        : [...this.users];
+    },
+
+    async loadCA() {
+      try { this.caList = await this.api('GET', '/ca') || []; } catch {}
+    },
+
+    async loadSettings() {
+      try { this.settings = await this.api('GET', '/settings') || {}; } catch {}
+    },
+
+    async saveSettings() {
+      this.settingsSaved = false;
+      this.settingsError = '';
+      try {
+        this.settings = await this.api('PUT', '/settings', this.settings);
+        this.settingsSaved = true;
+        setTimeout(() => this.settingsSaved = false, 3000);
+      } catch (e) {
+        this.settingsError = e.message;
+      }
+    },
+
+    async createCA() {
+      this.formError = '';
+      try {
+        await this.api('POST', '/ca', this.caForm);
+        await this.loadCA();
+        this.showCreateCA = false;
+        this.caForm = { common_name: '', country: 'RU', org: '', valid_days: 3650 };
+      } catch (e) { this.formError = e.message; }
+    },
+
+    async deleteCA(id) {
+      if (!confirm('Удалить CA?')) return;
+      try { await this.api('DELETE', '/ca/' + id); await this.loadCA(); }
+      catch (e) { alert(e.message); }
+    },
+
+    async createServer() {
+      this.formError = '';
+      try {
+        await this.api('POST', '/servers', { ...this.serverForm, ca_id: +this.serverForm.ca_id, port: +this.serverForm.port });
+        await this.loadServers();
+        this.showCreateServer = false;
+        this.serverForm = { name: '', ca_id: '', network: '10.8.0.0', netmask: '255.255.255.0', port: 1194, protocol: 'udp', dns_servers: '8.8.8.8,8.8.4.4', push_routes: '' };
+      } catch (e) { this.formError = e.message; }
+    },
+
+    async startServer(id) {
+      try { await this.api('POST', '/servers/' + id + '/start'); await this.loadServers(); }
+      catch (e) { alert(e.message); }
+    },
+
+    async stopServer(id) {
+      try { await this.api('POST', '/servers/' + id + '/stop'); await this.loadServers(); }
+      catch (e) { alert(e.message); }
+    },
+
+    async deleteServer(id) {
+      if (!confirm('Удалить сервер и всех его пользователей?')) return;
+      try { await this.api('DELETE', '/servers/' + id); await this.loadServers(); }
+      catch (e) { alert(e.message); }
+    },
+
+    async createUser() {
+      this.formError = '';
+      try {
+        await this.api('POST', '/users', { ...this.userForm, server_id: +this.userForm.server_id, valid_days: +this.userForm.valid_days });
+        await this.loadUsers();
+        this.showCreateUser = false;
+        this.userForm = { username: '', email: '', server_id: '', valid_days: 365 };
+      } catch (e) { this.formError = e.message; }
+    },
+
+    async revokeUser(id) {
+      if (!confirm('Отозвать сертификат? Пользователь потеряет доступ немедленно.')) return;
+      try { await this.api('POST', '/users/' + id + '/revoke'); await this.loadUsers(); }
+      catch (e) { alert(e.message); }
+    },
+
+    serverName(id) {
+      return this.servers.find(s => s.id === id)?.name || '—';
+    },
+
+    formatDate(dt) {
+      if (!dt) return '—';
+      return new Date(dt).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    },
+  };
+}
+</script>
+</body>
+</html>
