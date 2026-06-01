@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import AdminUser, CA, VPNServer, VPNUser, CertStatus, Settings
-from schemas import UserCreate, UserOut, UserListOut
+from schemas import UserCreate, UserUpdate, UserOut, UserListOut
 from auth import get_current_user
 from services import pki
 from services.profile_builder import build_ovpn_profile
@@ -74,6 +74,23 @@ def list_users(
         q = q.filter(VPNUser.server_id == server_id)
     users = q.order_by(VPNUser.created_at.desc()).all()
     return UserListOut(users=users, total=len(users))
+
+
+@router.put("/{user_id}", response_model=UserOut)
+def update_user(
+    user_id: int,
+    data: UserUpdate,
+    db: Session = Depends(get_db),
+    _: AdminUser = Depends(get_current_user),
+):
+    user = db.query(VPNUser).filter(VPNUser.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "Пользователь не найден")
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(user, field, value)
+    db.commit()
+    db.refresh(user)
+    return user
 
 
 @router.get("/{user_id}", response_model=UserOut)

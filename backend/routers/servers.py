@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import AdminUser, CA, VPNServer, VPNUser, CertStatus, ServerStatus
-from schemas import ServerCreate, ServerOut, CACreate, CAOut
+from schemas import ServerCreate, ServerUpdate, ServerOut, CACreate, CAOut
 from auth import get_current_user
 from services import pki, ovpn_manager
 from services.profile_builder import build_server_config
@@ -123,6 +123,23 @@ def create_server(
         f.write(config_content)
 
     server.config_path = config_path
+    db.commit()
+    db.refresh(server)
+    return server
+
+
+@router.put("/servers/{server_id}", response_model=ServerOut)
+def update_server(
+    server_id: int,
+    data: ServerUpdate,
+    db: Session = Depends(get_db),
+    _: AdminUser = Depends(get_current_user),
+):
+    server = db.query(VPNServer).filter(VPNServer.id == server_id).first()
+    if not server:
+        raise HTTPException(404, "Сервер не найден")
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(server, field, value)
     db.commit()
     db.refresh(server)
     return server

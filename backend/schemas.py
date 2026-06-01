@@ -79,6 +79,11 @@ class ServerCreate(BaseModel):
     dns_servers: str = "8.8.8.8,8.8.4.4"
     push_routes: str = ""
 
+class ServerUpdate(BaseModel):
+    name: Optional[str] = None
+    dns_servers: Optional[str] = None
+    push_routes: Optional[str] = None
+
 class ServerOut(BaseModel):
     id: int
     name: str
@@ -103,6 +108,10 @@ class UserCreate(BaseModel):
     server_id: int
     valid_days: int = 365
     password: Optional[str] = None  # пароль для шифрования приватного ключа
+
+class UserUpdate(BaseModel):
+    email: Optional[str] = None
+    is_active: Optional[bool] = None
 
 class UserOut(BaseModel):
     id: int

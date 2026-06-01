@@ -279,6 +279,10 @@
             <div style="display:flex;gap:8px">
               <button x-show="s.status!=='running'" @click="startServer(s.id)" class="btn btn-success btn-sm">Запустить</button>
               <button x-show="s.status==='running'" @click="stopServer(s.id)" class="btn btn-gray btn-sm">Стоп</button>
+              <button @click="openEditServer(s)" class="btn btn-gray btn-sm">
+                <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                Изменить
+              </button>
               <button @click="deleteServer(s.id)" class="btn btn-danger btn-sm">Удалить</button>
             </div>
           </div>
@@ -340,6 +344,10 @@
                        class="btn btn-primary btn-sm">
                       <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
                       .ovpn
+                    </button>
+                    <button @click="openEditUser(u)" class="btn btn-gray btn-sm">
+                      <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                      Изменить
                     </button>
                     <button x-show="u.cert_status==='active'" @click="revokeUser(u.id)" class="btn btn-danger btn-sm">Отозвать</button>
                   </div>
@@ -608,6 +616,59 @@
   </div>
 </div>
 
+<!-- Modal: Edit Server -->
+<div x-show="showEditServer" x-cloak class="modal-backdrop" @click.self="showEditServer=false">
+  <div class="modal fade-in">
+    <h3 style="font-size:18px;font-weight:700;margin:0 0 20px">Редактировать сервер</h3>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Название</label>
+        <input x-model="editServerForm.name" class="input" placeholder="Главный офис"/>
+      </div>
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">DNS серверы</label>
+        <input x-model="editServerForm.dns_servers" class="input" placeholder="8.8.8.8,8.8.4.4"/>
+      </div>
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Push маршруты (CIDR, каждый с новой строки)</label>
+        <textarea x-model="editServerForm.push_routes" class="input" placeholder="192.168.1.0/24&#10;10.0.0.0/8"></textarea>
+      </div>
+      <div class="alert alert-warning">
+        <svg style="flex-shrink:0" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+        <span>Для применения изменений DNS и маршрутов — перезапустите сервер</span>
+      </div>
+    </div>
+    <div x-show="formError" x-text="formError" class="alert alert-error" style="margin-top:14px"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+      <button class="btn btn-gray" @click="showEditServer=false;formError=''">Отмена</button>
+      <button class="btn btn-primary" @click="saveServer()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Edit User -->
+<div x-show="showEditUser" x-cloak class="modal-backdrop" @click.self="showEditUser=false">
+  <div class="modal fade-in">
+    <h3 style="font-size:18px;font-weight:700;margin:0 0 4px">Редактировать клиента</h3>
+    <p style="color:#94a3b8;font-size:13px;margin:0 0 20px" x-text="editUserForm.username"></p>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Email</label>
+        <input x-model="editUserForm.email" type="email" class="input" placeholder="user@company.ru"/>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;padding:14px;background:#f8fafc;border-radius:10px;border:1.5px solid #e2e8f0">
+        <input type="checkbox" x-model="editUserForm.is_active" id="userActive" style="width:16px;height:16px;accent-color:#4f46e5"/>
+        <label for="userActive" style="font-size:13px;font-weight:600;color:#475569;cursor:pointer">Клиент активен</label>
+      </div>
+    </div>
+    <div x-show="formError" x-text="formError" class="alert alert-error" style="margin-top:14px"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+      <button class="btn btn-gray" @click="showEditUser=false;formError=''">Отмена</button>
+      <button class="btn btn-primary" @click="saveUser()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
 <script>
 function app() {
   return {
@@ -632,6 +693,10 @@ function app() {
     showCreateServer: false,
     showCreateUser: false,
     showCreateCA: false,
+    showEditServer: false,
+    showEditUser: false,
+    editServerForm: { id:null, name:'', dns_servers:'', push_routes:'' },
+    editUserForm: { id:null, username:'', email:'', is_active:true },
     serverCreating: false,
     serverCreateTimer: 0,
     _timerInterval: null,
@@ -866,6 +931,43 @@ function app() {
     async stopServer(id) {
       try { await this.api('POST', '/servers/'+id+'/stop'); await this.loadServers(); }
       catch(e) { alert('Ошибка: ' + e.message); }
+    },
+
+    openEditServer(s) {
+      this.editServerForm = { id: s.id, name: s.name, dns_servers: s.dns_servers, push_routes: s.push_routes };
+      this.formError = '';
+      this.showEditServer = true;
+    },
+
+    async saveServer() {
+      this.formError = '';
+      try {
+        await this.api('PUT', '/servers/' + this.editServerForm.id, {
+          name: this.editServerForm.name,
+          dns_servers: this.editServerForm.dns_servers,
+          push_routes: this.editServerForm.push_routes,
+        });
+        await this.loadServers();
+        this.showEditServer = false;
+      } catch(e) { this.formError = e.message; }
+    },
+
+    openEditUser(u) {
+      this.editUserForm = { id: u.id, username: u.username, email: u.email || '', is_active: u.is_active };
+      this.formError = '';
+      this.showEditUser = true;
+    },
+
+    async saveUser() {
+      this.formError = '';
+      try {
+        await this.api('PUT', '/users/' + this.editUserForm.id, {
+          email: this.editUserForm.email || null,
+          is_active: this.editUserForm.is_active,
+        });
+        await this.loadUsers();
+        this.showEditUser = false;
+      } catch(e) { this.formError = e.message; }
     },
 
     async deleteServer(id) {
