@@ -19,14 +19,37 @@
     .badge-green { display:inline-flex; align-items:center; padding: 2px 8px; border-radius:4px; font-size:12px; font-weight:500; background:#dcfce7; color:#166534; }
     .badge-red   { display:inline-flex; align-items:center; padding: 2px 8px; border-radius:4px; font-size:12px; font-weight:500; background:#fee2e2; color:#991b1b; }
     .badge-gray  { display:inline-flex; align-items:center; padding: 2px 8px; border-radius:4px; font-size:12px; font-weight:500; background:#f3f4f6; color:#4b5563; }
-    .btn { padding: 8px 16px; border-radius: 8px; font-weight: 500; transition: background 0.15s; cursor: pointer; border: none; }
-    .btn:disabled { opacity: 0.5; }
-    .btn-primary { background: #4f46e5; color: #fff; }
-    .btn-primary:hover { background: #4338ca; }
-    .btn-danger  { background: #dc2626; color: #fff; }
-    .btn-danger:hover  { background: #b91c1c; }
-    .btn-gray    { background: #e5e7eb; color: #1f2937; }
-    .btn-gray:hover    { background: #d1d5db; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 9px 18px; border-radius: 10px; font-weight: 600;
+      font-size: 14px; cursor: pointer; border: none;
+      transition: all 0.18s ease; outline: none;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+    }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn:active { transform: scale(0.97); }
+    .btn-primary {
+      background: linear-gradient(135deg, #6366f1, #4f46e5);
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(99,102,241,0.4);
+    }
+    .btn-primary:hover {
+      background: linear-gradient(135deg, #818cf8, #6366f1);
+      box-shadow: 0 4px 14px rgba(99,102,241,0.5);
+      transform: translateY(-1px);
+    }
+    .btn-danger {
+      background: linear-gradient(135deg, #f87171, #dc2626);
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(220,38,38,0.35);
+    }
+    .btn-danger:hover {
+      background: linear-gradient(135deg, #fca5a5, #ef4444);
+      box-shadow: 0 4px 14px rgba(220,38,38,0.45);
+      transform: translateY(-1px);
+    }
+    .btn-gray { background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; box-shadow: none; }
+    .btn-gray:hover { background: #e5e7eb; transform: translateY(-1px); }
     .input { width:100%; border:1px solid #d1d5db; border-radius:8px; padding:8px 12px; font-size:14px; outline:none; }
     .input:focus { box-shadow: 0 0 0 2px #6366f1; border-color: #6366f1; }
     .card { background:#fff; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,0.08); border:1px solid #e5e7eb; padding:24px; }
