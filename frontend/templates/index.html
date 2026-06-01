@@ -80,7 +80,7 @@
     .fade-in{animation:fadeIn .25s ease}
   </style>
 </head>
-<body class="bg-slate-50 text-slate-900">
+<body class="bg-slate-50 text-slate-900" style="margin:0;padding:0;overflow:hidden;height:100vh">
 
 <!-- Login -->
 <div x-show="!token" x-cloak style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1e1b4b 0%,#312e81 50%,#1e1b4b 100%)">
@@ -112,7 +112,7 @@
 </div>
 
 <!-- App -->
-<div x-show="token" x-cloak style="display:flex;height:100vh;overflow:hidden;position:fixed;top:0;left:0;right:0;bottom:0">
+<div x-show="token" x-cloak style="display:flex;width:100vw;height:100vh;overflow:hidden">
 
   <!-- Sidebar -->
   <aside style="width:240px;background:#0f172a;display:flex;flex-direction:column;flex-shrink:0">
