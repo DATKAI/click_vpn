@@ -23,7 +23,8 @@ echo ""
 [ "$EUID" -ne 0 ] && error "Запустите от root: bash install.sh"
 [ ! -f /etc/debian_version ] && error "Скрипт только для Debian"
 
-if [ -d "$INSTALL_DIR" ]; then
+# Считаем установленным только если есть venv (не просто директория)
+if [ -d "$VENV_DIR" ]; then
   warn "Уже установлен. Для обновления: bash $INSTALL_DIR/update.sh"
   exit 0
 fi
@@ -39,9 +40,13 @@ apt-get install -y -qq \
   git curl openssl \
   iptables iproute2
 
-# ── Клонирование ──────────────────────────────────────────────────────────────
-info "Клонирование репозитория..."
-git clone "$REPO" "$INSTALL_DIR" -q
+# ── Клонирование (если директории нет) ───────────────────────────────────────
+if [ ! -d "$INSTALL_DIR" ]; then
+  info "Клонирование репозитория..."
+  git clone "$REPO" "$INSTALL_DIR" -q
+else
+  info "Директория уже существует, пропускаем клонирование"
+fi
 
 # ── Python venv ───────────────────────────────────────────────────────────────
 info "Создание Python окружения..."
