@@ -20,36 +20,43 @@
     .badge-red   { display:inline-flex; align-items:center; padding: 2px 8px; border-radius:4px; font-size:12px; font-weight:500; background:#fee2e2; color:#991b1b; }
     .badge-gray  { display:inline-flex; align-items:center; padding: 2px 8px; border-radius:4px; font-size:12px; font-weight:500; background:#f3f4f6; color:#4b5563; }
     .btn {
-      display: inline-flex; align-items: center; gap: 6px;
-      padding: 9px 18px; border-radius: 10px; font-weight: 600;
-      font-size: 14px; cursor: pointer; border: none;
-      transition: all 0.18s ease; outline: none;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 10px 20px; border-radius: 50px; font-weight: 600;
+      font-size: 13px; letter-spacing: 0.02em;
+      cursor: pointer; border: none;
+      transition: all 0.2s ease; outline: none;
+      white-space: nowrap;
     }
-    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-    .btn:active { transform: scale(0.97); }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none !important; }
+    .btn:active:not(:disabled) { transform: scale(0.96) !important; }
     .btn-primary {
-      background: linear-gradient(135deg, #6366f1, #4f46e5);
+      background: #4f46e5;
       color: #fff;
-      box-shadow: 0 2px 8px rgba(99,102,241,0.4);
+      box-shadow: 0 4px 14px rgba(79,70,229,0.45);
     }
-    .btn-primary:hover {
-      background: linear-gradient(135deg, #818cf8, #6366f1);
-      box-shadow: 0 4px 14px rgba(99,102,241,0.5);
-      transform: translateY(-1px);
+    .btn-primary:hover:not(:disabled) {
+      background: #4338ca;
+      box-shadow: 0 6px 20px rgba(79,70,229,0.55);
+      transform: translateY(-2px);
     }
     .btn-danger {
-      background: linear-gradient(135deg, #f87171, #dc2626);
-      color: #fff;
-      box-shadow: 0 2px 8px rgba(220,38,38,0.35);
+      background: #fff;
+      color: #dc2626;
+      border: 1.5px solid #fca5a5;
+      box-shadow: none;
     }
-    .btn-danger:hover {
-      background: linear-gradient(135deg, #fca5a5, #ef4444);
-      box-shadow: 0 4px 14px rgba(220,38,38,0.45);
+    .btn-danger:hover:not(:disabled) {
+      background: #fef2f2;
+      border-color: #dc2626;
+      box-shadow: 0 4px 12px rgba(220,38,38,0.2);
       transform: translateY(-1px);
     }
-    .btn-gray { background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; box-shadow: none; }
-    .btn-gray:hover { background: #e5e7eb; transform: translateY(-1px); }
+    .btn-gray {
+      background: #fff; color: #374151;
+      border: 1.5px solid #e5e7eb; box-shadow: none;
+    }
+    .btn-gray:hover:not(:disabled) { background: #f9fafb; border-color: #d1d5db; transform: translateY(-1px); }
+    .btn-sm { padding: 6px 14px; font-size: 12px; }
     .input { width:100%; border:1px solid #d1d5db; border-radius:8px; padding:8px 12px; font-size:14px; outline:none; }
     .input:focus { box-shadow: 0 0 0 2px #6366f1; border-color: #6366f1; }
     .card { background:#fff; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,0.08); border:1px solid #e5e7eb; padding:24px; }
@@ -182,7 +189,7 @@
     <div x-show="page==='servers'" class="p-8">
       <div class="flex items-center justify-between mb-6 gap-4 flex-wrap">
         <h2 class="text-2xl font-bold">OpenVPN Серверы</h2>
-        <button class="btn-primary" @click="showCreateServer=true">+ Добавить сервер</button>
+        <button class="btn btn-primary" @click="showCreateServer=true"><svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg> Новый сервер</button>
       </div>
       <div class="card">
         <template x-if="servers.length===0">
@@ -210,11 +217,11 @@
                 </td>
                 <td class="py-2 flex gap-2">
                   <button x-show="s.status!=='running'" @click="startServer(s.id)"
-                          class="btn-primary text-xs py-1 px-2">Запустить</button>
+                          class="btn-primary btn-sm">Запустить</button>
                   <button x-show="s.status==='running'" @click="stopServer(s.id)"
-                          class="btn-gray text-xs py-1 px-2">Стоп</button>
+                          class="btn-gray btn-sm">Стоп</button>
                   <button @click="deleteServer(s.id)"
-                          class="btn-danger text-xs py-1 px-2">Удалить</button>
+                          class="btn-danger btn-sm">Удалить</button>
                 </td>
               </tr>
             </template>
@@ -285,7 +292,7 @@
     <div x-show="page==='users'" class="p-8">
       <div class="flex items-center justify-between mb-6 gap-4 flex-wrap">
         <h2 class="text-2xl font-bold">Пользователи</h2>
-        <button class="btn-primary" @click="showCreateUser=true">+ Добавить пользователя</button>
+        <button class="btn btn-primary" @click="showCreateUser=true"><svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg> Новый клиент</button>
       </div>
 
       <!-- Filter -->
@@ -324,10 +331,10 @@
                 <td class="py-2 text-gray-500 text-xs" x-text="u.cert_expires_at ? formatDate(u.cert_expires_at) : '—'"></td>
                 <td class="py-2 flex gap-2">
                   <a :href="'/api/users/' + u.id + '/profile'"
-                     class="btn-primary text-xs py-1 px-2 no-underline"
+                     class="btn-primary btn-sm no-underline"
                      x-show="u.cert_status==='active'">Скачать .ovpn</a>
                   <button x-show="u.cert_status==='active'" @click="revokeUser(u.id)"
-                          class="btn-danger text-xs py-1 px-2">Отозвать</button>
+                          class="btn-danger btn-sm">Отозвать</button>
                 </td>
               </tr>
             </template>
@@ -379,7 +386,7 @@
     <div x-show="page==='ca'" class="p-8">
       <div class="flex items-center justify-between mb-6 gap-4 flex-wrap">
         <h2 class="text-2xl font-bold">CA — Сертификаты</h2>
-        <button class="btn-primary" @click="showCreateCA=true">+ Создать CA</button>
+        <button class="btn btn-primary" @click="showCreateCA=true"><svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg> Создать CA</button>
       </div>
       <div class="card">
         <template x-if="caList.length===0">
@@ -401,7 +408,7 @@
                 <td class="py-2 text-gray-500 text-xs" x-text="formatDate(ca.created_at)"></td>
                 <td class="py-2 text-gray-500 text-xs" x-text="formatDate(ca.expires_at)"></td>
                 <td class="py-2">
-                  <button @click="deleteCA(ca.id)" class="btn-danger text-xs py-1 px-2">Удалить</button>
+                  <button @click="deleteCA(ca.id)" class="btn-danger btn-sm">Удалить</button>
                 </td>
               </tr>
             </template>
