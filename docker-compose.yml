@@ -4,7 +4,7 @@ services:
     container_name: vpn-manager
     restart: unless-stopped
     ports:
-      - "8000:8000"       # Веб-панель
+      - "8080:8000"       # Веб-панель
       - "1194:1194/udp"   # OpenVPN (основной)
       - "1195:1195/udp"   # OpenVPN (дополнительный сервер, если нужен)
     volumes:

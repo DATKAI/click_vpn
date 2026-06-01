@@ -87,8 +87,7 @@ docker compose up -d --build
 # ── Ждём поднятия ─────────────────────────────────────────────────────────────
 info "Ожидание запуска сервиса..."
 for i in $(seq 1 30); do
-  if curl -sf http://localhost:8000/api/auth/me &>/dev/null || \
-     curl -sf http://localhost:8000 &>/dev/null; then
+  if curl -sf http://localhost:8080 &>/dev/null; then
     break
   fi
   sleep 1
@@ -100,7 +99,7 @@ echo ""
 echo "╔══════════════════════════════════════════╗"
 echo "║          Установка завершена!            ║"
 echo "╠══════════════════════════════════════════╣"
-printf  "║  Адрес:   http://%-23s║\n" "${IP}:8000"
+printf  "║  Адрес:   http://%-23s║\n" "${IP}:8080"
 printf  "║  Логин:   %-30s║\n" "admin"
 printf  "║  Пароль:  %-30s║\n" "${ADMIN_PASSWORD}"
 echo "╠══════════════════════════════════════════╣"

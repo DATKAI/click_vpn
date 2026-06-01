@@ -62,7 +62,7 @@ docker compose up -d --build
 # ── Ждём поднятия ─────────────────────────────────────────────────────────────
 info "Ожидание запуска..."
 for i in $(seq 1 30); do
-  if curl -sf http://localhost:8000 &>/dev/null; then break; fi
+  if curl -sf http://localhost:8080 &>/dev/null; then break; fi
   sleep 1
 done
 
