@@ -34,13 +34,8 @@ def create_org(
 ):
     if db.query(Organization).filter(Organization.name == data.name).first():
         raise HTTPException(400, "Организация с таким именем уже существует")
-
+    # Серверы назначаются со стороны сервера, не организации
     org = Organization(name=data.name, description=data.description)
-
-    if data.server_ids:
-        servers = db.query(VPNServer).filter(VPNServer.id.in_(data.server_ids)).all()
-        org.servers = servers
-
     db.add(org)
     db.commit()
     db.refresh(org)
@@ -57,14 +52,11 @@ def update_org(
     org = db.query(Organization).filter(Organization.id == org_id).first()
     if not org:
         raise HTTPException(404, "Организация не найдена")
-
     if data.name is not None:
         org.name = data.name
     if data.description is not None:
         org.description = data.description
-    if data.server_ids is not None:
-        org.servers = db.query(VPNServer).filter(VPNServer.id.in_(data.server_ids)).all()
-
+    # server_ids управляется только через сервер
     db.commit()
     db.refresh(org)
     return _org_to_out(org, db)
@@ -80,6 +72,6 @@ def delete_org(
     if not org:
         raise HTTPException(404, "Организация не найдена")
     if db.query(VPNUser).filter(VPNUser.org_id == org_id).count():
-        raise HTTPException(400, "Нельзя удалить организацию — есть привязанные пользователи")
+        raise HTTPException(400, "Нельзя удалить — есть привязанные пользователи")
     db.delete(org)
     db.commit()

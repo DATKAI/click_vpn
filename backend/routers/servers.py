@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import AdminUser, CA, VPNServer, VPNUser, CertStatus, ServerStatus
+from models import AdminUser, CA, VPNServer, VPNUser, Organization, CertStatus, ServerStatus
 from schemas import ServerCreate, ServerUpdate, ServerOut, CACreate, CAOut
 from auth import get_current_user
 from services import pki, ovpn_manager
@@ -128,7 +128,22 @@ def create_server(
     return server
 
 
-@router.put("/servers/{server_id}", response_model=ServerOut)
+def _server_out(s: VPNServer, db: Session, running: bool = None) -> dict:
+    from schemas import ServerOut as SO
+    if running is None:
+        running = ovpn_manager.is_running(s.id, DATA_DIR)
+    return SO(
+        id=s.id, name=s.name, ca_id=s.ca_id,
+        network=s.network, netmask=s.netmask,
+        port=s.port, protocol=s.protocol,
+        dns_servers=s.dns_servers, push_routes=s.push_routes,
+        status="running" if running else "stopped",
+        org_ids=[o.id for o in s.organizations],
+        created_at=s.created_at,
+    )
+
+
+@router.put("/servers/{server_id}")
 def update_server(
     server_id: int,
     data: ServerUpdate,
@@ -138,22 +153,35 @@ def update_server(
     server = db.query(VPNServer).filter(VPNServer.id == server_id).first()
     if not server:
         raise HTTPException(404, "Сервер не найден")
-    for field, value in data.model_dump(exclude_unset=True).items():
-        setattr(server, field, value)
+
+    if data.name is not None:
+        server.name = data.name
+    if data.dns_servers is not None:
+        server.dns_servers = data.dns_servers
+    if data.push_routes is not None:
+        server.push_routes = data.push_routes
+    if data.org_ids is not None:
+        server.organizations = db.query(Organization).filter(
+            Organization.id.in_(data.org_ids)
+        ).all()
+
     db.commit()
     db.refresh(server)
-    return server
+    return _server_out(server, db)
 
 
-@router.get("/servers", response_model=list[ServerOut])
+@router.get("/servers")
 def list_servers(db: Session = Depends(get_db), _: AdminUser = Depends(get_current_user)):
     servers = db.query(VPNServer).all()
-    # Обновляем реальный статус
+    result = []
     for s in servers:
         running = ovpn_manager.is_running(s.id, DATA_DIR)
-        s.status = ServerStatus.running if running else ServerStatus.stopped
+        if running:
+            s.status = ServerStatus.running
+        else:
+            s.status = ServerStatus.stopped
     db.commit()
-    return servers
+    return [_server_out(s, db) for s in servers]
 
 
 @router.post("/servers/{server_id}/start")

@@ -83,6 +83,7 @@ class ServerUpdate(BaseModel):
     name: Optional[str] = None
     dns_servers: Optional[str] = None
     push_routes: Optional[str] = None
+    org_ids: Optional[List[int]] = None   # организации этого сервера
 
 class ServerOut(BaseModel):
     id: int
@@ -95,6 +96,7 @@ class ServerOut(BaseModel):
     dns_servers: str
     push_routes: str
     status: str
+    org_ids: List[int] = []
     created_at: datetime
     class Config:
         from_attributes = True
@@ -105,12 +107,10 @@ class ServerOut(BaseModel):
 class OrgCreate(BaseModel):
     name: str
     description: Optional[str] = None
-    server_ids: List[int] = []
 
 class OrgUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
-    server_ids: Optional[List[int]] = None
 
 class OrgOut(BaseModel):
     id: int
@@ -128,8 +128,8 @@ class OrgOut(BaseModel):
 class UserCreate(BaseModel):
     username: str
     email: Optional[str] = None
-    server_id: int
-    org_id: Optional[int] = None
+    org_id: int                          # обязательно — сервер берётся из организации
+    server_id: Optional[int] = None      # если у орг несколько серверов — указать явно
     valid_days: int = 365
     password: Optional[str] = None
 

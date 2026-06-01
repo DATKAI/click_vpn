@@ -615,22 +615,30 @@
         <input x-model="userForm.email" type="email" class="input" placeholder="ivanov@company.ru"/>
       </div>
       <div>
-        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Организация (необязательно)</label>
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Организация</label>
         <select x-model="userForm.org_id" class="input" @change="filterServersByOrg()">
-          <option value="">— без организации —</option>
+          <option value="">— выберите организацию —</option>
           <template x-for="o in orgs" :key="o.id">
-            <option :value="o.id" x-text="o.name"></option>
+            <option :value="o.id" x-text="o.name + (o.server_ids.length ? ' (' + o.server_ids.length + ' серв.)' : ' ⚠️ нет серверов')"></option>
           </template>
         </select>
       </div>
-      <div>
-        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Сервер</label>
+
+      <!-- Сервер — только если у организации несколько серверов -->
+      <div x-show="availableServers.length > 1">
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Сервер <span style="color:#94a3b8;font-weight:400">(у организации несколько)</span></label>
         <select x-model="userForm.server_id" class="input">
           <option value="">— выберите сервер —</option>
           <template x-for="s in availableServers" :key="s.id">
             <option :value="s.id" x-text="s.name"></option>
           </template>
         </select>
+      </div>
+
+      <!-- Автосервер — если один -->
+      <div x-show="availableServers.length === 1" style="padding:10px 14px;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:10px;display:flex;align-items:center;gap:8px">
+        <svg width="16" height="16" fill="none" stroke="#16a34a" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M12 5l7 7-7 7"/></svg>
+        <span style="font-size:13px;color:#166534">Сервер: <strong x-text="availableServers[0]?.name"></strong></span>
       </div>
       <div>
         <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Срок действия (дней)</label>
@@ -694,32 +702,16 @@
 <!-- Modal: Create/Edit Organization -->
 <div x-show="showCreateOrg || showEditOrg" x-cloak class="modal-backdrop" @click.self="showCreateOrg=false;showEditOrg=false">
   <div class="modal fade-in">
-    <h3 style="font-size:18px;font-weight:700;margin:0 0 20px" x-text="showEditOrg ? 'Редактировать организацию' : 'Новая организация'"></h3>
+    <h3 style="font-size:18px;font-weight:700;margin:0 0 6px" x-text="showEditOrg ? 'Редактировать организацию' : 'Новая организация'"></h3>
+    <p style="color:#94a3b8;font-size:13px;margin:0 0 20px">Серверы назначаются через редактирование сервера</p>
     <div style="display:flex;flex-direction:column;gap:14px">
       <div>
         <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Название</label>
-        <input x-model="orgForm.name" class="input" placeholder="Главный офис"/>
+        <input x-model="orgForm.name" class="input" placeholder="Главный офис / Филиал Москва"/>
       </div>
       <div>
         <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Описание (необязательно)</label>
         <input x-model="orgForm.description" class="input" placeholder="Краткое описание"/>
-      </div>
-      <div>
-        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:8px">Серверы организации</label>
-        <div style="display:flex;flex-direction:column;gap:8px">
-          <template x-for="s in servers" :key="s.id">
-            <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:10px;cursor:pointer" :style="orgForm.server_ids.includes(s.id)?'border-color:#6366f1;background:#fafaff':''">
-              <input type="checkbox" :checked="orgForm.server_ids.includes(s.id)"
-                @change="orgForm.server_ids.includes(s.id) ? orgForm.server_ids.splice(orgForm.server_ids.indexOf(s.id),1) : orgForm.server_ids.push(s.id)"
-                style="width:16px;height:16px;accent-color:#4f46e5"/>
-              <span style="font-size:14px;font-weight:500" x-text="s.name"></span>
-              <span :class="s.status==='running'?'badge badge-green':'badge badge-gray'" style="margin-left:auto;font-size:11px">
-                <span class="badge-dot"></span>
-                <span x-text="s.status==='running'?'Работает':'Остановлен'"></span>
-              </span>
-            </label>
-          </template>
-        </div>
       </div>
     </div>
     <div x-show="formError" x-text="formError" class="alert alert-error" style="margin-top:14px"></div>
@@ -749,6 +741,30 @@
         <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Push маршруты (CIDR, каждый с новой строки)</label>
         <textarea x-model="editServerForm.push_routes" class="input" placeholder="192.168.1.0/24&#10;10.0.0.0/8"></textarea>
       </div>
+
+      <!-- Организации сервера -->
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:8px">Организации с доступом к серверу</label>
+        <template x-if="orgs.length === 0">
+          <p style="color:#94a3b8;font-size:13px">Организаций нет — создайте их в разделе «Организации»</p>
+        </template>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <template x-for="o in orgs" :key="o.id">
+            <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:10px;cursor:pointer"
+                   :style="editServerForm.org_ids.includes(o.id)?'border-color:#6366f1;background:#fafaff':''">
+              <input type="checkbox"
+                :checked="editServerForm.org_ids.includes(o.id)"
+                @change="editServerForm.org_ids.includes(o.id)
+                  ? editServerForm.org_ids.splice(editServerForm.org_ids.indexOf(o.id),1)
+                  : editServerForm.org_ids.push(o.id)"
+                style="width:16px;height:16px;accent-color:#4f46e5"/>
+              <span style="font-size:14px;font-weight:500" x-text="o.name"></span>
+              <span style="color:#94a3b8;font-size:12px;margin-left:auto" x-text="o.user_count + ' кл.'"></span>
+            </label>
+          </template>
+        </div>
+      </div>
+
       <div class="alert alert-warning">
         <svg style="flex-shrink:0" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
         <span>Для применения изменений DNS и маршрутов — перезапустите сервер</span>
@@ -837,7 +853,7 @@ function app() {
     showEditUser: false,
     showEditOrg: false,
     showEditPassword: false,
-    editServerForm: { id:null, name:'', dns_servers:'', push_routes:'' },
+    editServerForm: { id:null, name:'', dns_servers:'', push_routes:'', org_ids:[] },
     editUserForm: { id:null, username:'', email:'', is_active:true, org_id:'', cert_password:null, new_password:'' },
     orgForm: { id:null, name:'', description:'', server_ids:[] },
     orgs: [],
@@ -1127,7 +1143,11 @@ function app() {
     },
 
     openEditServer(s) {
-      this.editServerForm = { id: s.id, name: s.name, dns_servers: s.dns_servers, push_routes: s.push_routes };
+      this.editServerForm = {
+        id: s.id, name: s.name,
+        dns_servers: s.dns_servers, push_routes: s.push_routes,
+        org_ids: [...(s.org_ids || [])],
+      };
       this.formError = '';
       this.showEditServer = true;
     },
@@ -1139,8 +1159,10 @@ function app() {
           name: this.editServerForm.name,
           dns_servers: this.editServerForm.dns_servers,
           push_routes: this.editServerForm.push_routes,
+          org_ids: this.editServerForm.org_ids,
         });
         await this.loadServers();
+        await this.loadOrgs();
         this.showEditServer = false;
       } catch(e) { this.formError = e.message; }
     },
@@ -1184,14 +1206,21 @@ function app() {
     async createUser() {
       this.formError = '';
       if (!this.userForm.username) { this.formError = 'Введите имя пользователя'; return; }
-      if (!this.userForm.server_id) { this.formError = 'Выберите сервер'; return; }
+      if (!this.userForm.org_id) { this.formError = 'Выберите организацию'; return; }
+      if (this.availableServers.length > 1 && !this.userForm.server_id) { this.formError = 'Выберите сервер'; return; }
       if (!this.settings.isp1_host) { this.formError = 'Сначала настройте хост провайдера в Настройках'; return; }
       try {
-        const u = await this.api('POST', '/users', {
-          ...this.userForm,
-          server_id: +this.userForm.server_id,
-          valid_days: +this.userForm.valid_days
-        });
+        const payload = {
+          username: this.userForm.username,
+          email: this.userForm.email || null,
+          org_id: +this.userForm.org_id,
+          valid_days: +this.userForm.valid_days,
+          password: this.userForm.password || null,
+        };
+        if (this.availableServers.length > 1 && this.userForm.server_id) {
+          payload.server_id = +this.userForm.server_id;
+        }
+        const u = await this.api('POST', '/users', payload);
         await this.loadUsers();
         this.showCreateUser = false;
         this.showPassword = false;

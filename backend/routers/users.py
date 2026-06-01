@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import AdminUser, CA, VPNServer, VPNUser, CertStatus, Settings
+from models import AdminUser, CA, VPNServer, VPNUser, Organization, CertStatus, Settings
 from schemas import UserCreate, UserUpdate, UserChangePassword, UserOut, UserListOut
 from auth import get_current_user
 from services import pki
@@ -21,13 +21,26 @@ def create_user(
     db: Session = Depends(get_db),
     _: AdminUser = Depends(get_current_user),
 ):
-    server = db.query(VPNServer).filter(VPNServer.id == data.server_id).first()
-    if not server:
-        raise HTTPException(404, "Сервер не найден")
+    # Получаем организацию
+    org = db.query(Organization).filter(Organization.id == data.org_id).first()
+    if not org:
+        raise HTTPException(404, "Организация не найдена")
+    if not org.servers:
+        raise HTTPException(400, f"Организация '{org.name}' не привязана ни к одному серверу")
 
-    # Проверка уникальности username на сервере
+    # Определяем сервер: явно указан или единственный у организации
+    if data.server_id:
+        server = db.query(VPNServer).filter(VPNServer.id == data.server_id).first()
+        if not server or server not in org.servers:
+            raise HTTPException(400, "Указанный сервер не принадлежит организации")
+    elif len(org.servers) == 1:
+        server = org.servers[0]
+    else:
+        raise HTTPException(400, f"У организации несколько серверов — укажите server_id явно")
+
+    # Проверка уникальности
     exists = db.query(VPNUser).filter(
-        VPNUser.server_id == data.server_id,
+        VPNUser.server_id == server.id,
         VPNUser.username == data.username,
         VPNUser.cert_status == CertStatus.active,
     ).first()
