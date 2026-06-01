@@ -53,6 +53,7 @@ PIP_MIRROR="https://pypi.tuna.tsinghua.edu.cn/simple"
 
 # ── Перезапуск сервиса ────────────────────────────────────────────────────────
 info "Перезапуск сервиса..."
+systemctl daemon-reload
 systemctl restart "$SERVICE_NAME"
 
 # ── Проверка ──────────────────────────────────────────────────────────────────

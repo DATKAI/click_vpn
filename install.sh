@@ -87,7 +87,7 @@ chmod 600 "$INSTALL_DIR/.env"
 info "Создание systemd сервиса..."
 cat > /etc/systemd/system/${SERVICE_NAME}.service <<EOF
 [Unit]
-Description=VPN Manager
+Description=Click VPN
 After=network.target
 
 [Service]
@@ -98,6 +98,9 @@ Environment=PYTHONPATH=${INSTALL_DIR}/backend
 ExecStart=${VENV_DIR}/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8080
 Restart=always
 RestartSec=5
+# Права для управления OpenVPN и сетью
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
 
 [Install]
 WantedBy=multi-user.target

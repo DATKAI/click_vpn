@@ -143,9 +143,14 @@ def start_server(server_id: int, db: Session = Depends(get_db), _: AdminUser = D
     if not server.config_path or not os.path.exists(server.config_path):
         raise HTTPException(400, "Конфиг не найден")
 
-    ok = ovpn_manager.start_server(server_id, server.config_path, DATA_DIR)
+    # Создаём systemd unit и запускаем
+    ovpn_manager.create_systemd_unit(server_id, server.config_path)
+    ok = ovpn_manager.start_server(
+        server_id, server.config_path, DATA_DIR,
+        network=server.network, netmask=server.netmask
+    )
     if not ok:
-        raise HTTPException(500, "Не удалось запустить OpenVPN (установлен?)")
+        raise HTTPException(500, "Не удалось запустить OpenVPN. Проверьте: journalctl -u click-vpn-server-" + str(server_id))
 
     server.status = ServerStatus.running
     db.commit()
@@ -158,7 +163,8 @@ def stop_server(server_id: int, db: Session = Depends(get_db), _: AdminUser = De
     if not server:
         raise HTTPException(404, "Сервер не найден")
 
-    ovpn_manager.stop_server(server_id, DATA_DIR)
+    ovpn_manager.stop_server(server_id, DATA_DIR,
+                              network=server.network, netmask=server.netmask)
     server.status = ServerStatus.stopped
     db.commit()
     return {"status": "stopped"}
@@ -169,6 +175,7 @@ def delete_server(server_id: int, db: Session = Depends(get_db), _: AdminUser = 
     server = db.query(VPNServer).filter(VPNServer.id == server_id).first()
     if not server:
         raise HTTPException(404, "Сервер не найден")
-    ovpn_manager.stop_server(server_id, DATA_DIR)
+    ovpn_manager.remove_unit(server_id, DATA_DIR,
+                              network=server.network, netmask=server.netmask)
     db.delete(server)
     db.commit()
