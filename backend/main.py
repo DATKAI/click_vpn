@@ -21,8 +21,32 @@ os.makedirs(os.path.join(DATA_DIR, "openvpn"), exist_ok=True)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    _migrate_db()
     _seed_defaults()
     yield
+
+
+def _migrate_db():
+    """Добавляет новые колонки в существующую БД если их нет (safe migrations)."""
+    migrations = [
+        ("settings", "isp3_host",  "VARCHAR(256)"),
+        ("settings", "isp3_port",  "INTEGER DEFAULT 1194"),
+        ("settings", "isp3_label", "VARCHAR(64) DEFAULT 'ISP3'"),
+        ("settings", "isp4_host",  "VARCHAR(256)"),
+        ("settings", "isp4_port",  "INTEGER DEFAULT 1194"),
+        ("settings", "isp4_label", "VARCHAR(64) DEFAULT 'ISP4'"),
+    ]
+    with engine.connect() as conn:
+        for table, column, col_type in migrations:
+            try:
+                conn.execute(
+                    __import__("sqlalchemy").text(
+                        f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"
+                    )
+                )
+                conn.commit()
+            except Exception:
+                pass  # колонка уже существует
 
 
 def _seed_defaults():
