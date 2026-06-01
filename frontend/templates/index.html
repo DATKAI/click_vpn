@@ -147,6 +147,11 @@
         Клиенты
         <span x-show="users.length" x-text="users.length" style="margin-left:auto;background:rgba(255,255,255,.1);color:#94a3b8;font-size:11px;padding:1px 7px;border-radius:50px"></span>
       </button>
+      <button class="nav-item" :class="{active:page==='orgs'}" @click="navigate('orgs')">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+        Организации
+        <span x-show="orgs.length" x-text="orgs.length" style="margin-left:auto;background:rgba(255,255,255,.1);color:#94a3b8;font-size:11px;padding:1px 7px;border-radius:50px"></span>
+      </button>
       <button class="nav-item" :class="{active:page==='ca'}" @click="navigate('ca')">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
         Сертификаты
@@ -318,7 +323,7 @@
         <table class="table">
           <thead><tr>
             <th style="padding-left:20px">Клиент</th>
-            <th>Email</th>
+            <th>Организация</th>
             <th>Сервер</th>
             <th>Статус</th>
             <th>Истекает</th>
@@ -327,8 +332,11 @@
           <tbody>
             <template x-for="u in filteredUsers" :key="u.id">
               <tr>
-                <td style="padding-left:20px;font-weight:600" x-text="u.username"></td>
-                <td style="color:#94a3b8;font-size:13px" x-text="u.email || '—'"></td>
+                <td style="padding-left:20px">
+                  <div style="font-weight:600" x-text="u.username"></div>
+                  <div style="color:#94a3b8;font-size:12px" x-text="u.email || ''"></div>
+                </td>
+                <td style="font-size:13px;color:#475569" x-text="orgName(u.org_id)"></td>
                 <td style="font-size:13px" x-text="serverName(u.server_id)"></td>
                 <td>
                   <span :class="u.cert_status==='active'?'badge badge-green':'badge badge-red'">
@@ -359,6 +367,64 @@
             </tr>
           </tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- Organizations -->
+    <div x-show="page==='orgs'" class="fade-in" style="padding:32px">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:24px">
+        <div>
+          <h2 style="font-size:22px;font-weight:700;color:#0f172a;margin:0">Организации</h2>
+          <p style="color:#94a3b8;font-size:13px;margin-top:4px">Филиалы и отделы — привязываются к серверам</p>
+        </div>
+        <button class="btn btn-primary" @click="showCreateOrg=true">
+          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+          Новая организация
+        </button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px">
+        <template x-for="o in orgs" :key="o.id">
+          <div class="card" style="padding:20px">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">
+              <div style="display:flex;align-items:center;gap:10px">
+                <div style="width:40px;height:40px;background:#ede9fe;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                  <svg width="20" height="20" fill="none" stroke="#7c3aed" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+                </div>
+                <div>
+                  <div style="font-weight:700;font-size:15px" x-text="o.name"></div>
+                  <div style="color:#94a3b8;font-size:12px" x-text="o.description || 'Без описания'"></div>
+                </div>
+              </div>
+            </div>
+            <div style="display:flex;gap:12px;margin-bottom:14px">
+              <div style="text-align:center;flex:1;padding:8px;background:#f8fafc;border-radius:8px">
+                <div style="font-size:20px;font-weight:700;color:#4f46e5" x-text="o.user_count"></div>
+                <div style="font-size:11px;color:#94a3b8">Клиентов</div>
+              </div>
+              <div style="text-align:center;flex:1;padding:8px;background:#f8fafc;border-radius:8px">
+                <div style="font-size:20px;font-weight:700;color:#10b981" x-text="o.server_ids.length"></div>
+                <div style="font-size:11px;color:#94a3b8">Серверов</div>
+              </div>
+            </div>
+            <div x-show="o.server_ids.length" style="margin-bottom:12px;display:flex;flex-wrap:wrap;gap:6px">
+              <template x-for="sid in o.server_ids" :key="sid">
+                <span style="background:#f1f5f9;color:#475569;font-size:11px;padding:2px 8px;border-radius:50px" x-text="serverName(sid)"></span>
+              </template>
+            </div>
+            <div style="display:flex;gap:8px">
+              <button @click="openEditOrg(o)" class="btn btn-gray btn-sm" style="flex:1;justify-content:center">
+                <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                Изменить
+              </button>
+              <button @click="deleteOrg(o.id)" class="btn btn-danger btn-sm">Удалить</button>
+            </div>
+          </div>
+        </template>
+        <template x-if="orgs.length===0">
+          <div class="card" style="text-align:center;padding:48px;grid-column:1/-1">
+            <p style="color:#94a3b8;margin:0">Организаций нет. Создайте первую.</p>
+          </div>
+        </template>
       </div>
     </div>
 
@@ -549,10 +615,19 @@
         <input x-model="userForm.email" type="email" class="input" placeholder="ivanov@company.ru"/>
       </div>
       <div>
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Организация (необязательно)</label>
+        <select x-model="userForm.org_id" class="input" @change="filterServersByOrg()">
+          <option value="">— без организации —</option>
+          <template x-for="o in orgs" :key="o.id">
+            <option :value="o.id" x-text="o.name"></option>
+          </template>
+        </select>
+      </div>
+      <div>
         <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Сервер</label>
         <select x-model="userForm.server_id" class="input">
           <option value="">— выберите сервер —</option>
-          <template x-for="s in servers" :key="s.id">
+          <template x-for="s in availableServers" :key="s.id">
             <option :value="s.id" x-text="s.name"></option>
           </template>
         </select>
@@ -616,6 +691,47 @@
   </div>
 </div>
 
+<!-- Modal: Create/Edit Organization -->
+<div x-show="showCreateOrg || showEditOrg" x-cloak class="modal-backdrop" @click.self="showCreateOrg=false;showEditOrg=false">
+  <div class="modal fade-in">
+    <h3 style="font-size:18px;font-weight:700;margin:0 0 20px" x-text="showEditOrg ? 'Редактировать организацию' : 'Новая организация'"></h3>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Название</label>
+        <input x-model="orgForm.name" class="input" placeholder="Главный офис"/>
+      </div>
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Описание (необязательно)</label>
+        <input x-model="orgForm.description" class="input" placeholder="Краткое описание"/>
+      </div>
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:8px">Серверы организации</label>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <template x-for="s in servers" :key="s.id">
+            <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:10px;cursor:pointer" :style="orgForm.server_ids.includes(s.id)?'border-color:#6366f1;background:#fafaff':''">
+              <input type="checkbox" :checked="orgForm.server_ids.includes(s.id)"
+                @change="orgForm.server_ids.includes(s.id) ? orgForm.server_ids.splice(orgForm.server_ids.indexOf(s.id),1) : orgForm.server_ids.push(s.id)"
+                style="width:16px;height:16px;accent-color:#4f46e5"/>
+              <span style="font-size:14px;font-weight:500" x-text="s.name"></span>
+              <span :class="s.status==='running'?'badge badge-green':'badge badge-gray'" style="margin-left:auto;font-size:11px">
+                <span class="badge-dot"></span>
+                <span x-text="s.status==='running'?'Работает':'Остановлен'"></span>
+              </span>
+            </label>
+          </template>
+        </div>
+      </div>
+    </div>
+    <div x-show="formError" x-text="formError" class="alert alert-error" style="margin-top:14px"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+      <button class="btn btn-gray" @click="showCreateOrg=false;showEditOrg=false;formError=''">Отмена</button>
+      <button class="btn btn-primary" @click="showEditOrg ? saveOrg() : createOrg()">
+        <span x-text="showEditOrg ? 'Сохранить' : 'Создать'"></span>
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal: Edit Server -->
 <div x-show="showEditServer" x-cloak class="modal-backdrop" @click.self="showEditServer=false">
   <div class="modal fade-in">
@@ -656,9 +772,32 @@
         <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Email</label>
         <input x-model="editUserForm.email" type="email" class="input" placeholder="user@company.ru"/>
       </div>
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Организация</label>
+        <select x-model="editUserForm.org_id" class="input">
+          <option value="">— без организации —</option>
+          <template x-for="o in orgs" :key="o.id">
+            <option :value="o.id" x-text="o.name"></option>
+          </template>
+        </select>
+      </div>
       <div style="display:flex;align-items:center;gap:10px;padding:14px;background:#f8fafc;border-radius:10px;border:1.5px solid #e2e8f0">
         <input type="checkbox" x-model="editUserForm.is_active" id="userActive" style="width:16px;height:16px;accent-color:#4f46e5"/>
         <label for="userActive" style="font-size:13px;font-weight:600;color:#475569;cursor:pointer">Клиент активен</label>
+      </div>
+
+      <!-- Пароль сертификата -->
+      <div style="border-top:1px solid #f1f5f9;padding-top:14px">
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:4px">Пароль сертификата</label>
+        <div x-show="editUserForm.cert_password" style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:10px;margin-bottom:10px">
+          <svg width="16" height="16" fill="none" stroke="#16a34a" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+          <span style="font-family:monospace;font-size:14px;flex:1" x-text="showEditPassword ? editUserForm.cert_password : '••••••••'"></span>
+          <button type="button" @click="showEditPassword=!showEditPassword" style="background:none;border:none;cursor:pointer;color:#16a34a;font-size:12px" x-text="showEditPassword?'Скрыть':'Показать'"></button>
+        </div>
+        <div x-show="!editUserForm.cert_password" style="color:#94a3b8;font-size:12px;margin-bottom:10px">Пароль не установлен</div>
+        <div style="position:relative">
+          <input x-model="editUserForm.new_password" :type="showEditPassword?'text':'password'" class="input" placeholder="Новый пароль (оставьте пустым чтобы убрать)"/>
+        </div>
       </div>
     </div>
     <div x-show="formError" x-text="formError" class="alert alert-error" style="margin-top:14px"></div>
@@ -693,22 +832,28 @@ function app() {
     showCreateServer: false,
     showCreateUser: false,
     showCreateCA: false,
+    showCreateOrg: false,
     showEditServer: false,
     showEditUser: false,
+    showEditOrg: false,
+    showEditPassword: false,
     editServerForm: { id:null, name:'', dns_servers:'', push_routes:'' },
-    editUserForm: { id:null, username:'', email:'', is_active:true },
+    editUserForm: { id:null, username:'', email:'', is_active:true, org_id:'', cert_password:null, new_password:'' },
+    orgForm: { id:null, name:'', description:'', server_ids:[] },
+    orgs: [],
+    availableServers: [],
     serverCreating: false,
     serverCreateTimer: 0,
     _timerInterval: null,
     serverForm: { name:'', ca_id:'', network:'10.8.0.0', netmask:'255.255.255.0', port:1194, protocol:'udp', dns_servers:'8.8.8.8,8.8.4.4', push_routes:'' },
-    userForm: { username:'', email:'', server_id:'', valid_days:365, password:'' },
+    userForm: { username:'', email:'', server_id:'', org_id:'', valid_days:365, password:'' },
     showPassword: false,
     caForm: { common_name:'', country:'RU', org:'', valid_days:3650 },
     userFilter: { server_id:'', search:'' },
     _refreshTimer: null,
 
     get pageTitle() {
-      const titles = { dashboard:'Дашборд', servers:'Серверы', users:'Клиенты', ca:'Сертификаты', settings:'Настройки' };
+      const titles = { dashboard:'Дашборд', servers:'Серверы', users:'Клиенты', orgs:'Организации', ca:'Сертификаты', settings:'Настройки' };
       return (titles[this.page] || '') + ' — Click VPN';
     },
     get totalOnline() {
@@ -720,8 +865,8 @@ function app() {
       // Мгновенно восстанавливаем данные из кеша
       this._restoreCache();
       // Фоново загружаем свежие данные
-      Promise.all([this.loadSettings(), this.loadServers(), this.loadCA()])
-        .then(() => { this.loadDashboard(); this.loadUsers(); });
+      Promise.all([this.loadSettings(), this.loadServers(), this.loadCA(), this.loadOrgs()])
+        .then(() => { this.loadDashboard(); this.loadUsers(); this.availableServers = this.servers; });
       this._startRefresh();
     },
 
@@ -775,6 +920,7 @@ function app() {
       if (p === 'dashboard') this.loadDashboard();
       if (p === 'servers') this.loadServers();
       if (p === 'users') this.loadUsers();
+      if (p === 'orgs') this.loadOrgs();
       if (p === 'ca') this.loadCA();
       if (p === 'settings') this.loadSettings();
     },
@@ -849,6 +995,10 @@ function app() {
 
     async loadCA() {
       try { this.caList = await this.api('GET', '/ca') || []; this._saveCache(); } catch {}
+    },
+
+    async loadOrgs() {
+      try { this.orgs = await this.api('GET', '/organizations') || []; } catch {}
     },
 
     async loadSettings() {
@@ -933,6 +1083,49 @@ function app() {
       catch(e) { alert('Ошибка: ' + e.message); }
     },
 
+    filterServersByOrg() {
+      const orgId = +this.userForm.org_id;
+      if (!orgId) { this.availableServers = this.servers; return; }
+      const org = this.orgs.find(o => o.id === orgId);
+      this.availableServers = org ? this.servers.filter(s => org.server_ids.includes(s.id)) : this.servers;
+      // Сбросить выбранный сервер если он не в организации
+      if (this.userForm.server_id && !this.availableServers.find(s => s.id === +this.userForm.server_id)) {
+        this.userForm.server_id = '';
+      }
+    },
+
+    async createOrg() {
+      this.formError = '';
+      if (!this.orgForm.name) { this.formError = 'Введите название'; return; }
+      try {
+        await this.api('POST', '/organizations', this.orgForm);
+        await this.loadOrgs();
+        this.showCreateOrg = false;
+        this.orgForm = { id:null, name:'', description:'', server_ids:[] };
+      } catch(e) { this.formError = e.message; }
+    },
+
+    openEditOrg(o) {
+      this.orgForm = { id:o.id, name:o.name, description:o.description||'', server_ids:[...o.server_ids] };
+      this.formError = '';
+      this.showEditOrg = true;
+    },
+
+    async saveOrg() {
+      this.formError = '';
+      try {
+        await this.api('PUT', '/organizations/' + this.orgForm.id, this.orgForm);
+        await this.loadOrgs();
+        this.showEditOrg = false;
+      } catch(e) { this.formError = e.message; }
+    },
+
+    async deleteOrg(id) {
+      if (!confirm('Удалить организацию?')) return;
+      try { await this.api('DELETE', '/organizations/' + id); await this.loadOrgs(); }
+      catch(e) { alert(e.message); }
+    },
+
     openEditServer(s) {
       this.editServerForm = { id: s.id, name: s.name, dns_servers: s.dns_servers, push_routes: s.push_routes };
       this.formError = '';
@@ -953,7 +1146,12 @@ function app() {
     },
 
     openEditUser(u) {
-      this.editUserForm = { id: u.id, username: u.username, email: u.email || '', is_active: u.is_active };
+      this.editUserForm = {
+        id: u.id, username: u.username,
+        email: u.email || '', is_active: u.is_active,
+        org_id: u.org_id || '', cert_password: u.cert_password, new_password: '',
+      };
+      this.showEditPassword = false;
       this.formError = '';
       this.showEditUser = true;
     },
@@ -964,7 +1162,14 @@ function app() {
         await this.api('PUT', '/users/' + this.editUserForm.id, {
           email: this.editUserForm.email || null,
           is_active: this.editUserForm.is_active,
+          org_id: this.editUserForm.org_id ? +this.editUserForm.org_id : null,
         });
+        // Смена пароля если заполнено
+        if (this.editUserForm.new_password !== undefined) {
+          await this.api('POST', '/users/' + this.editUserForm.id + '/change-password', {
+            new_password: this.editUserForm.new_password || null,
+          });
+        }
         await this.loadUsers();
         this.showEditUser = false;
       } catch(e) { this.formError = e.message; }
@@ -990,7 +1195,8 @@ function app() {
         await this.loadUsers();
         this.showCreateUser = false;
         this.showPassword = false;
-        this.userForm = { username:'', email:'', server_id:'', valid_days:365, password:'' };
+        this.userForm = { username:'', email:'', server_id:'', org_id:'', valid_days:365, password:'' };
+        this.availableServers = this.servers;
         // Автоскачивание .ovpn
         await this.downloadOvpn(u.id, u.username);
       } catch(e) { this.formError = e.message; }
@@ -1025,6 +1231,7 @@ function app() {
     },
 
     serverName(id) { return this.servers.find(s => s.id === id)?.name || '—'; },
+    orgName(id) { return id ? (this.orgs.find(o => o.id === id)?.name || '—') : '—'; },
 
     formatDate(dt) {
       if (!dt) return '—';

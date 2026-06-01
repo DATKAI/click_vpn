@@ -100,26 +100,56 @@ class ServerOut(BaseModel):
         from_attributes = True
 
 
+# ── Organization ──────────────────────────────────────────────────────────────
+
+class OrgCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    server_ids: List[int] = []
+
+class OrgUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    server_ids: Optional[List[int]] = None
+
+class OrgOut(BaseModel):
+    id: int
+    name: str
+    description: Optional[str]
+    created_at: datetime
+    server_ids: List[int] = []
+    user_count: int = 0
+    class Config:
+        from_attributes = True
+
+
 # ── VPN User ──────────────────────────────────────────────────────────────────
 
 class UserCreate(BaseModel):
     username: str
     email: Optional[str] = None
     server_id: int
+    org_id: Optional[int] = None
     valid_days: int = 365
-    password: Optional[str] = None  # пароль для шифрования приватного ключа
+    password: Optional[str] = None
 
 class UserUpdate(BaseModel):
     email: Optional[str] = None
     is_active: Optional[bool] = None
+    org_id: Optional[int] = None
+
+class UserChangePassword(BaseModel):
+    new_password: Optional[str] = None  # None = убрать пароль
 
 class UserOut(BaseModel):
     id: int
     username: str
     email: Optional[str]
     server_id: int
+    org_id: Optional[int]
     cert_status: str
     cert_expires_at: Optional[datetime]
+    cert_password: Optional[str]
     is_active: bool
     created_at: datetime
     class Config:

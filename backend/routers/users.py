@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import AdminUser, CA, VPNServer, VPNUser, CertStatus, Settings
-from schemas import UserCreate, UserUpdate, UserOut, UserListOut
+from schemas import UserCreate, UserUpdate, UserChangePassword, UserOut, UserListOut
 from auth import get_current_user
 from services import pki
 from services.profile_builder import build_ovpn_profile
@@ -52,10 +52,12 @@ def create_user(
         email=data.email,
         ca_id=ca.id,
         server_id=data.server_id,
+        org_id=data.org_id,
         cert_pem=cert_pem,
         key_pem=key_pem,
         cert_serial=ca.serial,
         cert_expires_at=expires_at,
+        cert_password=data.password or None,
     )
     db.add(user)
     db.commit()
@@ -178,6 +180,53 @@ def revoke_user(
     with open(crl_path, "w") as f:
         f.write(crl_pem)
 
+    db.refresh(user)
+    return user
+
+
+@router.post("/{user_id}/change-password", response_model=UserOut)
+def change_password(
+    user_id: int,
+    data: UserChangePassword,
+    db: Session = Depends(get_db),
+    _: AdminUser = Depends(get_current_user),
+):
+    """Сменить пароль приватного ключа сертификата."""
+    user = db.query(VPNUser).filter(VPNUser.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "Пользователь не найден")
+    if not user.cert_pem or not user.key_pem:
+        raise HTTPException(400, "Сертификат не найден")
+
+    # Расшифровываем ключ старым паролем
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.backends import default_backend
+    old_password = user.cert_password.encode() if user.cert_password else None
+    try:
+        key = serialization.load_pem_private_key(
+            user.key_pem.encode(),
+            password=old_password,
+            backend=default_backend(),
+        )
+    except Exception:
+        raise HTTPException(400, "Не удалось расшифровать ключ")
+
+    # Перешифровываем новым паролем
+    new_pwd = data.new_password or None
+    if new_pwd:
+        encryption = serialization.BestAvailableEncryption(new_pwd.encode())
+    else:
+        encryption = serialization.NoEncryption()
+
+    new_key_pem = key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.TraditionalOpenSSL,
+        encryption_algorithm=encryption,
+    ).decode()
+
+    user.key_pem = new_key_pem
+    user.cert_password = new_pwd
+    db.commit()
     db.refresh(user)
     return user
 

@@ -11,7 +11,7 @@ from fastapi.responses import HTMLResponse
 from database import engine, SessionLocal, Base
 from models import AdminUser, Settings
 from auth import hash_password
-from routers import auth, settings, servers, users, status
+from routers import auth, settings, servers, users, status, organizations
 
 DATA_DIR = os.getenv("DATA_DIR", "./data")
 os.makedirs(os.path.join(DATA_DIR, "pki"), exist_ok=True)
@@ -29,12 +29,14 @@ async def lifespan(app: FastAPI):
 def _migrate_db():
     """Добавляет новые колонки в существующую БД если их нет (safe migrations)."""
     migrations = [
-        ("settings", "isp3_host",  "VARCHAR(256)"),
-        ("settings", "isp3_port",  "INTEGER DEFAULT 1194"),
-        ("settings", "isp3_label", "VARCHAR(64) DEFAULT 'ISP3'"),
-        ("settings", "isp4_host",  "VARCHAR(256)"),
-        ("settings", "isp4_port",  "INTEGER DEFAULT 1194"),
-        ("settings", "isp4_label", "VARCHAR(64) DEFAULT 'ISP4'"),
+        ("settings",  "isp3_host",      "VARCHAR(256)"),
+        ("settings",  "isp3_port",      "INTEGER DEFAULT 1194"),
+        ("settings",  "isp3_label",     "VARCHAR(64) DEFAULT 'ISP3'"),
+        ("settings",  "isp4_host",      "VARCHAR(256)"),
+        ("settings",  "isp4_port",      "INTEGER DEFAULT 1194"),
+        ("settings",  "isp4_label",     "VARCHAR(64) DEFAULT 'ISP4'"),
+        ("vpn_users", "org_id",         "INTEGER REFERENCES organizations(id)"),
+        ("vpn_users", "cert_password",  "VARCHAR(256)"),
     ]
     with engine.connect() as conn:
         for table, column, col_type in migrations:
@@ -90,6 +92,7 @@ app.include_router(settings.router)
 app.include_router(servers.router)
 app.include_router(users.router)
 app.include_router(status.router)
+app.include_router(organizations.router)
 
 # Статика и шаблоны
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
