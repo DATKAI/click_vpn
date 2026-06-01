@@ -4,6 +4,8 @@
 set -e
 
 INSTALL_DIR="/opt/vpn-manager"
+SERVICE_NAME="vpn-manager"
+VENV_DIR="$INSTALL_DIR/venv"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 info()  { echo -e "${GREEN}[INFO]${NC} $1"; }
@@ -16,20 +18,13 @@ echo "║         VPN Manager — Обновление         ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
 
-[ "$EUID" -ne 0 ] && error "Запустите от root: sudo bash update.sh"
+[ "$EUID" -ne 0 ] && error "Запустите от root: bash update.sh"
 [ ! -d "$INSTALL_DIR" ] && error "Не найдена директория $INSTALL_DIR. Сначала запустите install.sh"
 
 cd "$INSTALL_DIR"
 
-# ── Версия до обновления ──────────────────────────────────────────────────────
 OLD_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 info "Текущая версия: $OLD_COMMIT"
-
-# ── Сохраняем .env ────────────────────────────────────────────────────────────
-if [ -f .env ]; then
-  cp .env /tmp/vpn-manager-env.bak
-  info ".env сохранён в /tmp/vpn-manager-env.bak"
-fi
 
 # ── Pull ──────────────────────────────────────────────────────────────────────
 info "Получение обновлений с GitHub..."
@@ -44,30 +39,27 @@ fi
 
 info "Изменения:"
 git log --oneline HEAD..origin/master
-
 git pull origin master -q
 
-# ── Восстанавливаем .env ──────────────────────────────────────────────────────
-if [ -f /tmp/vpn-manager-env.bak ]; then
-  cp /tmp/vpn-manager-env.bak .env
-  chmod 600 .env
-  info ".env восстановлен"
-fi
+# ── Обновление зависимостей ───────────────────────────────────────────────────
+info "Обновление Python зависимостей..."
+"$VENV_DIR/bin/pip" install --quiet --upgrade pip
+"$VENV_DIR/bin/pip" install --quiet -r "$INSTALL_DIR/backend/requirements.txt"
 
-# ── Пересборка контейнера ─────────────────────────────────────────────────────
-info "Пересборка и перезапуск контейнера..."
-docker compose pull --quiet 2>/dev/null || true
-docker compose up -d --build
+# ── Перезапуск сервиса ────────────────────────────────────────────────────────
+info "Перезапуск сервиса..."
+systemctl restart "$SERVICE_NAME"
 
-# ── Ждём поднятия ─────────────────────────────────────────────────────────────
+# ── Проверка ──────────────────────────────────────────────────────────────────
 info "Ожидание запуска..."
 for i in $(seq 1 30); do
   if curl -sf http://localhost:8080 &>/dev/null; then break; fi
   sleep 1
 done
 
-# ── Удаляем старые образы ─────────────────────────────────────────────────────
-docker image prune -f 2>/dev/null || true
+if ! systemctl is-active --quiet "$SERVICE_NAME"; then
+  error "Сервис не запустился! Проверьте: journalctl -u vpn-manager -n 50"
+fi
 
 NEW_COMMIT=$(git rev-parse --short HEAD)
 echo ""

@@ -4,6 +4,8 @@
 set -e
 
 INSTALL_DIR="/opt/vpn-manager"
+SERVICE_NAME="vpn-manager"
+DATA_DIR="/var/lib/vpn-manager"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 info()  { echo -e "${GREEN}[INFO]${NC} $1"; }
@@ -16,60 +18,60 @@ echo "║         VPN Manager — Удаление           ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
 
-[ "$EUID" -ne 0 ] && error "Запустите от root: sudo bash uninstall.sh"
+[ "$EUID" -ne 0 ] && error "Запустите от root: bash uninstall.sh"
 
-# ── Подтверждение ─────────────────────────────────────────────────────────────
 warn "Будет удалено:"
-echo "  - Docker контейнер vpn-manager"
-echo "  - Docker образ vpn-manager"
-echo "  - Docker volume с данными (БД, сертификаты, ключи)"
-echo "  - Директория $INSTALL_DIR"
+echo "  - Сервис systemd vpn-manager"
+echo "  - Директория $INSTALL_DIR (код, venv)"
+echo "  - Директория $DATA_DIR (БД, сертификаты, ключи)"
+echo "  - Конфиг IP форвардинга"
 echo ""
 read -p "Вы уверены? Все данные будут потеряны! [yes/N]: " CONFIRM
 [ "$CONFIRM" != "yes" ] && echo "Отменено." && exit 0
 
 echo ""
 
-# ── Остановка и удаление контейнера ──────────────────────────────────────────
-if [ -d "$INSTALL_DIR" ]; then
-  cd "$INSTALL_DIR"
-  if docker compose ps -q 2>/dev/null | grep -q .; then
-    info "Остановка контейнера..."
-    docker compose down
-  else
-    info "Контейнер уже остановлен"
-  fi
-else
-  # Попытка остановить по имени если директория удалена
-  docker stop vpn-manager 2>/dev/null && docker rm vpn-manager 2>/dev/null || true
+# ── Остановка сервиса ─────────────────────────────────────────────────────────
+if systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
+  info "Остановка сервиса..."
+  systemctl stop "$SERVICE_NAME"
 fi
 
-# ── Удаление образа ───────────────────────────────────────────────────────────
-info "Удаление Docker образа..."
-docker rmi vpn-manager-vpn-manager 2>/dev/null || true
-docker rmi vpn-manager 2>/dev/null || true
+if systemctl is-enabled --quiet "$SERVICE_NAME" 2>/dev/null; then
+  info "Отключение автозапуска..."
+  systemctl disable "$SERVICE_NAME" --quiet
+fi
 
-# ── Удаление volume (данные: БД, PKI, сертификаты) ───────────────────────────
-info "Удаление данных (volume)..."
-docker volume rm vpn-manager_vpn-data 2>/dev/null || true
+# ── Удаление systemd unit ─────────────────────────────────────────────────────
+if [ -f "/etc/systemd/system/${SERVICE_NAME}.service" ]; then
+  info "Удаление systemd unit..."
+  rm -f "/etc/systemd/system/${SERVICE_NAME}.service"
+  systemctl daemon-reload
+fi
 
-# ── Удаление директории ───────────────────────────────────────────────────────
+# ── Удаление директорий ───────────────────────────────────────────────────────
+if [ -d "$DATA_DIR" ]; then
+  info "Удаление данных ($DATA_DIR)..."
+  rm -rf "$DATA_DIR"
+fi
+
 if [ -d "$INSTALL_DIR" ]; then
-  info "Удаление директории $INSTALL_DIR..."
+  info "Удаление приложения ($INSTALL_DIR)..."
   rm -rf "$INSTALL_DIR"
 fi
 
-# ── Чистка Docker ─────────────────────────────────────────────────────────────
-info "Очистка неиспользуемых Docker ресурсов..."
-docker system prune -f -q
+# ── IP форвардинг ─────────────────────────────────────────────────────────────
+if [ -f /etc/sysctl.d/99-vpn-manager.conf ]; then
+  info "Удаление конфига IP форвардинга..."
+  rm -f /etc/sysctl.d/99-vpn-manager.conf
+fi
 
 echo ""
 echo "╔══════════════════════════════════════════╗"
 echo "║           Удаление завершено!            ║"
 echo "║                                          ║"
-echo "║  Docker оставлен — он может              ║"
-echo "║  использоваться другими сервисами.       ║"
-echo "║  Для удаления Docker:                    ║"
-echo "║  apt-get remove -y docker-ce             ║"
+echo "║  openvpn оставлен (может использоваться  ║"
+echo "║  другими сервисами).                     ║"
+echo "║  Для удаления: apt remove openvpn        ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
