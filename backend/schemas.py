@@ -102,6 +102,7 @@ class UserCreate(BaseModel):
     email: Optional[str] = None
     server_id: int
     valid_days: int = 365
+    password: Optional[str] = None  # пароль для шифрования приватного ключа
 
 class UserOut(BaseModel):
     id: int

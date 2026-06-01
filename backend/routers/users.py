@@ -43,6 +43,7 @@ def create_user(
         serial=ca.serial,
         common_name=data.username,
         valid_days=data.valid_days,
+        password=data.password or None,
     )
     db.commit()
 

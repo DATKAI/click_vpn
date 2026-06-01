@@ -22,11 +22,15 @@ def generate_key(key_size: int = 2048) -> rsa.RSAPrivateKey:
     )
 
 
-def key_to_pem(key: rsa.RSAPrivateKey) -> str:
+def key_to_pem(key: rsa.RSAPrivateKey, password: str | None = None) -> str:
+    if password:
+        encryption = serialization.BestAvailableEncryption(password.encode())
+    else:
+        encryption = serialization.NoEncryption()
     return key.private_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PrivateFormat.TraditionalOpenSSL,
-        encryption_algorithm=serialization.NoEncryption(),
+        encryption_algorithm=encryption,
     ).decode()
 
 
@@ -124,6 +128,7 @@ def create_client_cert(
     serial: int,
     common_name: str,
     valid_days: int = 365,
+    password: str | None = None,
 ) -> tuple[str, str, datetime]:
     """Клиентский сертификат. Возвращает (cert_pem, key_pem, expires_at)."""
     ca_cert = x509.load_pem_x509_certificate(ca_cert_pem.encode(), default_backend())
@@ -157,7 +162,7 @@ def create_client_cert(
         )
         .sign(ca_key, hashes.SHA256(), default_backend())
     )
-    return cert_to_pem(cert), key_to_pem(key), expires_at
+    return cert_to_pem(cert), key_to_pem(key, password=password), expires_at
 
 
 def generate_dh_params(key_size: int = 2048) -> str:
