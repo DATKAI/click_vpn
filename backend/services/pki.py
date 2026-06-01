@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from cryptography import x509
 from cryptography.x509.oid import NameOID, ExtendedKeyUsageOID
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric import rsa, dh
 from cryptography.hazmat.backends import default_backend
 
 
@@ -158,6 +158,19 @@ def create_client_cert(
         .sign(ca_key, hashes.SHA256(), default_backend())
     )
     return cert_to_pem(cert), key_to_pem(key), expires_at
+
+
+def generate_dh_params(key_size: int = 2048) -> str:
+    """Генерирует DH параметры для OpenVPN сервера."""
+    parameters = dh.generate_parameters(
+        generator=2,
+        key_size=key_size,
+        backend=default_backend()
+    )
+    return parameters.parameter_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.ParameterFormat.PKCS3
+    ).decode()
 
 
 def build_crl(

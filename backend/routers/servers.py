@@ -98,12 +98,16 @@ def create_server(
     with open(crl_path, "w") as f:
         f.write(crl_pem)
 
+    # DH параметры (2048 бит, генерируется ~5-10 сек)
+    dh_pem = pki.generate_dh_params(2048)
+
     # OpenVPN config
     config_content = build_server_config(
         server_id=server.id,
         ca_cert_pem=ca.cert_pem,
         server_cert_pem=srv_cert_pem,
         server_key_pem=srv_key_pem,
+        dh_pem=dh_pem,
         network=server.network,
         netmask=server.netmask,
         port=server.port,

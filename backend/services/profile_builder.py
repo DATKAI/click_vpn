@@ -74,6 +74,7 @@ def build_server_config(
     ca_cert_pem: str,
     server_cert_pem: str,
     server_key_pem: str,
+    dh_pem: str,
     network: str,
     netmask: str,
     port: int,
@@ -92,7 +93,6 @@ def build_server_config(
         for route in push_routes.strip().splitlines():
             route = route.strip()
             if route:
-                # CIDR → network mask
                 try:
                     import ipaddress
                     net = ipaddress.ip_network(route, strict=False)
@@ -109,6 +109,7 @@ dev tun{server_id}
 
 server {network} {netmask}
 ifconfig-pool-persist {data_dir}/openvpn/ipp_{server_id}.txt
+topology subnet
 
 keepalive 10 120
 cipher AES-256-GCM
@@ -135,6 +136,9 @@ crl-verify {crl_path}
 <key>
 {server_key_pem.strip()}
 </key>
+<dh>
+{dh_pem.strip()}
+</dh>
 """
 
     if tls_auth_key:
