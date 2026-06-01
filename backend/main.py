@@ -46,7 +46,7 @@ def _seed_defaults():
 
 
 app = FastAPI(
-    title="VPN Manager",
+    title="Click VPN",
     description="Self-hosted OpenVPN management panel",
     version="1.0.0",
     lifespan=lifespan,

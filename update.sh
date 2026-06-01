@@ -3,8 +3,8 @@
 # Использование: bash /opt/vpn-manager/update.sh
 set -e
 
-INSTALL_DIR="/opt/vpn-manager"
-SERVICE_NAME="vpn-manager"
+INSTALL_DIR="/opt/click-vpn"
+SERVICE_NAME="click-vpn"
 VENV_DIR="$INSTALL_DIR/venv"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
@@ -14,7 +14,7 @@ error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
 echo ""
 echo "╔══════════════════════════════════════════╗"
-echo "║         VPN Manager — Обновление         ║"
+echo "║         Click VPN — Обновление         ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
 
@@ -58,7 +58,7 @@ for i in $(seq 1 30); do
 done
 
 if ! systemctl is-active --quiet "$SERVICE_NAME"; then
-  error "Сервис не запустился! Проверьте: journalctl -u vpn-manager -n 50"
+  error "Сервис не запустился! Проверьте: journalctl -u click-vpn -n 50"
 fi
 
 NEW_COMMIT=$(git rev-parse --short HEAD)

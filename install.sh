@@ -4,9 +4,9 @@
 set -e
 
 REPO="https://github.com/DATKAI/click_vpn.git"
-INSTALL_DIR="/opt/vpn-manager"
-SERVICE_NAME="vpn-manager"
-DATA_DIR="/var/lib/vpn-manager"
+INSTALL_DIR="/opt/click-vpn"
+SERVICE_NAME="click-vpn"
+DATA_DIR="/var/lib/click-vpn"
 VENV_DIR="$INSTALL_DIR/venv"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
@@ -16,7 +16,7 @@ error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
 echo ""
 echo "╔══════════════════════════════════════════╗"
-echo "║         VPN Manager — Установка          ║"
+echo "║          Click VPN — Установка           ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
 
@@ -67,8 +67,8 @@ cat > "$INSTALL_DIR/.env" <<EOF
 SECRET_KEY=${SECRET_KEY}
 ADMIN_PASSWORD=${ADMIN_PASSWORD}
 TOKEN_EXPIRE_MINUTES=480
-DATABASE_URL=sqlite:////var/lib/vpn-manager/vpn.db
-DATA_DIR=/var/lib/vpn-manager
+DATABASE_URL=sqlite:////var/lib/click-vpn/vpn.db
+DATA_DIR=/var/lib/click-vpn
 EOF
 chmod 600 "$INSTALL_DIR/.env"
 
@@ -94,8 +94,8 @@ EOF
 
 # ── IP форвардинг ─────────────────────────────────────────────────────────────
 info "Включение IP форвардинга..."
-echo "net.ipv4.ip_forward=1" > /etc/sysctl.d/99-vpn-manager.conf
-sysctl -p /etc/sysctl.d/99-vpn-manager.conf -q
+echo "net.ipv4.ip_forward=1" > /etc/sysctl.d/99-click-vpn.conf
+sysctl -p /etc/sysctl.d/99-click-vpn.conf -q
 
 # ── Запуск ────────────────────────────────────────────────────────────────────
 info "Запуск сервиса..."
@@ -121,6 +121,6 @@ printf  "║  Логин:   %-30s║\n" "admin"
 printf  "║  Пароль:  %-30s║\n" "${ADMIN_PASSWORD}"
 echo "╠══════════════════════════════════════════╣"
 echo "║  Пароль сохранён в:                      ║"
-echo "║  /opt/vpn-manager/.env                   ║"
+echo "║  /opt/click-vpn/.env                     ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""

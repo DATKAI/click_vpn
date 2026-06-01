@@ -3,9 +3,9 @@
 # Использование: bash /opt/vpn-manager/uninstall.sh
 set -e
 
-INSTALL_DIR="/opt/vpn-manager"
-SERVICE_NAME="vpn-manager"
-DATA_DIR="/var/lib/vpn-manager"
+INSTALL_DIR="/opt/click-vpn"
+SERVICE_NAME="click-vpn"
+DATA_DIR="/var/lib/click-vpn"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 info()  { echo -e "${GREEN}[INFO]${NC} $1"; }
@@ -14,7 +14,7 @@ error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
 echo ""
 echo "╔══════════════════════════════════════════╗"
-echo "║         VPN Manager — Удаление           ║"
+echo "║         Click VPN — Удаление           ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
 
@@ -61,9 +61,9 @@ if [ -d "$INSTALL_DIR" ]; then
 fi
 
 # ── IP форвардинг ─────────────────────────────────────────────────────────────
-if [ -f /etc/sysctl.d/99-vpn-manager.conf ]; then
+if [ -f /etc/sysctl.d/99-click-vpn.conf ]; then
   info "Удаление конфига IP форвардинга..."
-  rm -f /etc/sysctl.d/99-vpn-manager.conf
+  rm -f /etc/sysctl.d/99-click-vpn.conf
 fi
 
 echo ""
