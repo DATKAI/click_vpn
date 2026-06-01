@@ -3,83 +3,107 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title x-text="appTitle">Click VPN</title>
+  <title x-text="pageTitle">Click VPN</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <style>
-    [x-cloak] { display: none !important; }
-    .sidebar-link {
-      display: flex; align-items: center; gap: 12px;
-      padding: 10px 16px; border-radius: 8px;
-      color: #d1d5db; transition: background 0.15s, color 0.15s; cursor: pointer;
-      text-decoration: none;
-    }
-    .sidebar-link:hover { background: #374151; color: #fff; }
-    .sidebar-link.active { background: #4f46e5; color: #fff; }
-    .badge-green { display:inline-flex; align-items:center; padding: 2px 8px; border-radius:4px; font-size:12px; font-weight:500; background:#dcfce7; color:#166534; }
-    .badge-red   { display:inline-flex; align-items:center; padding: 2px 8px; border-radius:4px; font-size:12px; font-weight:500; background:#fee2e2; color:#991b1b; }
-    .badge-gray  { display:inline-flex; align-items:center; padding: 2px 8px; border-radius:4px; font-size:12px; font-weight:500; background:#f3f4f6; color:#4b5563; }
-    .btn {
-      display: inline-flex; align-items: center; gap: 7px;
-      padding: 10px 20px; border-radius: 50px; font-weight: 600;
-      font-size: 13px; letter-spacing: 0.02em;
-      cursor: pointer; border: none;
-      transition: all 0.2s ease; outline: none;
-      white-space: nowrap;
-    }
-    .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none !important; }
-    .btn:active:not(:disabled) { transform: scale(0.96) !important; }
-    .btn-primary {
-      background: #4f46e5;
-      color: #fff;
-      box-shadow: 0 4px 14px rgba(79,70,229,0.45);
-    }
-    .btn-primary:hover:not(:disabled) {
-      background: #4338ca;
-      box-shadow: 0 6px 20px rgba(79,70,229,0.55);
-      transform: translateY(-2px);
-    }
-    .btn-danger {
-      background: #fff;
-      color: #dc2626;
-      border: 1.5px solid #fca5a5;
-      box-shadow: none;
-    }
-    .btn-danger:hover:not(:disabled) {
-      background: #fef2f2;
-      border-color: #dc2626;
-      box-shadow: 0 4px 12px rgba(220,38,38,0.2);
-      transform: translateY(-1px);
-    }
-    .btn-gray {
-      background: #fff; color: #374151;
-      border: 1.5px solid #e5e7eb; box-shadow: none;
-    }
-    .btn-gray:hover:not(:disabled) { background: #f9fafb; border-color: #d1d5db; transform: translateY(-1px); }
-    .btn-sm { padding: 6px 14px; font-size: 12px; }
-    .input { width:100%; border:1px solid #d1d5db; border-radius:8px; padding:8px 12px; font-size:14px; outline:none; }
-    .input:focus { box-shadow: 0 0 0 2px #6366f1; border-color: #6366f1; }
-    .card { background:#fff; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,0.08); border:1px solid #e5e7eb; padding:24px; }
+    [x-cloak]{display:none!important}
+    *{box-sizing:border-box}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+
+    /* Sidebar */
+    .nav-item{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:10px;color:#94a3b8;font-size:14px;font-weight:500;cursor:pointer;transition:all .15s;text-decoration:none;border:none;background:none;width:100%}
+    .nav-item:hover{background:rgba(255,255,255,.07);color:#e2e8f0}
+    .nav-item.active{background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;box-shadow:0 4px 12px rgba(99,102,241,.4)}
+    .nav-item svg{flex-shrink:0;opacity:.8}
+    .nav-item.active svg{opacity:1}
+
+    /* Buttons */
+    .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:50px;font-weight:600;font-size:13px;cursor:pointer;border:none;transition:all .2s;outline:none;white-space:nowrap}
+    .btn:disabled{opacity:.45;cursor:not-allowed;transform:none!important}
+    .btn:active:not(:disabled){transform:scale(.96)!important}
+    .btn-primary{background:#4f46e5;color:#fff;box-shadow:0 4px 14px rgba(79,70,229,.4)}
+    .btn-primary:hover:not(:disabled){background:#4338ca;box-shadow:0 6px 20px rgba(79,70,229,.5);transform:translateY(-1px)}
+    .btn-danger{background:#fff;color:#dc2626;border:1.5px solid #fca5a5}
+    .btn-danger:hover:not(:disabled){background:#fef2f2;border-color:#dc2626;box-shadow:0 4px 12px rgba(220,38,38,.15);transform:translateY(-1px)}
+    .btn-success{background:#10b981;color:#fff;box-shadow:0 4px 14px rgba(16,185,129,.35)}
+    .btn-success:hover:not(:disabled){background:#059669;transform:translateY(-1px)}
+    .btn-gray{background:#f8fafc;color:#475569;border:1.5px solid #e2e8f0}
+    .btn-gray:hover:not(:disabled){background:#f1f5f9;border-color:#cbd5e1;transform:translateY(-1px)}
+    .btn-sm{padding:6px 14px;font-size:12px;border-radius:50px}
+
+    /* Badges */
+    .badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:50px;font-size:12px;font-weight:600}
+    .badge-green{background:#dcfce7;color:#15803d}
+    .badge-red{background:#fee2e2;color:#dc2626}
+    .badge-gray{background:#f1f5f9;color:#64748b}
+    .badge-yellow{background:#fef9c3;color:#a16207}
+    .badge-dot::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:currentColor;margin-right:2px}
+
+    /* Inputs */
+    .input{width:100%;border:1.5px solid #e2e8f0;border-radius:10px;padding:9px 13px;font-size:14px;outline:none;transition:all .15s;background:#fff;color:#1e293b}
+    .input:focus{border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,.12)}
+    select.input{cursor:pointer}
+    textarea.input{resize:vertical;min-height:80px}
+
+    /* Cards */
+    .card{background:#fff;border-radius:16px;border:1px solid #f1f5f9;box-shadow:0 1px 4px rgba(0,0,0,.06);padding:24px}
+    .stat-card{background:#fff;border-radius:16px;border:1px solid #f1f5f9;box-shadow:0 1px 4px rgba(0,0,0,.06);padding:24px;text-align:center;transition:all .2s}
+    .stat-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.1);transform:translateY(-2px)}
+
+    /* Table */
+    .table{width:100%;border-collapse:collapse;font-size:14px}
+    .table th{text-align:left;padding:10px 12px;color:#94a3b8;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #f1f5f9}
+    .table td{padding:12px;border-bottom:1px solid #f8fafc;color:#334155;vertical-align:middle}
+    .table tr:last-child td{border-bottom:none}
+    .table tr:hover td{background:#fafbff}
+
+    /* Modal */
+    .modal-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.5);backdrop-filter:blur(4px);z-index:50;display:flex;align-items:center;justify-content:center;padding:20px}
+    .modal{background:#fff;border-radius:20px;padding:28px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+
+    /* Alert */
+    .alert{display:flex;align-items:flex-start;gap:10px;padding:12px 16px;border-radius:12px;font-size:14px}
+    .alert-warning{background:#fffbeb;border:1px solid #fde68a;color:#92400e}
+    .alert-error{background:#fef2f2;border:1px solid #fecaca;color:#991b1b}
+    .alert-success{background:#f0fdf4;border:1px solid #bbf7d0;color:#166534}
+
+    /* Scrollbar */
+    ::-webkit-scrollbar{width:6px}
+    ::-webkit-scrollbar-track{background:transparent}
+    ::-webkit-scrollbar-thumb{background:#e2e8f0;border-radius:3px}
+
+    /* Animation */
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .spin{animation:spin 1s linear infinite}
+    @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+    .fade-in{animation:fadeIn .25s ease}
   </style>
 </head>
-<body class="bg-gray-50 text-gray-900">
+<body class="bg-slate-50 text-slate-900">
 
-<!-- Login Screen -->
-<div x-show="!token" x-cloak class="min-h-screen flex items-center justify-center">
-  <div class="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm">
-    <h1 class="text-2xl font-bold text-center mb-1">Click VPN</h1>
-    <p class="text-gray-500 text-center text-sm mb-6">Войдите для продолжения</p>
-    <form @submit.prevent="login">
-      <div class="mb-4">
-        <label class="block text-sm font-medium mb-1">Логин</label>
-        <input x-model="loginForm.username" type="text" class="input" placeholder="admin" required/>
+<!-- Login -->
+<div x-show="!token" x-cloak style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1e1b4b 0%,#312e81 50%,#1e1b4b 100%)">
+  <div style="background:#fff;border-radius:24px;padding:40px;width:100%;max-width:380px;box-shadow:0 25px 60px rgba(0,0,0,.3)">
+    <div style="text-align:center;margin-bottom:28px">
+      <div style="width:56px;height:56px;background:linear-gradient(135deg,#6366f1,#4f46e5);border-radius:16px;display:inline-flex;align-items:center;justify-content:center;margin-bottom:16px;box-shadow:0 8px 20px rgba(99,102,241,.4)">
+        <svg width="28" height="28" fill="none" stroke="#fff" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
       </div>
-      <div class="mb-6">
-        <label class="block text-sm font-medium mb-1">Пароль</label>
+      <h1 style="font-size:24px;font-weight:700;color:#1e293b;margin:0">Click VPN</h1>
+      <p style="color:#94a3b8;font-size:14px;margin-top:4px">Панель управления</p>
+    </div>
+    <form @submit.prevent="login">
+      <div style="margin-bottom:16px">
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Логин</label>
+        <input x-model="loginForm.username" type="text" class="input" placeholder="admin" required autofocus/>
+      </div>
+      <div style="margin-bottom:20px">
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Пароль</label>
         <input x-model="loginForm.password" type="password" class="input" placeholder="••••••••" required/>
       </div>
-      <p x-show="loginError" x-text="loginError" class="text-red-500 text-sm mb-3"></p>
-      <button type="submit" class="btn-primary w-full" :disabled="loading">
+      <p x-show="loginError" x-text="loginError" class="alert alert-error" style="margin-bottom:16px"></p>
+      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;padding:12px" :disabled="loading">
+        <svg x-show="loading" class="spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-dasharray="31" stroke-dashoffset="10"/></svg>
         <span x-show="!loading">Войти</span>
         <span x-show="loading">Вход...</span>
       </button>
@@ -87,95 +111,124 @@
   </div>
 </div>
 
-<!-- Main App -->
-<div x-show="token" x-cloak class="flex h-screen overflow-hidden">
+<!-- App -->
+<div x-show="token" x-cloak style="display:flex;height:100vh;overflow:hidden">
 
   <!-- Sidebar -->
-  <aside class="w-64 bg-gray-900 flex flex-col">
-    <div class="p-5 border-b border-gray-700">
-      <h1 class="text-white font-bold text-lg">Click VPN</h1>
-      <p class="text-gray-400 text-xs mt-0.5" x-text="settings.server_name || ''"></p>
+  <aside style="width:240px;background:#0f172a;display:flex;flex-direction:column;flex-shrink:0">
+    <div style="padding:20px 16px;border-bottom:1px solid rgba(255,255,255,.06)">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:36px;height:36px;background:linear-gradient(135deg,#6366f1,#4f46e5);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg width="18" height="18" fill="none" stroke="#fff" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+        </div>
+        <div>
+          <div style="color:#f1f5f9;font-weight:700;font-size:15px">Click VPN</div>
+          <div style="color:#475569;font-size:11px" x-text="settings.server_name || 'VPN Server'"></div>
+        </div>
+      </div>
     </div>
-    <nav class="flex-1 p-3 space-y-1">
-      <a class="sidebar-link" :class="{active: page==='dashboard'}" @click="page='dashboard'; loadDashboard()">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7h18M3 12h18M3 17h18"/></svg>
+
+    <nav style="flex:1;padding:12px 8px;display:flex;flex-direction:column;gap:2px">
+      <button class="nav-item" :class="{active:page==='dashboard'}" @click="navigate('dashboard')">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1" stroke-width="2"/><rect x="14" y="3" width="7" height="7" rx="1" stroke-width="2"/><rect x="3" y="14" width="7" height="7" rx="1" stroke-width="2"/><rect x="14" y="14" width="7" height="7" rx="1" stroke-width="2"/></svg>
         Дашборд
-      </a>
-      <a class="sidebar-link" :class="{active: page==='servers'}" @click="page='servers'; loadServers()">
+      </button>
+      <button class="nav-item" :class="{active:page==='servers'}" @click="navigate('servers')">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M12 5l7 7-7 7"/></svg>
         Серверы
-      </a>
-      <a class="sidebar-link" :class="{active: page==='users'}" @click="page='users'; loadUsers()">
+        <span x-show="servers.length" x-text="servers.length" style="margin-left:auto;background:rgba(255,255,255,.1);color:#94a3b8;font-size:11px;padding:1px 7px;border-radius:50px"></span>
+      </button>
+      <button class="nav-item" :class="{active:page==='users'}" @click="navigate('users')">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0"/></svg>
-        Пользователи
-      </a>
-      <a class="sidebar-link" :class="{active: page==='ca'}" @click="page='ca'; loadCA()">
+        Клиенты
+        <span x-show="users.length" x-text="users.length" style="margin-left:auto;background:rgba(255,255,255,.1);color:#94a3b8;font-size:11px;padding:1px 7px;border-radius:50px"></span>
+      </button>
+      <button class="nav-item" :class="{active:page==='ca'}" @click="navigate('ca')">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
-        Сертификаты (CA)
-      </a>
-      <a class="sidebar-link" :class="{active: page==='settings'}" @click="page='settings'; loadSettings()">
+        Сертификаты
+      </button>
+      <button class="nav-item" :class="{active:page==='settings'}" @click="navigate('settings')">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/></svg>
         Настройки
-      </a>
+        <span x-show="!settings.isp1_host" style="margin-left:auto;background:#f59e0b;color:#fff;font-size:10px;padding:1px 7px;border-radius:50px">!</span>
+      </button>
     </nav>
-    <div class="p-3 border-t border-gray-700">
-      <button @click="logout" class="sidebar-link w-full text-red-400 hover:text-red-300">
+
+    <div style="padding:12px 8px;border-top:1px solid rgba(255,255,255,.06)">
+      <button class="nav-item" @click="logout" style="color:#f87171">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
         Выйти
       </button>
     </div>
   </aside>
 
-  <!-- Content -->
-  <main class="flex-1 overflow-auto">
+  <!-- Main -->
+  <main style="flex:1;overflow-y:auto;background:#f8fafc">
 
     <!-- Dashboard -->
-    <div x-show="page==='dashboard'" class="p-8">
-      <h2 class="text-2xl font-bold mb-6">Дашборд</h2>
-      <div class="grid grid-cols-3 gap-6 mb-8">
-        <div class="card text-center">
-          <div class="text-4xl font-bold text-indigo-600" x-text="summary.total_users ?? '—'"></div>
-          <div class="text-gray-500 mt-1">Активных клиентов</div>
+    <div x-show="page==='dashboard'" class="fade-in" style="padding:32px">
+      <div style="margin-bottom:24px">
+        <h2 style="font-size:22px;font-weight:700;color:#0f172a;margin:0">Дашборд</h2>
+        <p style="color:#94a3b8;font-size:13px;margin-top:4px">Обновляется каждые 10 секунд</p>
+      </div>
+
+      <!-- Warning if no ISP configured -->
+      <div x-show="!settings.isp1_host" class="alert alert-warning" style="margin-bottom:20px">
+        <svg style="flex-shrink:0;margin-top:1px" width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+        <span>Не настроены хосты провайдеров. <button @click="navigate('settings')" style="font-weight:600;text-decoration:underline;background:none;border:none;cursor:pointer;color:inherit">Перейти в настройки →</button></span>
+      </div>
+
+      <!-- Stats -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px">
+        <div class="stat-card">
+          <div style="font-size:36px;font-weight:800;color:#4f46e5" x-text="summary.total_users ?? 0"></div>
+          <div style="color:#94a3b8;font-size:13px;margin-top:4px">Активных клиентов</div>
         </div>
-        <div class="card text-center">
-          <div class="text-4xl font-bold text-indigo-600" x-text="summary.running_servers ?? '—'"></div>
-          <div class="text-gray-500 mt-1">Серверов онлайн</div>
+        <div class="stat-card">
+          <div style="font-size:36px;font-weight:800;color:#10b981" x-text="totalOnline"></div>
+          <div style="color:#94a3b8;font-size:13px;margin-top:4px">Онлайн сейчас</div>
         </div>
-        <div class="card text-center">
-          <div class="text-4xl font-bold text-gray-800" x-text="summary.total_servers ?? '—'"></div>
-          <div class="text-gray-500 mt-1">Всего серверов</div>
+        <div class="stat-card">
+          <div style="font-size:36px;font-weight:800;color:#f59e0b" x-text="summary.running_servers ?? 0"></div>
+          <div style="color:#94a3b8;font-size:13px;margin-top:4px">Серверов работает</div>
         </div>
       </div>
 
-      <!-- Online clients table -->
+      <!-- Online clients -->
       <div class="card">
-        <h3 class="font-semibold mb-4">Подключённые клиенты</h3>
-        <template x-if="statusList.length === 0">
-          <p class="text-gray-400 text-sm">Нет активных подключений</p>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+          <h3 style="font-size:15px;font-weight:700;margin:0">Подключённые клиенты</h3>
+          <button @click="loadDashboard()" style="background:none;border:none;cursor:pointer;color:#94a3b8;display:flex;align-items:center;gap:4px;font-size:13px">
+            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            Обновить
+          </button>
+        </div>
+        <template x-if="totalOnline === 0">
+          <div style="text-align:center;padding:32px 0;color:#94a3b8">
+            <svg style="margin:0 auto 8px" width="40" height="40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M18.364 5.636a9 9 0 010 12.728M15.536 8.464a5 5 0 010 7.072M12 12h.01"/></svg>
+            <p style="margin:0;font-size:14px">Нет активных подключений</p>
+          </div>
         </template>
         <template x-for="srv in statusList" :key="srv.server_id">
-          <div class="mb-6">
-            <div class="flex items-center gap-2 mb-2">
-              <span class="font-medium" x-text="srv.server_name"></span>
-              <span :class="srv.status==='running' ? 'badge-green' : 'badge-gray'" x-text="srv.status==='running' ? 'Работает' : 'Остановлен'"></span>
-              <span class="text-gray-400 text-sm" x-text="'(' + srv.connected_clients.length + ' клиентов)'"></span>
+          <div x-show="srv.connected_clients.length > 0" style="margin-bottom:16px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+              <span style="font-weight:600;font-size:13px" x-text="srv.server_name"></span>
+              <span :class="srv.status==='running'?'badge badge-green':'badge badge-gray'">
+                <span class="badge-dot"></span>
+                <span x-text="srv.status==='running'?'Работает':'Остановлен'"></span>
+              </span>
             </div>
-            <table x-show="srv.connected_clients.length > 0" class="w-full text-sm">
-              <thead class="text-gray-500 border-b">
-                <tr>
-                  <th class="text-left py-1">Имя</th>
-                  <th class="text-left py-1">Реальный IP</th>
-                  <th class="text-left py-1">VPN IP</th>
-                  <th class="text-left py-1">Подключён</th>
-                </tr>
-              </thead>
+            <table class="table">
+              <thead><tr>
+                <th>Клиент</th><th>Реальный IP</th><th>VPN IP</th><th>Подключён</th>
+              </tr></thead>
               <tbody>
                 <template x-for="c in srv.connected_clients" :key="c.common_name">
-                  <tr class="border-b border-gray-50">
-                    <td class="py-1.5 font-mono" x-text="c.common_name"></td>
-                    <td class="py-1.5" x-text="c.real_address"></td>
-                    <td class="py-1.5" x-text="c.virtual_address"></td>
-                    <td class="py-1.5 text-gray-500" x-text="c.connected_since"></td>
+                  <tr>
+                    <td style="font-weight:500" x-text="c.common_name"></td>
+                    <td style="font-family:monospace;font-size:13px" x-text="c.real_address"></td>
+                    <td style="font-family:monospace;font-size:13px" x-text="c.virtual_address"></td>
+                    <td style="color:#94a3b8;font-size:12px" x-text="c.connected_since"></td>
                   </tr>
                 </template>
               </tbody>
@@ -186,335 +239,361 @@
     </div>
 
     <!-- Servers -->
-    <div x-show="page==='servers'" class="p-8">
-      <div class="flex items-center justify-between mb-6 gap-4 flex-wrap">
-        <h2 class="text-2xl font-bold">OpenVPN Серверы</h2>
-        <button class="btn btn-primary" @click="showCreateServer=true"><svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg> Новый сервер</button>
-      </div>
-      <div class="card">
-        <template x-if="servers.length===0">
-          <p class="text-gray-400 text-sm">Серверов нет. Сначала создайте CA.</p>
-        </template>
-        <table x-show="servers.length>0" class="w-full text-sm">
-          <thead class="text-gray-500 border-b">
-            <tr>
-              <th class="text-left py-2">Название</th>
-              <th class="text-left py-2">Сеть</th>
-              <th class="text-left py-2">Порт/Протокол</th>
-              <th class="text-left py-2">Статус</th>
-              <th class="text-left py-2">Действия</th>
-            </tr>
-          </thead>
-          <tbody>
-            <template x-for="s in servers" :key="s.id">
-              <tr class="border-b border-gray-50">
-                <td class="py-2 font-medium" x-text="s.name"></td>
-                <td class="py-2 font-mono text-xs" x-text="s.network + '/' + s.netmask"></td>
-                <td class="py-2" x-text="s.port + '/' + s.protocol.toUpperCase()"></td>
-                <td class="py-2">
-                  <span :class="s.status==='running' ? 'badge-green' : 'badge-gray'"
-                        x-text="s.status==='running' ? 'Работает' : 'Остановлен'"></span>
-                </td>
-                <td class="py-2 flex gap-2">
-                  <button x-show="s.status!=='running'" @click="startServer(s.id)"
-                          class="btn-primary btn-sm">Запустить</button>
-                  <button x-show="s.status==='running'" @click="stopServer(s.id)"
-                          class="btn-gray btn-sm">Стоп</button>
-                  <button @click="deleteServer(s.id)"
-                          class="btn-danger btn-sm">Удалить</button>
-                </td>
-              </tr>
-            </template>
-          </tbody>
-        </table>
+    <div x-show="page==='servers'" class="fade-in" style="padding:32px">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:24px">
+        <div>
+          <h2 style="font-size:22px;font-weight:700;color:#0f172a;margin:0">Серверы</h2>
+          <p style="color:#94a3b8;font-size:13px;margin-top:4px">Управление OpenVPN серверами</p>
+        </div>
+        <button class="btn btn-primary" @click="showCreateServer=true">
+          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+          Новый сервер
+        </button>
       </div>
 
-      <!-- Create Server Modal -->
-      <div x-show="showCreateServer" x-cloak class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-        <div class="bg-white rounded-2xl p-6 w-full max-w-lg">
-          <h3 class="text-lg font-bold mb-4">Новый сервер</h3>
-          <div class="space-y-3">
-            <div>
-              <label class="block text-sm font-medium mb-1">Название</label>
-              <input x-model="serverForm.name" class="input" placeholder="Main Office"/>
-            </div>
-            <div>
-              <label class="block text-sm font-medium mb-1">CA</label>
-              <select x-model="serverForm.ca_id" class="input">
-                <option value="">— выберите CA —</option>
-                <template x-for="ca in caList" :key="ca.id">
-                  <option :value="ca.id" x-text="ca.common_name"></option>
-                </template>
-              </select>
-            </div>
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <label class="block text-sm font-medium mb-1">Подсеть</label>
-                <input x-model="serverForm.network" class="input" placeholder="10.8.0.0"/>
-              </div>
-              <div>
-                <label class="block text-sm font-medium mb-1">Маска</label>
-                <input x-model="serverForm.netmask" class="input" placeholder="255.255.255.0"/>
-              </div>
-            </div>
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <label class="block text-sm font-medium mb-1">Порт</label>
-                <input x-model="serverForm.port" type="number" class="input" placeholder="1194"/>
-              </div>
-              <div>
-                <label class="block text-sm font-medium mb-1">Протокол</label>
-                <select x-model="serverForm.protocol" class="input">
-                  <option value="udp">UDP</option>
-                  <option value="tcp">TCP</option>
-                </select>
-              </div>
-            </div>
-            <div>
-              <label class="block text-sm font-medium mb-1">DNS серверы (через запятую)</label>
-              <input x-model="serverForm.dns_servers" class="input" placeholder="8.8.8.8,8.8.4.4"/>
-            </div>
-            <div>
-              <label class="block text-sm font-medium mb-1">Push маршруты (каждый с новой строки, CIDR)</label>
-              <textarea x-model="serverForm.push_routes" class="input h-20" placeholder="192.168.1.0/24&#10;10.0.0.0/8"></textarea>
-            </div>
-          </div>
-          <p x-show="formError" x-text="formError" class="text-red-500 text-sm mt-3"></p>
-          <div class="flex gap-3 justify-end mt-5">
-            <button class="btn-gray" @click="showCreateServer=false; formError=''">Отмена</button>
-            <button class="btn-primary" @click="createServer()">Создать</button>
-          </div>
+      <template x-if="servers.length===0">
+        <div class="card" style="text-align:center;padding:48px">
+          <svg style="margin:0 auto 12px;color:#cbd5e1" width="48" height="48" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 12h14M12 5l7 7-7 7"/></svg>
+          <p style="color:#94a3b8;margin:0">Серверов нет. Сначала создайте CA.</p>
         </div>
+      </template>
+
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <template x-for="s in servers" :key="s.id">
+          <div class="card" style="display:flex;align-items:center;gap:16px;padding:18px 24px">
+            <div style="width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0" :style="s.status==='running'?'background:#dcfce7':'background:#f1f5f9'">
+              <svg width="20" height="20" fill="none" :stroke="s.status==='running'?'#16a34a':'#94a3b8'" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </div>
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:700;font-size:15px" x-text="s.name"></div>
+              <div style="color:#94a3b8;font-size:12px;margin-top:2px" x-text="s.network + '/' + s.netmask + ' · ' + s.port + '/' + s.protocol.toUpperCase()"></div>
+            </div>
+            <span :class="s.status==='running'?'badge badge-green':'badge badge-gray'">
+              <span class="badge-dot"></span>
+              <span x-text="s.status==='running'?'Работает':'Остановлен'"></span>
+            </span>
+            <div style="display:flex;gap:8px">
+              <button x-show="s.status!=='running'" @click="startServer(s.id)" class="btn btn-success btn-sm">Запустить</button>
+              <button x-show="s.status==='running'" @click="stopServer(s.id)" class="btn btn-gray btn-sm">Стоп</button>
+              <button @click="deleteServer(s.id)" class="btn btn-danger btn-sm">Удалить</button>
+            </div>
+          </div>
+        </template>
       </div>
     </div>
 
     <!-- Users -->
-    <div x-show="page==='users'" class="p-8">
-      <div class="flex items-center justify-between mb-6 gap-4 flex-wrap">
-        <h2 class="text-2xl font-bold">Пользователи</h2>
-        <button class="btn btn-primary" @click="showCreateUser=true"><svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg> Новый клиент</button>
+    <div x-show="page==='users'" class="fade-in" style="padding:32px">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:24px">
+        <div>
+          <h2 style="font-size:22px;font-weight:700;color:#0f172a;margin:0">Клиенты</h2>
+          <p style="color:#94a3b8;font-size:13px;margin-top:4px" x-text="'Всего: ' + users.length"></p>
+        </div>
+        <button class="btn btn-primary" @click="showCreateUser=true">
+          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+          Новый клиент
+        </button>
       </div>
 
-      <!-- Filter -->
-      <div class="flex gap-3 mb-4">
-        <select x-model="userFilter.server_id" @change="loadUsers()" class="input max-w-xs">
+      <!-- Filters -->
+      <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+        <select x-model="userFilter.server_id" @change="loadUsers()" class="input" style="max-width:200px">
           <option value="">Все серверы</option>
           <template x-for="s in servers" :key="s.id">
             <option :value="s.id" x-text="s.name"></option>
           </template>
         </select>
-        <input x-model="userFilter.search" @input="filterUsers()" class="input max-w-xs" placeholder="Поиск по имени..."/>
+        <input x-model="userFilter.search" @input="filterUsers()" class="input" style="max-width:240px" placeholder="🔍 Поиск по имени..."/>
       </div>
 
-      <div class="card">
-        <table class="w-full text-sm">
-          <thead class="text-gray-500 border-b">
-            <tr>
-              <th class="text-left py-2">Имя пользователя</th>
-              <th class="text-left py-2">Email</th>
-              <th class="text-left py-2">Сервер</th>
-              <th class="text-left py-2">Статус</th>
-              <th class="text-left py-2">Истекает</th>
-              <th class="text-left py-2">Действия</th>
-            </tr>
-          </thead>
+      <div class="card" style="padding:0;overflow:hidden">
+        <table class="table">
+          <thead><tr>
+            <th style="padding-left:20px">Клиент</th>
+            <th>Email</th>
+            <th>Сервер</th>
+            <th>Статус</th>
+            <th>Истекает</th>
+            <th style="padding-right:20px">Действия</th>
+          </tr></thead>
           <tbody>
             <template x-for="u in filteredUsers" :key="u.id">
-              <tr class="border-b border-gray-50">
-                <td class="py-2 font-medium" x-text="u.username"></td>
-                <td class="py-2 text-gray-500" x-text="u.email || '—'"></td>
-                <td class="py-2" x-text="serverName(u.server_id)"></td>
-                <td class="py-2">
-                  <span :class="u.cert_status==='active' ? 'badge-green' : 'badge-red'"
-                        x-text="u.cert_status==='active' ? 'Активен' : 'Отозван'"></span>
+              <tr>
+                <td style="padding-left:20px;font-weight:600" x-text="u.username"></td>
+                <td style="color:#94a3b8;font-size:13px" x-text="u.email || '—'"></td>
+                <td style="font-size:13px" x-text="serverName(u.server_id)"></td>
+                <td>
+                  <span :class="u.cert_status==='active'?'badge badge-green':'badge badge-red'">
+                    <span class="badge-dot"></span>
+                    <span x-text="u.cert_status==='active'?'Активен':'Отозван'"></span>
+                  </span>
                 </td>
-                <td class="py-2 text-gray-500 text-xs" x-text="u.cert_expires_at ? formatDate(u.cert_expires_at) : '—'"></td>
-                <td class="py-2 flex gap-2">
-                  <a :href="'/api/users/' + u.id + '/profile'"
-                     class="btn-primary btn-sm no-underline"
-                     x-show="u.cert_status==='active'">Скачать .ovpn</a>
-                  <button x-show="u.cert_status==='active'" @click="revokeUser(u.id)"
-                          class="btn-danger btn-sm">Отозвать</button>
+                <td style="color:#94a3b8;font-size:12px" x-text="u.cert_expires_at ? formatDate(u.cert_expires_at) : '—'"></td>
+                <td style="padding-right:20px">
+                  <div style="display:flex;gap:6px">
+                    <a x-show="u.cert_status==='active'"
+                       :href="'/api/users/' + u.id + '/profile'"
+                       class="btn btn-primary btn-sm"
+                       style="text-decoration:none">
+                      <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                      .ovpn
+                    </a>
+                    <button x-show="u.cert_status==='active'" @click="revokeUser(u.id)" class="btn btn-danger btn-sm">Отозвать</button>
+                  </div>
                 </td>
               </tr>
             </template>
             <tr x-show="filteredUsers.length===0">
-              <td colspan="6" class="py-4 text-center text-gray-400">Пользователей нет</td>
+              <td colspan="6" style="text-align:center;padding:40px;color:#94a3b8">Клиентов нет</td>
             </tr>
           </tbody>
         </table>
-        <div class="mt-3 text-gray-400 text-sm" x-text="'Всего: ' + users.length"></div>
-      </div>
-
-      <!-- Create User Modal -->
-      <div x-show="showCreateUser" x-cloak class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-        <div class="bg-white rounded-2xl p-6 w-full max-w-md">
-          <h3 class="text-lg font-bold mb-4">Новый пользователь</h3>
-          <div class="space-y-3">
-            <div>
-              <label class="block text-sm font-medium mb-1">Имя пользователя (CN сертификата)</label>
-              <input x-model="userForm.username" class="input" placeholder="ivanov"/>
-            </div>
-            <div>
-              <label class="block text-sm font-medium mb-1">Email (необязательно)</label>
-              <input x-model="userForm.email" type="email" class="input" placeholder="user@company.ru"/>
-            </div>
-            <div>
-              <label class="block text-sm font-medium mb-1">Сервер</label>
-              <select x-model="userForm.server_id" class="input">
-                <option value="">— выберите сервер —</option>
-                <template x-for="s in servers" :key="s.id">
-                  <option :value="s.id" x-text="s.name"></option>
-                </template>
-              </select>
-            </div>
-            <div>
-              <label class="block text-sm font-medium mb-1">Срок действия (дней)</label>
-              <input x-model="userForm.valid_days" type="number" class="input" placeholder="365"/>
-            </div>
-          </div>
-          <p x-show="formError" x-text="formError" class="text-red-500 text-sm mt-3"></p>
-          <div class="flex gap-3 justify-end mt-5">
-            <button class="btn-gray" @click="showCreateUser=false; formError=''">Отмена</button>
-            <button class="btn-primary" @click="createUser()">Создать</button>
-          </div>
-        </div>
       </div>
     </div>
 
     <!-- CA -->
-    <div x-show="page==='ca'" class="p-8">
-      <div class="flex items-center justify-between mb-6 gap-4 flex-wrap">
-        <h2 class="text-2xl font-bold">CA — Сертификаты</h2>
-        <button class="btn btn-primary" @click="showCreateCA=true"><svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg> Создать CA</button>
+    <div x-show="page==='ca'" class="fade-in" style="padding:32px">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:24px">
+        <div>
+          <h2 style="font-size:22px;font-weight:700;color:#0f172a;margin:0">Сертификаты (CA)</h2>
+          <p style="color:#94a3b8;font-size:13px;margin-top:4px">Корневые удостоверяющие центры</p>
+        </div>
+        <button class="btn btn-primary" @click="showCreateCA=true">
+          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+          Создать CA
+        </button>
       </div>
-      <div class="card">
-        <template x-if="caList.length===0">
-          <p class="text-gray-400 text-sm">CA не создан. Начните с создания корневого сертификата.</p>
-        </template>
-        <table x-show="caList.length>0" class="w-full text-sm">
-          <thead class="text-gray-500 border-b">
-            <tr>
-              <th class="text-left py-2">Common Name</th>
-              <th class="text-left py-2">Создан</th>
-              <th class="text-left py-2">Истекает</th>
-              <th class="text-left py-2">Действия</th>
-            </tr>
-          </thead>
+      <div class="card" style="padding:0;overflow:hidden">
+        <table class="table">
+          <thead><tr>
+            <th style="padding-left:20px">Common Name</th>
+            <th>Создан</th>
+            <th>Истекает</th>
+            <th style="padding-right:20px">Действия</th>
+          </tr></thead>
           <tbody>
             <template x-for="ca in caList" :key="ca.id">
-              <tr class="border-b border-gray-50">
-                <td class="py-2 font-medium" x-text="ca.common_name"></td>
-                <td class="py-2 text-gray-500 text-xs" x-text="formatDate(ca.created_at)"></td>
-                <td class="py-2 text-gray-500 text-xs" x-text="formatDate(ca.expires_at)"></td>
-                <td class="py-2">
-                  <button @click="deleteCA(ca.id)" class="btn-danger btn-sm">Удалить</button>
-                </td>
+              <tr>
+                <td style="padding-left:20px;font-weight:600" x-text="ca.common_name"></td>
+                <td style="color:#94a3b8;font-size:13px" x-text="formatDate(ca.created_at)"></td>
+                <td style="color:#94a3b8;font-size:13px" x-text="formatDate(ca.expires_at)"></td>
+                <td style="padding-right:20px"><button @click="deleteCA(ca.id)" class="btn btn-danger btn-sm">Удалить</button></td>
               </tr>
             </template>
+            <tr x-show="caList.length===0">
+              <td colspan="4" style="text-align:center;padding:40px;color:#94a3b8">CA не создан</td>
+            </tr>
           </tbody>
         </table>
-      </div>
-
-      <!-- Create CA Modal -->
-      <div x-show="showCreateCA" x-cloak class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-        <div class="bg-white rounded-2xl p-6 w-full max-w-md">
-          <h3 class="text-lg font-bold mb-4">Создать CA</h3>
-          <div class="space-y-3">
-            <div>
-              <label class="block text-sm font-medium mb-1">Common Name</label>
-              <input x-model="caForm.common_name" class="input" placeholder="My Company VPN CA"/>
-            </div>
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <label class="block text-sm font-medium mb-1">Страна (2 буквы)</label>
-                <input x-model="caForm.country" class="input" placeholder="RU" maxlength="2"/>
-              </div>
-              <div>
-                <label class="block text-sm font-medium mb-1">Организация</label>
-                <input x-model="caForm.org" class="input" placeholder="My Company"/>
-              </div>
-            </div>
-            <div>
-              <label class="block text-sm font-medium mb-1">Срок действия (дней)</label>
-              <input x-model="caForm.valid_days" type="number" class="input" placeholder="3650"/>
-            </div>
-          </div>
-          <p x-show="formError" x-text="formError" class="text-red-500 text-sm mt-3"></p>
-          <div class="flex gap-3 justify-end mt-5">
-            <button class="btn-gray" @click="showCreateCA=false; formError=''">Отмена</button>
-            <button class="btn-primary" @click="createCA()">Создать</button>
-          </div>
-        </div>
       </div>
     </div>
 
     <!-- Settings -->
-    <div x-show="page==='settings'" class="p-8 max-w-2xl">
-      <h2 class="text-2xl font-bold mb-6">Настройки</h2>
-      <div class="card space-y-5">
-        <div>
-          <label class="block text-sm font-medium mb-1">Название сервиса</label>
-          <input x-model="settings.server_name" class="input" placeholder="VPN Server"/>
-        </div>
+    <div x-show="page==='settings'" class="fade-in" style="padding:32px;max-width:640px">
+      <div style="margin-bottom:24px">
+        <h2 style="font-size:22px;font-weight:700;color:#0f172a;margin:0">Настройки</h2>
+        <p style="color:#94a3b8;font-size:13px;margin-top:4px">Конфигурация провайдеров и сервиса</p>
+      </div>
 
-        <hr/>
-        <h3 class="font-semibold text-gray-700">Провайдер 1 (основной)</h3>
-        <div class="grid grid-cols-3 gap-3">
-          <div class="col-span-2">
-            <label class="block text-sm font-medium mb-1">Хост / IP</label>
-            <input x-model="settings.isp1_host" class="input" placeholder="vpn.company.ru"/>
+      <div class="card" style="margin-bottom:16px">
+        <h3 style="font-size:14px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.05em;margin:0 0 16px">Общее</h3>
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Название сервиса</label>
+        <input x-model="settings.server_name" class="input" placeholder="VPN Server"/>
+      </div>
+
+      <div class="card" style="margin-bottom:16px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+          <div style="width:32px;height:32px;background:#dbeafe;border-radius:8px;display:flex;align-items:center;justify-content:center">
+            <svg width="16" height="16" fill="none" stroke="#2563eb" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"/></svg>
           </div>
           <div>
-            <label class="block text-sm font-medium mb-1">Порт</label>
+            <div style="font-size:14px;font-weight:700" x-text="settings.isp1_label || 'Провайдер 1'"></div>
+            <div style="font-size:12px;color:#94a3b8">Основной канал</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr auto;gap:10px;margin-bottom:10px">
+          <div>
+            <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5px">Хост / IP</label>
+            <input x-model="settings.isp1_host" class="input" placeholder="vpn.company.ru или 1.2.3.4"/>
+          </div>
+          <div style="width:90px">
+            <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5px">Порт</label>
             <input x-model="settings.isp1_port" type="number" class="input" placeholder="1194"/>
           </div>
         </div>
         <div>
-          <label class="block text-sm font-medium mb-1">Метка (для отображения)</label>
+          <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5px">Метка</label>
           <input x-model="settings.isp1_label" class="input" placeholder="Ростелеком"/>
         </div>
+      </div>
 
-        <hr/>
-        <h3 class="font-semibold text-gray-700">Провайдер 2 (резервный)</h3>
-        <div class="grid grid-cols-3 gap-3">
-          <div class="col-span-2">
-            <label class="block text-sm font-medium mb-1">Хост / IP</label>
-            <input x-model="settings.isp2_host" class="input" placeholder="vpn2.company.ru"/>
+      <div class="card" style="margin-bottom:16px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+          <div style="width:32px;height:32px;background:#f0fdf4;border-radius:8px;display:flex;align-items:center;justify-content:center">
+            <svg width="16" height="16" fill="none" stroke="#16a34a" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"/></svg>
           </div>
           <div>
-            <label class="block text-sm font-medium mb-1">Порт</label>
+            <div style="font-size:14px;font-weight:700" x-text="settings.isp2_label || 'Провайдер 2'"></div>
+            <div style="font-size:12px;color:#94a3b8">Резервный канал</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr auto;gap:10px;margin-bottom:10px">
+          <div>
+            <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5px">Хост / IP</label>
+            <input x-model="settings.isp2_host" class="input" placeholder="vpn2.company.ru или 5.6.7.8"/>
+          </div>
+          <div style="width:90px">
+            <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5px">Порт</label>
             <input x-model="settings.isp2_port" type="number" class="input" placeholder="1194"/>
           </div>
         </div>
         <div>
-          <label class="block text-sm font-medium mb-1">Метка (для отображения)</label>
+          <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5px">Метка</label>
           <input x-model="settings.isp2_label" class="input" placeholder="МТС"/>
         </div>
-
-        <p class="text-gray-400 text-xs">Оба хоста будут автоматически добавлены в .ovpn профили клиентов. Клиент попробует ISP2, если ISP1 недоступен.</p>
-
-        <p x-show="settingsSaved" class="text-green-600 text-sm">Настройки сохранены</p>
-        <p x-show="settingsError" x-text="settingsError" class="text-red-500 text-sm"></p>
-        <button class="btn-primary" @click="saveSettings()">Сохранить</button>
+        <p style="color:#94a3b8;font-size:12px;margin-top:12px;margin-bottom:0">Оба хоста автоматически попадут в .ovpn профили клиентов</p>
       </div>
+
+      <div x-show="settingsSaved" class="alert alert-success" style="margin-bottom:12px">Настройки сохранены</div>
+      <div x-show="settingsError" x-text="settingsError" class="alert alert-error" style="margin-bottom:12px"></div>
+      <button class="btn btn-primary" @click="saveSettings()">Сохранить настройки</button>
     </div>
 
   </main>
 </div>
 
+<!-- Modal: Create Server -->
+<div x-show="showCreateServer" x-cloak class="modal-backdrop" @click.self="showCreateServer=false">
+  <div class="modal fade-in">
+    <h3 style="font-size:18px;font-weight:700;margin:0 0 20px">Новый сервер</h3>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Название</label>
+        <input x-model="serverForm.name" class="input" placeholder="Главный офис"/>
+      </div>
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">CA</label>
+        <select x-model="serverForm.ca_id" class="input">
+          <option value="">— выберите CA —</option>
+          <template x-for="ca in caList" :key="ca.id">
+            <option :value="ca.id" x-text="ca.common_name"></option>
+          </template>
+        </select>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div>
+          <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Подсеть</label>
+          <input x-model="serverForm.network" class="input" placeholder="10.8.0.0"/>
+        </div>
+        <div>
+          <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Маска</label>
+          <input x-model="serverForm.netmask" class="input" placeholder="255.255.255.0"/>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div>
+          <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Порт</label>
+          <input x-model="serverForm.port" type="number" class="input" placeholder="1194"/>
+        </div>
+        <div>
+          <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Протокол</label>
+          <select x-model="serverForm.protocol" class="input"><option value="udp">UDP</option><option value="tcp">TCP</option></select>
+        </div>
+      </div>
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">DNS серверы</label>
+        <input x-model="serverForm.dns_servers" class="input" placeholder="8.8.8.8,8.8.4.4"/>
+      </div>
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Push маршруты (CIDR, каждый с новой строки)</label>
+        <textarea x-model="serverForm.push_routes" class="input" placeholder="192.168.1.0/24&#10;10.0.0.0/8"></textarea>
+      </div>
+    </div>
+    <div x-show="formError" x-text="formError" class="alert alert-error" style="margin-top:14px"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+      <button class="btn btn-gray" @click="showCreateServer=false;formError=''">Отмена</button>
+      <button class="btn btn-primary" @click="createServer()">Создать</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Create User -->
+<div x-show="showCreateUser" x-cloak class="modal-backdrop" @click.self="showCreateUser=false">
+  <div class="modal fade-in">
+    <h3 style="font-size:18px;font-weight:700;margin:0 0 20px">Новый клиент</h3>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Имя пользователя</label>
+        <input x-model="userForm.username" class="input" placeholder="ivanov"/>
+        <p style="color:#94a3b8;font-size:12px;margin-top:4px">Используется как CN сертификата. Только латиница, без пробелов.</p>
+      </div>
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Email (необязательно)</label>
+        <input x-model="userForm.email" type="email" class="input" placeholder="ivanov@company.ru"/>
+      </div>
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Сервер</label>
+        <select x-model="userForm.server_id" class="input">
+          <option value="">— выберите сервер —</option>
+          <template x-for="s in servers" :key="s.id">
+            <option :value="s.id" x-text="s.name"></option>
+          </template>
+        </select>
+      </div>
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Срок действия (дней)</label>
+        <input x-model="userForm.valid_days" type="number" class="input" placeholder="365"/>
+      </div>
+    </div>
+    <div x-show="formError" x-text="formError" class="alert alert-error" style="margin-top:14px"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+      <button class="btn btn-gray" @click="showCreateUser=false;formError=''">Отмена</button>
+      <button class="btn btn-primary" @click="createUser()">Создать и скачать .ovpn</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Create CA -->
+<div x-show="showCreateCA" x-cloak class="modal-backdrop" @click.self="showCreateCA=false">
+  <div class="modal fade-in">
+    <h3 style="font-size:18px;font-weight:700;margin:0 0 20px">Создать CA</h3>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Common Name</label>
+        <input x-model="caForm.common_name" class="input" placeholder="Click VPN CA"/>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div>
+          <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Страна</label>
+          <input x-model="caForm.country" class="input" placeholder="RU" maxlength="2"/>
+        </div>
+        <div>
+          <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Организация</label>
+          <input x-model="caForm.org" class="input" placeholder="My Company"/>
+        </div>
+      </div>
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Срок действия (дней)</label>
+        <input x-model="caForm.valid_days" type="number" class="input" placeholder="3650"/>
+      </div>
+    </div>
+    <div x-show="formError" x-text="formError" class="alert alert-error" style="margin-top:14px"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+      <button class="btn btn-gray" @click="showCreateCA=false;formError=''">Отмена</button>
+      <button class="btn btn-primary" @click="createCA()">Создать</button>
+    </div>
+  </div>
+</div>
+
 <script>
 function app() {
   return {
-    // State
     token: localStorage.getItem('token') || '',
     page: 'dashboard',
     loading: false,
     loginError: '',
     formError: '',
     loginForm: { username: '', password: '' },
-
-    // Data
     summary: {},
     statusList: [],
     servers: [],
@@ -524,35 +603,52 @@ function app() {
     settings: { isp1_port: 1194, isp2_port: 1194 },
     settingsSaved: false,
     settingsError: '',
-    appTitle: 'VPN Manager',
-
-    // Modals
     showCreateServer: false,
     showCreateUser: false,
     showCreateCA: false,
+    serverForm: { name:'', ca_id:'', network:'10.8.0.0', netmask:'255.255.255.0', port:1194, protocol:'udp', dns_servers:'8.8.8.8,8.8.4.4', push_routes:'' },
+    userForm: { username:'', email:'', server_id:'', valid_days:365 },
+    caForm: { common_name:'', country:'RU', org:'', valid_days:3650 },
+    userFilter: { server_id:'', search:'' },
+    _refreshTimer: null,
 
-    // Forms
-    serverForm: { name: '', ca_id: '', network: '10.8.0.0', netmask: '255.255.255.0', port: 1194, protocol: 'udp', dns_servers: '8.8.8.8,8.8.4.4', push_routes: '' },
-    userForm: { username: '', email: '', server_id: '', valid_days: 365 },
-    caForm: { common_name: '', country: 'RU', org: '', valid_days: 3650 },
-    userFilter: { server_id: '', search: '' },
+    get pageTitle() {
+      const titles = { dashboard:'Дашборд', servers:'Серверы', users:'Клиенты', ca:'Сертификаты', settings:'Настройки' };
+      return (titles[this.page] || '') + ' — Click VPN';
+    },
+    get totalOnline() {
+      return this.statusList.reduce((s, srv) => s + srv.connected_clients.length, 0);
+    },
 
     async init() {
-      if (this.token) {
-        await this.loadDashboard();
-        await this.loadSettings();
-        await this.loadServers();
-        await this.loadCA();
-      }
+      if (!this.token) return;
+      await Promise.all([this.loadSettings(), this.loadServers(), this.loadCA()]);
+      await this.loadDashboard();
+      await this.loadUsers();
+      this._startRefresh();
+    },
+
+    _startRefresh() {
+      if (this._refreshTimer) clearInterval(this._refreshTimer);
+      this._refreshTimer = setInterval(() => {
+        if (this.page === 'dashboard') this.loadDashboard();
+        if (this.page === 'servers') this.loadServers();
+      }, 10000);
+    },
+
+    navigate(p) {
+      this.page = p;
+      if (p === 'dashboard') this.loadDashboard();
+      if (p === 'servers') this.loadServers();
+      if (p === 'users') this.loadUsers();
+      if (p === 'ca') this.loadCA();
+      if (p === 'settings') this.loadSettings();
     },
 
     async api(method, path, body) {
       const res = await fetch('/api' + path, {
         method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + this.token,
-        },
+        headers: { 'Content-Type':'application/json', 'Authorization':'Bearer ' + this.token },
         body: body ? JSON.stringify(body) : undefined,
       });
       if (res.status === 401) { this.logout(); return null; }
@@ -565,27 +661,23 @@ function app() {
     },
 
     async login() {
-      this.loading = true;
-      this.loginError = '';
+      this.loading = true; this.loginError = '';
       try {
-        const data = await fetch('/api/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        const r = await fetch('/api/auth/login', {
+          method:'POST', headers:{'Content-Type':'application/json'},
           body: JSON.stringify(this.loginForm),
         });
-        if (!data.ok) { this.loginError = 'Неверный логин или пароль'; return; }
-        const json = await data.json();
-        this.token = json.access_token;
+        if (!r.ok) { this.loginError = 'Неверный логин или пароль'; return; }
+        const j = await r.json();
+        this.token = j.access_token;
         localStorage.setItem('token', this.token);
         await this.init();
-      } finally {
-        this.loading = false;
-      }
+      } finally { this.loading = false; }
     },
 
     logout() {
-      this.token = '';
-      localStorage.removeItem('token');
+      if (this._refreshTimer) clearInterval(this._refreshTimer);
+      this.token = ''; localStorage.removeItem('token');
     },
 
     async loadDashboard() {
@@ -604,9 +696,8 @@ function app() {
     async loadUsers() {
       try {
         const path = this.userFilter.server_id ? '/users?server_id=' + this.userFilter.server_id : '/users';
-        const data = await this.api('GET', path);
-        this.users = data?.users || [];
-        this.filteredUsers = this.users;
+        const d = await this.api('GET', path);
+        this.users = d?.users || [];
         this.filterUsers();
       } catch {}
     },
@@ -614,7 +705,7 @@ function app() {
     filterUsers() {
       const q = (this.userFilter.search || '').toLowerCase();
       this.filteredUsers = q
-        ? this.users.filter(u => u.username.toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q))
+        ? this.users.filter(u => u.username.toLowerCase().includes(q) || (u.email||'').toLowerCase().includes(q))
         : [...this.users];
     },
 
@@ -627,15 +718,12 @@ function app() {
     },
 
     async saveSettings() {
-      this.settingsSaved = false;
-      this.settingsError = '';
+      this.settingsSaved = false; this.settingsError = '';
       try {
         this.settings = await this.api('PUT', '/settings', this.settings);
         this.settingsSaved = true;
         setTimeout(() => this.settingsSaved = false, 3000);
-      } catch (e) {
-        this.settingsError = e.message;
-      }
+      } catch(e) { this.settingsError = e.message; }
     },
 
     async createCA() {
@@ -644,65 +732,77 @@ function app() {
         await this.api('POST', '/ca', this.caForm);
         await this.loadCA();
         this.showCreateCA = false;
-        this.caForm = { common_name: '', country: 'RU', org: '', valid_days: 3650 };
-      } catch (e) { this.formError = e.message; }
+        this.caForm = { common_name:'', country:'RU', org:'', valid_days:3650 };
+      } catch(e) { this.formError = e.message; }
     },
 
     async deleteCA(id) {
-      if (!confirm('Удалить CA?')) return;
-      try { await this.api('DELETE', '/ca/' + id); await this.loadCA(); }
-      catch (e) { alert(e.message); }
+      if (!confirm('Удалить CA? Все серверы и сертификаты станут недействительными.')) return;
+      try { await this.api('DELETE', '/ca/'+id); await this.loadCA(); }
+      catch(e) { alert(e.message); }
     },
 
     async createServer() {
       this.formError = '';
+      if (!this.serverForm.ca_id) { this.formError = 'Выберите CA'; return; }
       try {
-        await this.api('POST', '/servers', { ...this.serverForm, ca_id: +this.serverForm.ca_id, port: +this.serverForm.port });
+        await this.api('POST', '/servers', {
+          ...this.serverForm,
+          ca_id: +this.serverForm.ca_id,
+          port: +this.serverForm.port
+        });
         await this.loadServers();
         this.showCreateServer = false;
-        this.serverForm = { name: '', ca_id: '', network: '10.8.0.0', netmask: '255.255.255.0', port: 1194, protocol: 'udp', dns_servers: '8.8.8.8,8.8.4.4', push_routes: '' };
-      } catch (e) { this.formError = e.message; }
+        this.serverForm = { name:'', ca_id:'', network:'10.8.0.0', netmask:'255.255.255.0', port:1194, protocol:'udp', dns_servers:'8.8.8.8,8.8.4.4', push_routes:'' };
+      } catch(e) { this.formError = e.message; }
     },
 
     async startServer(id) {
-      try { await this.api('POST', '/servers/' + id + '/start'); await this.loadServers(); }
-      catch (e) { alert(e.message); }
+      try { await this.api('POST', '/servers/'+id+'/start'); await this.loadServers(); }
+      catch(e) { alert('Ошибка: ' + e.message); }
     },
 
     async stopServer(id) {
-      try { await this.api('POST', '/servers/' + id + '/stop'); await this.loadServers(); }
-      catch (e) { alert(e.message); }
+      try { await this.api('POST', '/servers/'+id+'/stop'); await this.loadServers(); }
+      catch(e) { alert('Ошибка: ' + e.message); }
     },
 
     async deleteServer(id) {
-      if (!confirm('Удалить сервер и всех его пользователей?')) return;
-      try { await this.api('DELETE', '/servers/' + id); await this.loadServers(); }
-      catch (e) { alert(e.message); }
+      if (!confirm('Удалить сервер? Все пользователи потеряют доступ.')) return;
+      try { await this.api('DELETE', '/servers/'+id); await this.loadServers(); }
+      catch(e) { alert(e.message); }
     },
 
     async createUser() {
       this.formError = '';
+      if (!this.userForm.username) { this.formError = 'Введите имя пользователя'; return; }
+      if (!this.userForm.server_id) { this.formError = 'Выберите сервер'; return; }
+      if (!this.settings.isp1_host) { this.formError = 'Сначала настройте хост провайдера в Настройках'; return; }
       try {
-        await this.api('POST', '/users', { ...this.userForm, server_id: +this.userForm.server_id, valid_days: +this.userForm.valid_days });
+        const u = await this.api('POST', '/users', {
+          ...this.userForm,
+          server_id: +this.userForm.server_id,
+          valid_days: +this.userForm.valid_days
+        });
         await this.loadUsers();
         this.showCreateUser = false;
-        this.userForm = { username: '', email: '', server_id: '', valid_days: 365 };
-      } catch (e) { this.formError = e.message; }
+        this.userForm = { username:'', email:'', server_id:'', valid_days:365 };
+        // Автоскачивание .ovpn
+        window.location.href = '/api/users/' + u.id + '/profile';
+      } catch(e) { this.formError = e.message; }
     },
 
     async revokeUser(id) {
-      if (!confirm('Отозвать сертификат? Пользователь потеряет доступ немедленно.')) return;
-      try { await this.api('POST', '/users/' + id + '/revoke'); await this.loadUsers(); }
-      catch (e) { alert(e.message); }
+      if (!confirm('Отозвать сертификат? Пользователь немедленно потеряет доступ.')) return;
+      try { await this.api('POST', '/users/'+id+'/revoke'); await this.loadUsers(); }
+      catch(e) { alert(e.message); }
     },
 
-    serverName(id) {
-      return this.servers.find(s => s.id === id)?.name || '—';
-    },
+    serverName(id) { return this.servers.find(s => s.id === id)?.name || '—'; },
 
     formatDate(dt) {
       if (!dt) return '—';
-      return new Date(dt).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      return new Date(dt).toLocaleDateString('ru-RU', { day:'2-digit', month:'2-digit', year:'numeric' });
     },
   };
 }
