@@ -68,6 +68,10 @@
     .alert-error{background:#fef2f2;border:1px solid #fecaca;color:#991b1b}
     .alert-success{background:#f0fdf4;border:1px solid #bbf7d0;color:#166534}
 
+    /* Layout */
+    html, body { height: 100%; margin: 0; }
+    #app { display: flex !important; width: 100vw; height: 100vh; overflow: hidden; }
+
     /* Scrollbar */
     ::-webkit-scrollbar{width:6px}
     ::-webkit-scrollbar-track{background:transparent}
@@ -112,7 +116,7 @@
 </div>
 
 <!-- App -->
-<div x-show="token" x-cloak style="display:flex;width:100vw;height:100vh;overflow:hidden">
+<div id="app" x-show="token" x-cloak>
 
   <!-- Sidebar -->
   <aside style="width:240px;background:#0f172a;display:flex;flex-direction:column;flex-shrink:0">
