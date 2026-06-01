@@ -17,20 +17,40 @@ if ! command -v docker &>/dev/null; then
   apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 fi
 
-# .env
+# .env — генерируем автоматически при первом запуске
 if [ ! -f .env ]; then
-  cp .env.example .env
-  # Генерируем случайный SECRET_KEY
-  SECRET=$(openssl rand -hex 32)
-  sed -i "s/change-me-please-use-strong-random-key/$SECRET/" .env
+  SECRET_KEY=$(openssl rand -hex 32)
+  ADMIN_PASSWORD=$(openssl rand -base64 12 | tr -d '/+=')
+
+  cat > .env <<EOF
+SECRET_KEY=${SECRET_KEY}
+ADMIN_PASSWORD=${ADMIN_PASSWORD}
+TOKEN_EXPIRE_MINUTES=480
+DATABASE_URL=sqlite:////data/vpn.db
+DATA_DIR=/data
+EOF
+
   echo ""
-  echo ">>> .env создан. Установите ADMIN_PASSWORD в .env перед запуском!"
+  echo "┌─────────────────────────────────────────┐"
+  echo "│         .env сгенерирован автоматом     │"
+  echo "│                                         │"
+  echo "│  Логин:  admin                          │"
+  echo "│  Пароль: ${ADMIN_PASSWORD}              │"
+  echo "│                                         │"
+  echo "│  Сохраните пароль — он больше не        │"
+  echo "│  будет показан!                         │"
+  echo "└─────────────────────────────────────────┘"
   echo ""
 fi
 
 docker compose up -d --build
 
+IP=$(hostname -I | awk '{print $1}')
 echo ""
 echo "=== Готово ==="
-echo "Веб-панель: http://$(hostname -I | awk '{print $1}'):8000"
-echo "Логин: admin / (пароль из .env ADMIN_PASSWORD)"
+echo "Веб-панель: http://${IP}:8000"
+if [ -f .env ]; then
+  PASS=$(grep ADMIN_PASSWORD .env | cut -d= -f2)
+  echo "Логин:      admin"
+  echo "Пароль:     ${PASS}"
+fi
