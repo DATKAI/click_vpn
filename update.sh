@@ -67,7 +67,7 @@ for i in $(seq 1 30); do
 done
 
 # ── Удаляем старые образы ─────────────────────────────────────────────────────
-docker image prune -f -q
+docker image prune -f 2>/dev/null || true
 
 NEW_COMMIT=$(git rev-parse --short HEAD)
 echo ""
