@@ -43,8 +43,13 @@ git pull origin master -q
 
 # ── Обновление зависимостей ───────────────────────────────────────────────────
 info "Обновление Python зависимостей..."
-"$VENV_DIR/bin/pip" install --quiet --upgrade pip
-"$VENV_DIR/bin/pip" install --quiet -r "$INSTALL_DIR/backend/requirements.txt"
+PIP="$VENV_DIR/bin/pip"
+PIP_MIRROR="https://pypi.tuna.tsinghua.edu.cn/simple"
+
+"$PIP" install -r "$INSTALL_DIR/backend/requirements.txt" --timeout 30 -q || {
+  warn "PyPI недоступен, используем зеркало..."
+  "$PIP" install -r "$INSTALL_DIR/backend/requirements.txt" --timeout 60 -q -i "$PIP_MIRROR"
+}
 
 # ── Перезапуск сервиса ────────────────────────────────────────────────────────
 info "Перезапуск сервиса..."

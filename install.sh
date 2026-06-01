@@ -51,8 +51,19 @@ fi
 # ── Python venv ───────────────────────────────────────────────────────────────
 info "Создание Python окружения..."
 python3 -m venv "$VENV_DIR"
-"$VENV_DIR/bin/pip" install --quiet --upgrade pip
-"$VENV_DIR/bin/pip" install --quiet -r "$INSTALL_DIR/backend/requirements.txt"
+
+# Пробуем основной PyPI, при таймауте — зеркало
+PIP="$VENV_DIR/bin/pip"
+PIP_MIRROR="https://pypi.tuna.tsinghua.edu.cn/simple"
+
+info "Установка Python пакетов..."
+"$PIP" install --upgrade pip --timeout 30 -q 2>/dev/null || \
+  "$PIP" install --upgrade pip --timeout 60 -q -i "$PIP_MIRROR"
+
+"$PIP" install -r "$INSTALL_DIR/backend/requirements.txt" --timeout 30 -q || {
+  warn "PyPI недоступен, используем зеркало..."
+  "$PIP" install -r "$INSTALL_DIR/backend/requirements.txt" --timeout 60 -q -i "$PIP_MIRROR"
+}
 
 # ── Директории данных ─────────────────────────────────────────────────────────
 info "Создание директорий..."
@@ -96,6 +107,16 @@ EOF
 info "Включение IP форвардинга..."
 echo "net.ipv4.ip_forward=1" > /etc/sysctl.d/99-click-vpn.conf
 sysctl -p /etc/sysctl.d/99-click-vpn.conf -q
+
+# ── Освобождаем порт 8080 если занят ─────────────────────────────────────────
+if ss -tlnp | grep -q ':8080'; then
+  warn "Порт 8080 занят — освобождаем..."
+  PIDS=$(ss -tlnp | grep ':8080' | grep -oP 'pid=\K[0-9]+' | sort -u)
+  for PID in $PIDS; do
+    kill "$PID" 2>/dev/null && info "Завершён процесс $PID"
+  done
+  sleep 1
+fi
 
 # ── Запуск ────────────────────────────────────────────────────────────────────
 info "Запуск сервиса..."
