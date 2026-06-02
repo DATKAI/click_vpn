@@ -158,6 +158,10 @@
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
         Сертификаты
       </button>
+      <button class="nav-item" :class="{active:page==='logs'}" @click="navigate('logs')">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        Логи
+      </button>
       <button class="nav-item" :class="{active:page==='settings'}" @click="navigate('settings')">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/></svg>
         Настройки
@@ -432,6 +436,91 @@
             <p style="color:#94a3b8;margin:0">Организаций нет. Создайте первую.</p>
           </div>
         </template>
+      </div>
+    </div>
+
+    <!-- Logs -->
+    <div x-show="page==='logs'" class="fade-in" style="padding:32px;display:flex;flex-direction:column;height:100%">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px">
+        <div>
+          <h2 style="font-size:22px;font-weight:700;color:#0f172a;margin:0">Логи</h2>
+          <p style="color:#94a3b8;font-size:13px;margin-top:4px" x-text="logsAutoRefresh ? 'Авто-обновление каждые 5 сек' : 'Обновление остановлено'"></p>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <select x-model="logsLines" @change="loadLogs()" class="input" style="width:120px">
+            <option value="50">50 строк</option>
+            <option value="100">100 строк</option>
+            <option value="200">200 строк</option>
+            <option value="500">500 строк</option>
+          </select>
+          <button @click="logsAutoRefresh=!logsAutoRefresh; logsAutoRefresh ? startLogsRefresh() : stopLogsRefresh()"
+                  class="btn btn-sm"
+                  :style="logsAutoRefresh ? 'background:#fef2f2;color:#dc2626;border:1.5px solid #fca5a5' : 'background:#f0fdf4;color:#16a34a;border:1.5px solid #bbf7d0'">
+            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path x-show="logsAutoRefresh" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6"/>
+              <path x-show="!logsAutoRefresh" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+            </svg>
+            <span x-text="logsAutoRefresh ? 'Пауза' : 'Старт'"></span>
+          </button>
+          <button @click="loadLogs()" class="btn btn-gray btn-sm">
+            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            Обновить
+          </button>
+          <button @click="copyLogs()" class="btn btn-gray btn-sm">
+            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+            Копировать
+          </button>
+        </div>
+      </div>
+
+      <!-- Вкладки источников -->
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+        <button @click="logsSource='service'; loadLogs()"
+                class="btn btn-sm"
+                :style="logsSource==='service' ? 'background:#4f46e5;color:#fff' : 'background:#f1f5f9;color:#475569'">
+          Click VPN (сервис)
+        </button>
+        <template x-for="s in servers" :key="s.id">
+          <button @click="logsSource='server_'+s.id; loadLogs()"
+                  class="btn btn-sm"
+                  :style="logsSource==='server_'+s.id ? 'background:#4f46e5;color:#fff' : 'background:#f1f5f9;color:#475569'">
+            <span class="badge-dot" :style="s.status==='running' ? 'color:#16a34a' : 'color:#94a3b8'"></span>
+            <span x-text="s.name"></span>
+          </button>
+        </template>
+      </div>
+
+      <!-- Лог терминал -->
+      <div style="flex:1;background:#0f172a;border-radius:12px;overflow:hidden;display:flex;flex-direction:column;min-height:400px">
+        <div style="padding:10px 16px;background:#1e293b;display:flex;align-items:center;justify-content:space-between">
+          <div style="display:flex;gap:6px">
+            <div style="width:12px;height:12px;border-radius:50%;background:#ef4444"></div>
+            <div style="width:12px;height:12px;border-radius:50%;background:#f59e0b"></div>
+            <div style="width:12px;height:12px;border-radius:50%;background:#22c55e"></div>
+          </div>
+          <span style="color:#475569;font-size:12px;font-family:monospace" x-text="logsTitle"></span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <input x-model="logsSearch" @input="filterLogs()"
+                   style="background:#0f172a;border:1px solid #334155;border-radius:6px;padding:4px 10px;color:#94a3b8;font-size:12px;width:160px;outline:none"
+                   placeholder="🔍 Фильтр..."/>
+            <label style="display:flex;align-items:center;gap:6px;color:#475569;font-size:12px;cursor:pointer">
+              <input type="checkbox" x-model="logsAutoScroll" style="accent-color:#4f46e5"/>
+              Автоскролл
+            </label>
+          </div>
+        </div>
+        <div id="log-output"
+             style="flex:1;overflow-y:auto;padding:16px;font-family:monospace;font-size:12px;line-height:1.6;color:#94a3b8;white-space:pre-wrap;word-break:break-all">
+          <template x-if="logsLoading">
+            <div style="color:#475569;text-align:center;padding:40px">Загрузка...</div>
+          </template>
+          <template x-if="!logsLoading && !filteredLogLines.length">
+            <div style="color:#475569;text-align:center;padding:40px">Логов нет</div>
+          </template>
+          <template x-for="(line, i) in filteredLogLines" :key="i">
+            <div :style="logLineStyle(line)" x-text="line"></div>
+          </template>
+        </div>
       </div>
     </div>
 
@@ -906,8 +995,25 @@ function app() {
     userFilter: { server_id:'', search:'' },
     _refreshTimer: null,
 
+    // Logs state
+    logsSource: 'service',
+    logsLines: '200',
+    logsRaw: '',
+    filteredLogLines: [],
+    logsSearch: '',
+    logsLoading: false,
+    logsAutoRefresh: true,
+    logsAutoScroll: true,
+    _logsTimer: null,
+
+    get logsTitle() {
+      if (this.logsSource === 'service') return 'click-vpn.service';
+      const id = +this.logsSource.replace('server_', '');
+      return `click-vpn-server-${id} (${this.servers.find(s=>s.id===id)?.name||''})`;
+    },
+
     get pageTitle() {
-      const titles = { dashboard:'Дашборд', servers:'Серверы', users:'Клиенты', orgs:'Организации', ca:'Сертификаты', settings:'Настройки' };
+      const titles = { dashboard:'Дашборд', servers:'Серверы', users:'Клиенты', orgs:'Организации', logs:'Логи', ca:'Сертификаты', settings:'Настройки' };
       return (titles[this.page] || '') + ' — Click VPN';
     },
     get totalOnline() {
@@ -977,6 +1083,8 @@ function app() {
       if (p === 'orgs') this.loadOrgs();
       if (p === 'ca') this.loadCA();
       if (p === 'settings') this.loadSettings();
+      if (p === 'logs') { this.loadLogs(); this.startLogsRefresh(); }
+      else { this.stopLogsRefresh(); }
     },
 
     async api(method, path, body) {
@@ -1311,6 +1419,63 @@ function app() {
       if (!confirm('Отозвать сертификат? Пользователь немедленно потеряет доступ.')) return;
       try { await this.api('POST', '/users/'+id+'/revoke'); await this.loadUsers(); }
       catch(e) { alert(e.message); }
+    },
+
+    async loadLogs() {
+      this.logsLoading = !this.logsRaw;
+      try {
+        let path;
+        if (this.logsSource === 'service') {
+          path = `/logs/service?lines=${this.logsLines}`;
+        } else {
+          const id = this.logsSource.replace('server_', '');
+          path = `/logs/server/${id}?lines=${this.logsLines}`;
+        }
+        const data = await this.api('GET', path);
+        if (data) {
+          this.logsRaw = data.logs || '';
+          this.filterLogs();
+          if (this.logsAutoScroll) this.$nextTick(() => {
+            const el = document.getElementById('log-output');
+            if (el) el.scrollTop = el.scrollHeight;
+          });
+        }
+      } catch {}
+      finally { this.logsLoading = false; }
+    },
+
+    filterLogs() {
+      const lines = this.logsRaw.split('\n').filter(l => l.trim());
+      if (this.logsSearch) {
+        const q = this.logsSearch.toLowerCase();
+        this.filteredLogLines = lines.filter(l => l.toLowerCase().includes(q));
+      } else {
+        this.filteredLogLines = lines;
+      }
+    },
+
+    logLineStyle(line) {
+      const l = line.toLowerCase();
+      if (l.includes('error') || l.includes('failed') || l.includes('crit')) return 'color:#f87171';
+      if (l.includes('warn')) return 'color:#fbbf24';
+      if (l.includes('start') || l.includes('success') || l.includes('active')) return 'color:#4ade80';
+      if (l.includes('info')) return 'color:#60a5fa';
+      return 'color:#94a3b8';
+    },
+
+    startLogsRefresh() {
+      this.stopLogsRefresh();
+      if (this.logsAutoRefresh) {
+        this._logsTimer = setInterval(() => { if (this.page==='logs') this.loadLogs(); }, 5000);
+      }
+    },
+
+    stopLogsRefresh() {
+      if (this._logsTimer) { clearInterval(this._logsTimer); this._logsTimer = null; }
+    },
+
+    async copyLogs() {
+      await navigator.clipboard.writeText(this.logsRaw).catch(() => {});
     },
 
     serverName(id) { return this.servers.find(s => s.id === id)?.name || '—'; },
