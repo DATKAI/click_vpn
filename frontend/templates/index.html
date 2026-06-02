@@ -622,6 +622,42 @@
       <div x-show="settingsSaved" class="alert alert-success" style="margin-bottom:12px">Настройки сохранены</div>
       <div x-show="settingsError" x-text="settingsError" class="alert alert-error" style="margin-bottom:12px"></div>
       <button class="btn btn-primary" @click="saveSettings()">Сохранить настройки</button>
+      </div>
+
+      <!-- Обновление системы -->
+      <div class="card" style="margin-top:16px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+          <div style="width:40px;height:40px;background:#f0fdf4;border-radius:10px;display:flex;align-items:center;justify-content:center">
+            <svg width="20" height="20" fill="none" stroke="#16a34a" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          </div>
+          <div style="flex:1">
+            <div style="font-weight:700;font-size:15px">Обновление системы</div>
+            <div style="color:#94a3b8;font-size:12px">Получить последнюю версию с GitHub</div>
+          </div>
+          <div x-show="sysVersion.commit" style="text-align:right">
+            <div style="font-family:monospace;font-size:13px;color:#475569;font-weight:600" x-text="sysVersion.commit"></div>
+            <div style="font-size:11px;color:#94a3b8" x-text="sysVersion.date ? sysVersion.date.slice(0,10) : ''"></div>
+          </div>
+        </div>
+
+        <div x-show="updateRunning || updateOutput" style="margin-bottom:16px">
+          <div style="background:#0f172a;border-radius:10px;padding:14px;font-family:monospace;font-size:12px;max-height:280px;overflow-y:auto;white-space:pre-wrap;line-height:1.6" id="update-output"
+               :style="updateSuccess===true ? 'border:1.5px solid #16a34a' : updateSuccess===false ? 'border:1.5px solid #dc2626' : 'border:1.5px solid #334155'"
+               x-text="updateOutput || 'Запуск...'">
+          </div>
+          <div x-show="updateSuccess===true" class="alert alert-success" style="margin-top:10px">✅ Обновление завершено! Сервис перезапущен.</div>
+          <div x-show="updateSuccess===false" class="alert alert-error" style="margin-top:10px">❌ Ошибка при обновлении. Проверьте вывод выше.</div>
+        </div>
+
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-primary" @click="startUpdate()" :disabled="updateRunning">
+            <svg x-show="updateRunning" class="spin" width="16" height="16" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-dasharray="31" stroke-dashoffset="10" opacity=".3"/><path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>
+            <svg x-show="!updateRunning" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            <span x-text="updateRunning ? 'Обновление...' : 'Обновить Click VPN'"></span>
+          </button>
+          <button x-show="updateOutput && !updateRunning" class="btn btn-gray" @click="updateOutput='';updateSuccess=null">Очистить</button>
+        </div>
+      </div>
     </div>
 
   </main>
@@ -969,6 +1005,11 @@ function app() {
     ispColors: ['#6366f1','#10b981','#f59e0b','#ef4444'],
     settingsSaved: false,
     settingsError: '',
+    sysVersion: {},
+    updateRunning: false,
+    updateOutput: '',
+    updateSuccess: null,
+    _updateTimer: null,
     showCreateServer: false,
     showCreateUser: false,
     showCreateCA: false,
@@ -1025,6 +1066,7 @@ function app() {
       // Мгновенно восстанавливаем данные из кеша
       this._restoreCache();
       // Фоново загружаем свежие данные
+      this.loadVersion();
       Promise.all([this.loadSettings(), this.loadServers(), this.loadCA(), this.loadOrgs()])
         .then(() => { this.loadDashboard(); this.loadUsers(); this.availableServers = this.servers; });
       this._startRefresh();
@@ -1161,6 +1203,46 @@ function app() {
 
     async loadOrgs() {
       try { this.orgs = await this.api('GET', '/organizations') || []; } catch {}
+    },
+
+    async loadVersion() {
+      try { this.sysVersion = await this.api('GET', '/system/version') || {}; } catch {}
+    },
+
+    async startUpdate() {
+      this.updateOutput = '';
+      this.updateSuccess = null;
+      this.updateRunning = true;
+      try {
+        await this.api('POST', '/system/update');
+        // Поллинг статуса
+        this._updateTimer = setInterval(async () => {
+          try {
+            const s = await this.api('GET', '/system/update/status');
+            if (s) {
+              this.updateOutput = s.output;
+              this.updateRunning = s.running;
+              // Прокрутка вниз
+              this.$nextTick(() => {
+                const el = document.getElementById('update-output');
+                if (el) el.scrollTop = el.scrollHeight;
+              });
+              if (!s.running) {
+                this.updateSuccess = s.success;
+                clearInterval(this._updateTimer);
+                // Обновляем версию
+                if (s.success) setTimeout(() => this.loadVersion(), 2000);
+              }
+            }
+          } catch {
+            // Сервис перезапускается — ждём
+          }
+        }, 1500);
+      } catch(e) {
+        this.updateRunning = false;
+        this.updateOutput = 'Ошибка запуска: ' + e.message;
+        this.updateSuccess = false;
+      }
     },
 
     async loadSettings() {
