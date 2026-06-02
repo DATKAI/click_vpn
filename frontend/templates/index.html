@@ -320,14 +320,39 @@
       </div>
 
       <!-- Filters -->
-      <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
-        <select x-model="userFilter.server_id" @change="loadUsers()" class="input" style="max-width:200px">
+      <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
+        <select x-model="userFilter.org_id" @change="loadUsers()" class="input" style="max-width:200px">
+          <option value="">Все организации</option>
+          <template x-for="o in orgs" :key="o.id">
+            <option :value="o.id" x-text="o.name"></option>
+          </template>
+        </select>
+        <select x-model="userFilter.server_id" @change="loadUsers()" class="input" style="max-width:180px">
           <option value="">Все серверы</option>
           <template x-for="s in servers" :key="s.id">
             <option :value="s.id" x-text="s.name"></option>
           </template>
         </select>
-        <input x-model="userFilter.search" @input="filterUsers()" class="input" style="max-width:240px" placeholder="🔍 Поиск по имени..."/>
+        <select x-model="userFilter.sort" @change="loadUsers()" class="input" style="max-width:180px">
+          <option value="created">Сначала новые</option>
+          <option value="username">По имени (А-Я)</option>
+          <option value="org">По организации</option>
+        </select>
+        <input x-model="userFilter.search" @input="filterUsers()" class="input" style="max-width:220px;flex:1" placeholder="🔍 Поиск по имени..."/>
+
+        <!-- Переключатель Активные / Архив -->
+        <div style="display:flex;background:#f1f5f9;border-radius:50px;padding:3px;margin-left:auto">
+          <button @click="userFilter.archived=false; loadUsers()"
+                  class="btn-sm" style="border:none;border-radius:50px;cursor:pointer;font-weight:600"
+                  :style="!userFilter.archived ? 'background:#fff;color:#4f46e5;box-shadow:0 1px 3px rgba(0,0,0,.1)' : 'background:transparent;color:#94a3b8'">
+            Активные
+          </button>
+          <button @click="userFilter.archived=true; loadUsers()"
+                  class="btn-sm" style="border:none;border-radius:50px;cursor:pointer;font-weight:600"
+                  :style="userFilter.archived ? 'background:#fff;color:#4f46e5;box-shadow:0 1px 3px rgba(0,0,0,.1)' : 'background:transparent;color:#94a3b8'">
+            Архив
+          </button>
+        </div>
       </div>
 
       <div class="card" style="padding:0;overflow:hidden">
@@ -350,25 +375,46 @@
                 <td style="font-size:13px;color:#475569" x-text="orgName(u.org_id)"></td>
                 <td style="font-size:13px" x-text="serverName(u.server_id)"></td>
                 <td>
-                  <span :class="u.cert_status==='active'?'badge badge-green':'badge badge-red'">
+                  <span :class="u.is_active ? 'badge badge-green' : 'badge badge-gray'">
                     <span class="badge-dot"></span>
-                    <span x-text="u.cert_status==='active'?'Активен':'Отозван'"></span>
+                    <span x-text="u.is_active ? 'Включён' : 'Выключен'"></span>
                   </span>
                 </td>
                 <td style="color:#94a3b8;font-size:12px" x-text="u.cert_expires_at ? formatDate(u.cert_expires_at) : '—'"></td>
                 <td style="padding-right:20px">
-                  <div style="display:flex;gap:6px">
-                    <button x-show="u.cert_status==='active'"
+                  <div style="display:flex;gap:6px;flex-wrap:wrap">
+                    <!-- Скачать (только включённые, не архив) -->
+                    <button x-show="u.is_active && !u.archived"
                        @click="downloadOvpn(u.id, u.username)"
-                       class="btn btn-primary btn-sm">
+                       class="btn btn-primary btn-sm" title="Скачать .ovpn">
                       <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
                       .ovpn
                     </button>
-                    <button @click="openEditUser(u)" class="btn btn-gray btn-sm">
-                      <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-                      Изменить
+
+                    <!-- Вкл/Выкл доступ (не в архиве) -->
+                    <button x-show="!u.archived && u.is_active" @click="disableUser(u.id)" class="btn btn-sm" style="background:#fff7ed;color:#c2410c;border:1.5px solid #fed7aa" title="Выключить доступ">
+                      Выключить
                     </button>
-                    <button x-show="u.cert_status==='active'" @click="revokeUser(u.id)" class="btn btn-danger btn-sm">Отозвать</button>
+                    <button x-show="!u.archived && !u.is_active" @click="enableUser(u.id)" class="btn btn-success btn-sm" title="Включить доступ">
+                      Включить
+                    </button>
+
+                    <button @click="openEditUser(u)" class="btn btn-gray btn-sm" title="Редактировать">
+                      <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                    </button>
+
+                    <!-- Архив / Из архива -->
+                    <button x-show="!u.archived" @click="archiveUser(u.id)" class="btn btn-gray btn-sm" title="В архив">
+                      <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
+                    </button>
+                    <button x-show="u.archived" @click="unarchiveUser(u.id)" class="btn btn-success btn-sm" title="Вернуть из архива">
+                      Восстановить
+                    </button>
+
+                    <!-- Удалить -->
+                    <button @click="deleteUser(u.id, u.username)" class="btn btn-danger btn-sm" title="Удалить">
+                      <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -1032,7 +1078,7 @@ function app() {
     userForm: { username:'', email:'', server_id:'', org_id:'', valid_days:365, password:'' },
     showPassword: false,
     caForm: { common_name:'', country:'RU', org:'', valid_days:3650 },
-    userFilter: { server_id:'', search:'' },
+    userFilter: { server_id:'', org_id:'', search:'', sort:'created', archived:false },
     _refreshTimer: null,
 
     // Logs state
@@ -1181,8 +1227,12 @@ function app() {
 
     async loadUsers() {
       try {
-        const path = this.userFilter.server_id ? '/users?server_id=' + this.userFilter.server_id : '/users';
-        const d = await this.api('GET', path);
+        const p = new URLSearchParams();
+        if (this.userFilter.server_id) p.set('server_id', this.userFilter.server_id);
+        if (this.userFilter.org_id) p.set('org_id', this.userFilter.org_id);
+        p.set('sort', this.userFilter.sort || 'created');
+        p.set('archived', this.userFilter.archived ? 'true' : 'false');
+        const d = await this.api('GET', '/users?' + p.toString());
         this.users = d?.users || [];
         this.filterUsers();
         this._saveCache();
@@ -1496,9 +1546,31 @@ function app() {
       }
     },
 
-    async revokeUser(id) {
-      if (!confirm('Отозвать сертификат? Пользователь немедленно потеряет доступ.')) return;
-      try { await this.api('POST', '/users/'+id+'/revoke'); await this.loadUsers(); }
+    async enableUser(id) {
+      try { await this.api('POST', '/users/'+id+'/enable'); await this.loadUsers(); }
+      catch(e) { alert(e.message); }
+    },
+
+    async disableUser(id) {
+      if (!confirm('Выключить доступ? Клиент сразу потеряет связь, но его можно включить обратно.')) return;
+      try { await this.api('POST', '/users/'+id+'/disable'); await this.loadUsers(); }
+      catch(e) { alert(e.message); }
+    },
+
+    async archiveUser(id) {
+      if (!confirm('Переместить в архив? Доступ будет заблокирован, клиент скрыт из списка.')) return;
+      try { await this.api('POST', '/users/'+id+'/archive'); await this.loadUsers(); }
+      catch(e) { alert(e.message); }
+    },
+
+    async unarchiveUser(id) {
+      try { await this.api('POST', '/users/'+id+'/unarchive'); await this.loadUsers(); }
+      catch(e) { alert(e.message); }
+    },
+
+    async deleteUser(id, username) {
+      if (!confirm('Удалить клиента "' + username + '" навсегда?\nСертификат будет отозван и не подлежит восстановлению.')) return;
+      try { await this.api('DELETE', '/users/'+id); await this.loadUsers(); }
       catch(e) { alert(e.message); }
     },
 

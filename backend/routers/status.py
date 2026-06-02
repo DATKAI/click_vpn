@@ -33,7 +33,10 @@ def get_status(db: Session = Depends(get_db), _: AdminUser = Depends(get_current
 
 @router.get("/summary")
 def summary(db: Session = Depends(get_db), _: AdminUser = Depends(get_current_user)):
-    total_users = db.query(VPNUser).filter(VPNUser.cert_status == CertStatus.active).count()
+    total_users = db.query(VPNUser).filter(
+        VPNUser.is_active == True,
+        VPNUser.archived == False,
+    ).count()
     total_servers = db.query(VPNServer).count()
     running_servers = sum(
         1 for s in db.query(VPNServer).all()

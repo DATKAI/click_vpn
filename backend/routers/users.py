@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import AdminUser, CA, VPNServer, VPNUser, Organization, CertStatus, Settings
+from models import AdminUser, CA, VPNServer, VPNUser, Organization, RevokedSerial, CertStatus, Settings
 from schemas import UserCreate, UserUpdate, UserChangePassword, UserOut, UserListOut
 from auth import get_current_user
 from services import pki
@@ -13,6 +13,27 @@ from services.profile_builder import build_ovpn_profile
 DATA_DIR = os.getenv("DATA_DIR", "./data")
 
 router = APIRouter(prefix="/api/users", tags=["users"])
+
+
+def rebuild_crl(db: Session, ca_id: int):
+    """Пересобирает CRL: блокирует выключенных, архивных и удалённых клиентов."""
+    ca = db.query(CA).filter(CA.id == ca_id).first()
+    if not ca:
+        return
+    serials = set()
+    # Выключенные или архивные активные пользователи
+    for u in db.query(VPNUser).filter(VPNUser.ca_id == ca_id, VPNUser.cert_serial.isnot(None)).all():
+        if not u.is_active or u.archived:
+            serials.add(u.cert_serial)
+    # Удалённые (постоянно отозванные)
+    for r in db.query(RevokedSerial).filter(RevokedSerial.ca_id == ca_id).all():
+        serials.add(r.serial)
+
+    crl_pem = pki.build_crl(ca.cert_pem, ca.key_pem, list(serials))
+    crl_path = os.path.join(DATA_DIR, "pki", f"crl_{ca_id}.pem")
+    os.makedirs(os.path.dirname(crl_path), exist_ok=True)
+    with open(crl_path, "w") as f:
+        f.write(crl_pem)
 
 
 @router.post("", response_model=UserOut)
@@ -81,13 +102,26 @@ def create_user(
 @router.get("", response_model=UserListOut)
 def list_users(
     server_id: int | None = None,
+    org_id: int | None = None,
+    archived: bool = False,
+    sort: str = "created",   # created | username | org
     db: Session = Depends(get_db),
     _: AdminUser = Depends(get_current_user),
 ):
-    q = db.query(VPNUser)
+    q = db.query(VPNUser).filter(VPNUser.archived == archived)
     if server_id:
         q = q.filter(VPNUser.server_id == server_id)
-    users = q.order_by(VPNUser.created_at.desc()).all()
+    if org_id:
+        q = q.filter(VPNUser.org_id == org_id)
+
+    if sort == "username":
+        q = q.order_by(VPNUser.username.asc())
+    elif sort == "org":
+        q = q.order_by(VPNUser.org_id.asc(), VPNUser.username.asc())
+    else:
+        q = q.order_by(VPNUser.created_at.desc())
+
+    users = q.all()
     return UserListOut(users=users, total=len(users))
 
 
@@ -101,9 +135,15 @@ def update_user(
     user = db.query(VPNUser).filter(VPNUser.id == user_id).first()
     if not user:
         raise HTTPException(404, "Пользователь не найден")
-    for field, value in data.model_dump(exclude_unset=True).items():
+    fields = data.model_dump(exclude_unset=True)
+    crl_dirty = "is_active" in fields
+    for field, value in fields.items():
         setattr(user, field, value)
+        if field == "is_active":
+            user.cert_status = CertStatus.active if value else CertStatus.revoked
     db.commit()
+    if crl_dirty:
+        rebuild_crl(db, user.ca_id)
     db.refresh(user)
     return user
 
@@ -163,36 +203,58 @@ def download_profile(
     )
 
 
-@router.post("/{user_id}/revoke", response_model=UserOut)
-def revoke_user(
-    user_id: int,
-    db: Session = Depends(get_db),
-    _: AdminUser = Depends(get_current_user),
-):
+@router.post("/{user_id}/enable", response_model=UserOut)
+def enable_user(user_id: int, db: Session = Depends(get_db), _: AdminUser = Depends(get_current_user)):
+    """Включить доступ клиенту."""
     user = db.query(VPNUser).filter(VPNUser.id == user_id).first()
     if not user:
         raise HTTPException(404, "Пользователь не найден")
+    user.is_active = True
+    user.cert_status = CertStatus.active
+    user.revoked_at = None
+    db.commit()
+    rebuild_crl(db, user.ca_id)
+    db.refresh(user)
+    return user
 
+
+@router.post("/{user_id}/disable", response_model=UserOut)
+def disable_user(user_id: int, db: Session = Depends(get_db), _: AdminUser = Depends(get_current_user)):
+    """Выключить доступ клиенту (обратимо)."""
+    user = db.query(VPNUser).filter(VPNUser.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "Пользователь не найден")
+    user.is_active = False
     user.cert_status = CertStatus.revoked
     user.revoked_at = datetime.utcnow()
-    user.is_active = False
     db.commit()
+    rebuild_crl(db, user.ca_id)
+    db.refresh(user)
+    return user
 
-    # Обновляем CRL
-    ca = db.query(CA).filter(CA.id == user.ca_id).first()
-    revoked_serials = [
-        u.cert_serial for u in db.query(VPNUser).filter(
-            VPNUser.ca_id == ca.id,
-            VPNUser.cert_status == CertStatus.revoked,
-            VPNUser.cert_serial.isnot(None),
-        ).all()
-    ]
-    crl_pem = pki.build_crl(ca.cert_pem, ca.key_pem, revoked_serials)
-    crl_path = os.path.join(DATA_DIR, "pki", f"crl_{ca.id}.pem")
-    os.makedirs(os.path.dirname(crl_path), exist_ok=True)
-    with open(crl_path, "w") as f:
-        f.write(crl_pem)
 
+@router.post("/{user_id}/archive", response_model=UserOut)
+def archive_user(user_id: int, db: Session = Depends(get_db), _: AdminUser = Depends(get_current_user)):
+    """Архивировать клиента (скрыть + заблокировать доступ)."""
+    user = db.query(VPNUser).filter(VPNUser.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "Пользователь не найден")
+    user.archived = True
+    db.commit()
+    rebuild_crl(db, user.ca_id)
+    db.refresh(user)
+    return user
+
+
+@router.post("/{user_id}/unarchive", response_model=UserOut)
+def unarchive_user(user_id: int, db: Session = Depends(get_db), _: AdminUser = Depends(get_current_user)):
+    """Вернуть клиента из архива."""
+    user = db.query(VPNUser).filter(VPNUser.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "Пользователь не найден")
+    user.archived = False
+    db.commit()
+    rebuild_crl(db, user.ca_id)
     db.refresh(user)
     return user
 
@@ -249,5 +311,14 @@ def delete_user(user_id: int, db: Session = Depends(get_db), _: AdminUser = Depe
     user = db.query(VPNUser).filter(VPNUser.id == user_id).first()
     if not user:
         raise HTTPException(404, "Пользователь не найден")
+    ca_id = user.ca_id
+    # Серийник навсегда в CRL чтобы удалённый сертификат не работал
+    if user.cert_serial:
+        already = db.query(RevokedSerial).filter(
+            RevokedSerial.ca_id == ca_id, RevokedSerial.serial == user.cert_serial
+        ).first()
+        if not already:
+            db.add(RevokedSerial(ca_id=ca_id, serial=user.cert_serial))
     db.delete(user)
     db.commit()
+    rebuild_crl(db, ca_id)

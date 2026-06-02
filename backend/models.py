@@ -131,10 +131,21 @@ class VPNUser(Base):
     cert_expires_at = Column(DateTime, nullable=True)
     cert_password = Column(String(256), nullable=True)  # пароль приватного ключа
 
-    is_active = Column(Boolean, default=True)
+    is_active = Column(Boolean, default=True)     # доступ включён/выключен
+    archived = Column(Boolean, default=False)     # в архиве (скрыт)
     created_at = Column(DateTime, default=datetime.utcnow)
     revoked_at = Column(DateTime, nullable=True)
 
     ca = relationship("CA", back_populates="users")
     server = relationship("VPNServer", back_populates="users")
     organization = relationship("Organization", back_populates="users")
+
+
+class RevokedSerial(Base):
+    """Серийники отозванных/удалённых сертификатов — для построения CRL."""
+    __tablename__ = "revoked_serials"
+
+    id = Column(Integer, primary_key=True)
+    ca_id = Column(Integer, ForeignKey("ca.id"), nullable=False)
+    serial = Column(Integer, nullable=False)
+    revoked_at = Column(DateTime, default=datetime.utcnow)

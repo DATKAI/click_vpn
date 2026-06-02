@@ -37,6 +37,7 @@ def _migrate_db():
         ("settings",  "isp4_label",     "VARCHAR(64) DEFAULT 'ISP4'"),
         ("vpn_users", "org_id",         "INTEGER REFERENCES organizations(id)"),
         ("vpn_users", "cert_password",  "VARCHAR(256)"),
+        ("vpn_users", "archived",       "BOOLEAN DEFAULT 0"),
     ]
     with engine.connect() as conn:
         for table, column, col_type in migrations:

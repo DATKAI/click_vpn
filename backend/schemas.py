@@ -151,6 +151,7 @@ class UserOut(BaseModel):
     cert_expires_at: Optional[datetime]
     cert_password: Optional[str]
     is_active: bool
+    archived: bool = False
     created_at: datetime
     class Config:
         from_attributes = True
