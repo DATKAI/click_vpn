@@ -13,6 +13,11 @@ DATA_DIR = os.getenv("DATA_DIR", "./data")
 
 router = APIRouter(prefix="/api", tags=["servers"])
 
+WG_KINDS = ("wireguard", "amneziawg", "amneziawg_legacy")
+
+def _is_wg(kind: str) -> bool:
+    return kind in WG_KINDS
+
 
 # ── CA ────────────────────────────────────────────────────────────────────────
 
@@ -64,25 +69,32 @@ def create_server(
     db: Session = Depends(get_db),
     _: AdminUser = Depends(get_current_user),
 ):
-    # ── WireGuard ──────────────────────────────────────────────────────────
-    if data.kind == "wireguard":
+    # ── WireGuard / AmneziaWG ──────────────────────────────────────────────
+    if data.kind in ("wireguard", "amneziawg", "amneziawg_legacy"):
         from services import wireguard
+        import json
         try:
-            priv, pub = wireguard.gen_keypair()
+            priv, pub = wireguard.gen_keypair(data.kind)
         except Exception as e:
-            raise HTTPException(500, f"WireGuard не установлен или ошибка ключей: {e}")
+            raise HTTPException(500, f"WireGuard/AmneziaWG не установлен: {e}")
+
+        awg = None
+        if data.kind == "amneziawg":
+            awg = json.dumps(wireguard.gen_awg_params("2"))
+        elif data.kind == "amneziawg_legacy":
+            awg = json.dumps(wireguard.gen_awg_params("legacy"))
+
         server = VPNServer(
-            name=data.name, kind="wireguard", ca_id=None,
+            name=data.name, kind=data.kind, ca_id=None,
             network=data.network, netmask=data.netmask,
             port=(data.port if data.port not in (1194,) else 51820),
             protocol="udp",
             dns_servers=data.dns_servers, push_routes=data.push_routes,
-            wg_private_key=priv, wg_public_key=pub,
+            wg_private_key=priv, wg_public_key=pub, awg_params=awg,
         )
         db.add(server)
         db.commit()
         db.refresh(server)
-        # пустой конфиг (без пиров) + unit
         wireguard.write_and_sync(server, [])
         server.config_path = wireguard._conf_path(server.id)
         db.commit()
@@ -162,7 +174,7 @@ def create_server(
 def _server_out(s: VPNServer, db: Session, running: bool = None) -> dict:
     from schemas import ServerOut as SO
     if running is None:
-        if s.kind == "wireguard":
+        if _is_wg(s.kind):
             from services import wireguard
             running = wireguard.is_running(s.id)
         else:
@@ -222,11 +234,11 @@ def start_server(server_id: int, db: Session = Depends(get_db), _: AdminUser = D
     if not server:
         raise HTTPException(404, "Сервер не найден")
 
-    if server.kind == "wireguard":
+    if _is_wg(server.kind):
         from services import wireguard
-        ok, msg = wireguard.start(server_id)
+        ok, msg = wireguard.start(server_id, server.kind)
         if not ok:
-            raise HTTPException(500, f"Не удалось запустить WireGuard: {msg}")
+            raise HTTPException(500, f"Не удалось запустить: {msg}")
         return {"status": "started"}
 
     if not server.config_path or not os.path.exists(server.config_path):
@@ -250,7 +262,7 @@ def stop_server(server_id: int, db: Session = Depends(get_db), _: AdminUser = De
     if not server:
         raise HTTPException(404, "Сервер не найден")
 
-    if server.kind == "wireguard":
+    if _is_wg(server.kind):
         from services import wireguard
         wireguard.stop(server_id)
     else:
@@ -267,8 +279,8 @@ def delete_server(server_id: int, db: Session = Depends(get_db), _: AdminUser = 
     if not server:
         raise HTTPException(404, "Сервер не найден")
 
-    # WireGuard — отдельный путь: снимаем интерфейс/юнит, удаляем клиентов без CRL
-    if server.kind == "wireguard":
+    # WireGuard/AmneziaWG — снимаем интерфейс/юнит, удаляем клиентов без CRL
+    if _is_wg(server.kind):
         from services import wireguard
         wireguard.remove(server_id)
         db.query(VPNUser).filter(VPNUser.server_id == server_id).delete()

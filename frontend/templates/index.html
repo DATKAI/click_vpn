@@ -442,7 +442,7 @@
             <div style="flex:1;min-width:0">
               <div style="font-weight:700;font-size:15px;display:flex;align-items:center;gap:8px">
                 <span x-text="s.name"></span>
-                <span :style="s.kind==='wireguard' ? 'background:#dcfce7;color:#15803d' : 'background:#dbeafe;color:#1d4ed8'" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:50px" x-text="s.kind==='wireguard'?'WireGuard':'OpenVPN'"></span>
+                <span :style="(s.kind && s.kind.startsWith('amnezia')) ? 'background:#fef9c3;color:#a16207' : (s.kind==='wireguard' ? 'background:#dcfce7;color:#15803d' : 'background:#dbeafe;color:#1d4ed8')" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:50px" x-text="s.kind==='amneziawg'?'AmneziaWG 2':(s.kind==='amneziawg_legacy'?'AmneziaWG legacy':(s.kind==='wireguard'?'WireGuard':'OpenVPN'))"></span>
                 <span x-show="s.obfuscation" style="background:#ede9fe;color:#6d28d9;font-size:10px;font-weight:700;padding:2px 8px;border-radius:50px">🛡 ОБФУСКАЦИЯ</span>
               </div>
               <div style="color:#94a3b8;font-size:12px;margin-top:2px" x-text="s.network + '/' + s.netmask + ' · ' + s.port + '/' + s.protocol.toUpperCase() + ' · клиентов: ' + (s.user_count||0) + ' · орг.: ' + (s.org_ids?.length||0)"></div>
@@ -1120,6 +1120,14 @@
           <label style="display:flex;align-items:center;gap:8px;padding:12px;border:1.5px solid #e2e8f0;border-radius:10px;cursor:pointer" :style="serverForm.kind==='wireguard'?'border-color:#6366f1;background:#fafaff':''">
             <input type="radio" value="wireguard" x-model="serverForm.kind" @change="serverForm.port=51820; serverForm.network='10.9.0.0'" style="accent-color:#4f46e5"/>
             <div><div style="font-weight:600;font-size:14px">WireGuard</div><div style="font-size:11px;color:#94a3b8">быстрый, лёгкий</div></div>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;padding:12px;border:1.5px solid #e2e8f0;border-radius:10px;cursor:pointer" :style="serverForm.kind==='amneziawg'?'border-color:#6366f1;background:#fafaff':''">
+            <input type="radio" value="amneziawg" x-model="serverForm.kind" @change="serverForm.port=51820; serverForm.network='10.9.0.0'" style="accent-color:#4f46e5"/>
+            <div><div style="font-weight:600;font-size:14px">AmneziaWG 2.0</div><div style="font-size:11px;color:#94a3b8">WG + обход DPI</div></div>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;padding:12px;border:1.5px solid #e2e8f0;border-radius:10px;cursor:pointer" :style="serverForm.kind==='amneziawg_legacy'?'border-color:#6366f1;background:#fafaff':''">
+            <input type="radio" value="amneziawg_legacy" x-model="serverForm.kind" @change="serverForm.port=51820; serverForm.network='10.9.0.0'" style="accent-color:#4f46e5"/>
+            <div><div style="font-weight:600;font-size:14px">AmneziaWG legacy</div><div style="font-size:11px;color:#94a3b8">совместимость 1.5</div></div>
           </label>
         </div>
       </div>
@@ -2335,7 +2343,7 @@ function app() {
         // расширение по типу сервера клиента
         const u = this.users.find(x => x.id === userId);
         const srv = u ? this.servers.find(s => s.id === u.server_id) : null;
-        const ext = (srv && srv.kind === 'wireguard') ? 'conf' : 'ovpn';
+        const ext = (srv && srv.kind && srv.kind !== 'openvpn') ? 'conf' : 'ovpn';
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');

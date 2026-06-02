@@ -44,10 +44,17 @@ def _wg_resync(db: Session, server):
         pass
 
 
+WG_KINDS = ("wireguard", "amneziawg", "amneziawg_legacy")
+
+
+def _is_wg(kind) -> bool:
+    return kind in WG_KINDS
+
+
 def _apply_user_change(db: Session, user):
-    """Применяет изменение доступа: CRL (OpenVPN) или resync пиров (WireGuard)."""
+    """Применяет изменение доступа: CRL (OpenVPN) или resync пиров (WireGuard/AmneziaWG)."""
     server = db.query(VPNServer).filter(VPNServer.id == user.server_id).first()
-    if server and server.kind == "wireguard":
+    if server and _is_wg(server.kind):
         _wg_resync(db, server)
     elif user.ca_id:
         rebuild_crl(db, user.ca_id)
@@ -85,10 +92,10 @@ def create_user(
     if exists:
         raise HTTPException(400, f"Пользователь '{data.username}' уже существует на этом сервере")
 
-    # ── WireGuard клиент ───────────────────────────────────────────────────
-    if server.kind == "wireguard":
+    # ── WireGuard / AmneziaWG клиент ───────────────────────────────────────
+    if _is_wg(server.kind):
         from services import wireguard
-        priv, pub = wireguard.gen_keypair()
+        priv, pub = wireguard.gen_keypair(server.kind)
         used = [u.wg_address for u in db.query(VPNUser).filter(
             VPNUser.server_id == server.id, VPNUser.wg_address.isnot(None)
         ).all() if u.wg_address]
@@ -256,7 +263,7 @@ def bulk_download(
         for u in users:
             srv = db.query(VPNServer).filter(VPNServer.id == u.server_id).first()
             try:
-                if srv and srv.kind == "wireguard":
+                if srv and _is_wg(srv.kind):
                     content = _build_wg_conf(db, u, srv); ext = "conf"
                 else:
                     if not u.cert_pem:
@@ -345,6 +352,13 @@ def _build_wg_conf(db: Session, user: VPNUser, server) -> str:
         import ipaddress
         routes = [str(ipaddress.ip_network(f"{server.network}/{server.netmask}", strict=False))]
     allowed = ", ".join(routes)
+    awg = None
+    if server.awg_params:
+        import json
+        try:
+            awg = json.loads(server.awg_params)
+        except Exception:
+            awg = None
     return wireguard.build_client_conf(
         client_priv=user.wg_private_key,
         client_addr=user.wg_address,
@@ -353,6 +367,7 @@ def _build_wg_conf(db: Session, user: VPNUser, server) -> str:
         endpoint_port=server.port,
         dns=server.dns_servers,
         allowed_ips=allowed,
+        awg_params=awg,
     )
 
 
@@ -398,7 +413,7 @@ def download_profile(
         raise HTTPException(404, "Пользователь не найден")
 
     server = db.query(VPNServer).filter(VPNServer.id == user.server_id).first()
-    if server and server.kind == "wireguard":
+    if server and _is_wg(server.kind):
         conf = _build_wg_conf(db, user, server)
         return Response(
             content=conf, media_type="text/plain",
@@ -648,7 +663,7 @@ def delete_user(user_id: int, db: Session = Depends(get_db), admin: AdminUser = 
     db.delete(user)
     db.commit()
 
-    if server and server.kind == "wireguard":
+    if server and _is_wg(server.kind):
         _wg_resync(db, server)              # убираем пир — клиент отваливается
     else:
         rebuild_crl(db, ca_id)

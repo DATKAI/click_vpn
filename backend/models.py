@@ -105,12 +105,13 @@ class VPNServer(Base):
 
     id = Column(Integer, primary_key=True)
     name = Column(String(128), nullable=False)
-    kind = Column(String(16), default="openvpn")   # openvpn | wireguard
+    kind = Column(String(24), default="openvpn")   # openvpn | wireguard | amneziawg | amneziawg_legacy
     ca_id = Column(Integer, ForeignKey("ca.id"), nullable=True)  # WG не нужен CA
 
-    # WireGuard серверные ключи
+    # WireGuard / AmneziaWG серверные ключи
     wg_private_key = Column(Text, nullable=True)
     wg_public_key = Column(Text, nullable=True)
+    awg_params = Column(Text, nullable=True)        # JSON параметров обфускации AmneziaWG
 
     network = Column(String(64), default="10.8.0.0")
     netmask = Column(String(64), default="255.255.255.0")

@@ -81,6 +81,7 @@ def _migrate_db():
         ("vpn_servers", "kind",          "VARCHAR(16) DEFAULT 'openvpn'"),
         ("vpn_servers", "wg_private_key","TEXT"),
         ("vpn_servers", "wg_public_key", "TEXT"),
+        ("vpn_servers", "awg_params",    "TEXT"),
         ("vpn_users",   "wg_private_key","TEXT"),
         ("vpn_users",   "wg_public_key", "TEXT"),
         ("vpn_users",   "wg_address",    "VARCHAR(64)"),
