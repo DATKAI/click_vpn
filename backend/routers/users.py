@@ -15,6 +15,7 @@ from auth import get_current_user
 from services import pki
 from services.profile_builder import build_ovpn_profile
 from services import mailer
+from services import audit
 
 DATA_DIR = os.getenv("DATA_DIR", "./data")
 
@@ -46,7 +47,7 @@ def rebuild_crl(db: Session, ca_id: int):
 def create_user(
     data: UserCreate,
     db: Session = Depends(get_db),
-    _: AdminUser = Depends(get_current_user),
+    admin: AdminUser = Depends(get_current_user),
 ):
     # Получаем организацию
     org = db.query(Organization).filter(Organization.id == data.org_id).first()
@@ -99,10 +100,12 @@ def create_user(
         cert_serial=ca.serial,
         cert_expires_at=expires_at,
         cert_password=data.password or None,
+        notes=data.notes,
     )
     db.add(user)
     db.commit()
     db.refresh(user)
+    audit.log(db, admin.username, "user.create", user.username, f"org={org.name}")
     return user
 
 
@@ -367,7 +370,7 @@ def send_profile_email(
 
 
 @router.post("/{user_id}/enable", response_model=UserOut)
-def enable_user(user_id: int, db: Session = Depends(get_db), _: AdminUser = Depends(get_current_user)):
+def enable_user(user_id: int, db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_user)):
     """Включить доступ клиенту."""
     user = db.query(VPNUser).filter(VPNUser.id == user_id).first()
     if not user:
@@ -377,12 +380,13 @@ def enable_user(user_id: int, db: Session = Depends(get_db), _: AdminUser = Depe
     user.revoked_at = None
     db.commit()
     rebuild_crl(db, user.ca_id)
+    audit.log(db, admin.username, "user.enable", user.username)
     db.refresh(user)
     return user
 
 
 @router.post("/{user_id}/disable", response_model=UserOut)
-def disable_user(user_id: int, db: Session = Depends(get_db), _: AdminUser = Depends(get_current_user)):
+def disable_user(user_id: int, db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_user)):
     """Выключить доступ клиенту (обратимо)."""
     user = db.query(VPNUser).filter(VPNUser.id == user_id).first()
     if not user:
@@ -392,12 +396,13 @@ def disable_user(user_id: int, db: Session = Depends(get_db), _: AdminUser = Dep
     user.revoked_at = datetime.utcnow()
     db.commit()
     rebuild_crl(db, user.ca_id)
+    audit.log(db, admin.username, "user.disable", user.username)
     db.refresh(user)
     return user
 
 
 @router.post("/{user_id}/archive", response_model=UserOut)
-def archive_user(user_id: int, db: Session = Depends(get_db), _: AdminUser = Depends(get_current_user)):
+def archive_user(user_id: int, db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_user)):
     """Архивировать клиента (скрыть + заблокировать доступ)."""
     user = db.query(VPNUser).filter(VPNUser.id == user_id).first()
     if not user:
@@ -405,12 +410,13 @@ def archive_user(user_id: int, db: Session = Depends(get_db), _: AdminUser = Dep
     user.archived = True
     db.commit()
     rebuild_crl(db, user.ca_id)
+    audit.log(db, admin.username, "user.archive", user.username)
     db.refresh(user)
     return user
 
 
 @router.post("/{user_id}/unarchive", response_model=UserOut)
-def unarchive_user(user_id: int, db: Session = Depends(get_db), _: AdminUser = Depends(get_current_user)):
+def unarchive_user(user_id: int, db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_user)):
     """Вернуть клиента из архива."""
     user = db.query(VPNUser).filter(VPNUser.id == user_id).first()
     if not user:
@@ -418,6 +424,7 @@ def unarchive_user(user_id: int, db: Session = Depends(get_db), _: AdminUser = D
     user.archived = False
     db.commit()
     rebuild_crl(db, user.ca_id)
+    audit.log(db, admin.username, "user.unarchive", user.username)
     db.refresh(user)
     return user
 
@@ -427,7 +434,7 @@ def reissue_cert(
     user_id: int,
     data: UserReissue,
     db: Session = Depends(get_db),
-    _: AdminUser = Depends(get_current_user),
+    admin: AdminUser = Depends(get_current_user),
 ):
     """Перевыпустить сертификат: старый отзывается, выдаётся новый с новым серийником."""
     user = db.query(VPNUser).filter(VPNUser.id == user_id).first()
@@ -468,6 +475,7 @@ def reissue_cert(
     db.commit()
 
     rebuild_crl(db, ca.id)
+    audit.log(db, admin.username, "user.reissue", user.username)
     db.refresh(user)
     return user
 
@@ -520,11 +528,12 @@ def change_password(
 
 
 @router.delete("/{user_id}", status_code=204)
-def delete_user(user_id: int, db: Session = Depends(get_db), _: AdminUser = Depends(get_current_user)):
+def delete_user(user_id: int, db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_user)):
     user = db.query(VPNUser).filter(VPNUser.id == user_id).first()
     if not user:
         raise HTTPException(404, "Пользователь не найден")
     ca_id = user.ca_id
+    uname = user.username
     # Серийник навсегда в CRL чтобы удалённый сертификат не работал
     if user.cert_serial:
         already = db.query(RevokedSerial).filter(
@@ -534,4 +543,6 @@ def delete_user(user_id: int, db: Session = Depends(get_db), _: AdminUser = Depe
             db.add(RevokedSerial(ca_id=ca_id, serial=user.cert_serial))
     db.delete(user)
     db.commit()
+    rebuild_crl(db, ca_id)
+    audit.log(db, admin.username, "user.delete", uname)
     rebuild_crl(db, ca_id)

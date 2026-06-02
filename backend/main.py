@@ -11,7 +11,7 @@ from fastapi.responses import HTMLResponse
 from database import engine, SessionLocal, Base
 from models import AdminUser, Settings
 from auth import hash_password
-from routers import auth, settings, servers, users, status, organizations, logs, system
+from routers import auth, settings, servers, users, status, organizations, logs, system, audit, backup
 
 DATA_DIR = os.getenv("DATA_DIR", "./data")
 os.makedirs(os.path.join(DATA_DIR, "pki"), exist_ok=True)
@@ -23,7 +23,33 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     _migrate_db()
     _seed_defaults()
+    _start_background()
     yield
+
+
+def _start_background():
+    """Запуск фоновых потоков: трекер подключений + автобэкап."""
+    from models import VPNServer, VPNUser, ConnectionLog, Settings
+    from services import conn_tracker, backup as backup_svc
+    try:
+        conn_tracker.start_tracker(SessionLocal, VPNServer, VPNUser, ConnectionLog)
+    except Exception:
+        pass
+
+    def _backup_settings():
+        db = SessionLocal()
+        try:
+            s = db.query(Settings).filter(Settings.id == 1).first()
+            if s:
+                return bool(s.backup_enabled), s.backup_interval_hours or 24, s.backup_keep or 7
+        finally:
+            db.close()
+        return False, 24, 7
+
+    try:
+        backup_svc.start_auto_backup(_backup_settings)
+    except Exception:
+        pass
 
 
 def _migrate_db():
@@ -45,6 +71,10 @@ def _migrate_db():
         ("settings",  "smtp_password",  "VARCHAR(256)"),
         ("settings",  "smtp_from",      "VARCHAR(256)"),
         ("settings",  "smtp_tls",       "BOOLEAN DEFAULT 1"),
+        ("settings",  "backup_enabled", "BOOLEAN DEFAULT 0"),
+        ("settings",  "backup_interval_hours", "INTEGER DEFAULT 24"),
+        ("settings",  "backup_keep",    "INTEGER DEFAULT 7"),
+        ("vpn_users", "notes",          "TEXT"),
     ]
     with engine.connect() as conn:
         for table, column, col_type in migrations:
@@ -103,6 +133,8 @@ app.include_router(status.router)
 app.include_router(organizations.router)
 app.include_router(logs.router)
 app.include_router(system.router)
+app.include_router(audit.router)
+app.include_router(backup.router)
 
 # Статика и шаблоны
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")

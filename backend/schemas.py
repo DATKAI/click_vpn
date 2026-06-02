@@ -49,6 +49,9 @@ class SettingsUpdate(BaseModel):
     smtp_password: Optional[str] = None
     smtp_from: Optional[str] = None
     smtp_tls: Optional[bool] = True
+    backup_enabled: Optional[bool] = False
+    backup_interval_hours: Optional[int] = 24
+    backup_keep: Optional[int] = 7
 
 class SettingsOut(SettingsUpdate):
     id: int
@@ -143,12 +146,14 @@ class UserCreate(BaseModel):
     server_id: Optional[int] = None      # если у орг несколько серверов — указать явно
     valid_days: int = 365
     password: Optional[str] = None
+    notes: Optional[str] = None
 
 class UserUpdate(BaseModel):
     full_name: Optional[str] = None
     email: Optional[str] = None
     is_active: Optional[bool] = None
     org_id: Optional[int] = None
+    notes: Optional[str] = None
 
 class UserChangePassword(BaseModel):
     new_password: Optional[str] = None  # None = убрать пароль
@@ -169,6 +174,7 @@ class UserOut(BaseModel):
     cert_password: Optional[str]
     is_active: bool
     archived: bool = False
+    notes: Optional[str] = None
     created_at: datetime
     class Config:
         from_attributes = True

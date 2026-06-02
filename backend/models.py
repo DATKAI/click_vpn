@@ -55,6 +55,10 @@ class Settings(Base):
     smtp_password = Column(String(256), nullable=True)
     smtp_from = Column(String(256), nullable=True)
     smtp_tls = Column(Boolean, default=True)
+    # Авто-бэкап
+    backup_enabled = Column(Boolean, default=False)
+    backup_interval_hours = Column(Integer, default=24)
+    backup_keep = Column(Integer, default=7)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
@@ -141,6 +145,7 @@ class VPNUser(Base):
 
     is_active = Column(Boolean, default=True)     # доступ включён/выключен
     archived = Column(Boolean, default=False)     # в архиве (скрыт)
+    notes = Column(Text, nullable=True)           # комментарий админа
     created_at = Column(DateTime, default=datetime.utcnow)
     revoked_at = Column(DateTime, nullable=True)
 
@@ -157,3 +162,31 @@ class RevokedSerial(Base):
     ca_id = Column(Integer, ForeignKey("ca.id"), nullable=False)
     serial = Column(Integer, nullable=False)
     revoked_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ConnectionLog(Base):
+    """История подключений клиентов."""
+    __tablename__ = "connection_logs"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("vpn_users.id"), nullable=True)
+    common_name = Column(String(128), nullable=False)
+    server_id = Column(Integer, nullable=True)
+    real_address = Column(String(64), nullable=True)
+    virtual_address = Column(String(64), nullable=True)
+    connected_at = Column(DateTime, default=datetime.utcnow)
+    disconnected_at = Column(DateTime, nullable=True)
+    bytes_received = Column(Integer, default=0)
+    bytes_sent = Column(Integer, default=0)
+
+
+class AuditLog(Base):
+    """Журнал действий администраторов."""
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    admin = Column(String(64), nullable=True)
+    action = Column(String(64), nullable=False)   # login, user.create, user.delete...
+    target = Column(String(256), nullable=True)
+    details = Column(String(512), nullable=True)

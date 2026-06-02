@@ -5,6 +5,7 @@ from database import get_db
 from models import AdminUser
 from schemas import LoginRequest, TokenResponse, AdminUserCreate, AdminUserOut
 from auth import hash_password, verify_password, create_access_token, get_current_user
+from services import audit
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -13,8 +14,10 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 def login(data: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(AdminUser).filter(AdminUser.username == data.username).first()
     if not user or not verify_password(data.password, user.password_hash):
+        audit.log(db, data.username, "login.failed", details="неверный пароль")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Неверный логин или пароль")
     token = create_access_token({"sub": user.username})
+    audit.log(db, user.username, "login")
     return TokenResponse(access_token=token)
 
 
