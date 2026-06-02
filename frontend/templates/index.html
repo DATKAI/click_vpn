@@ -639,18 +639,35 @@
     </div>
 
     <!-- Settings -->
-    <div x-show="page==='settings'" class="fade-in" style="padding:32px;max-width:640px">
-      <div style="margin-bottom:24px">
+    <div x-show="page==='settings'" class="fade-in" style="padding:32px;max-width:680px">
+      <div style="margin-bottom:20px">
         <h2 style="font-size:22px;font-weight:700;color:#0f172a;margin:0">Настройки</h2>
-        <p style="color:#94a3b8;font-size:13px;margin-top:4px">Конфигурация провайдеров и сервиса</p>
+        <p style="color:#94a3b8;font-size:13px;margin-top:4px">Конфигурация сервиса</p>
       </div>
 
+      <!-- Вкладки -->
+      <div style="display:flex;gap:4px;background:#f1f5f9;border-radius:12px;padding:4px;margin-bottom:20px;flex-wrap:wrap">
+        <template x-for="t in settingsTabs" :key="t.id">
+          <button @click="settingsTab=t.id"
+                  style="flex:1;min-width:100px;border:none;border-radius:9px;padding:9px 12px;cursor:pointer;font-weight:600;font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px;transition:all .15s"
+                  :style="settingsTab===t.id ? 'background:#fff;color:#4f46e5;box-shadow:0 1px 3px rgba(0,0,0,.1)' : 'background:transparent;color:#64748b'">
+            <span x-html="t.icon"></span>
+            <span x-text="t.label"></span>
+          </button>
+        </template>
+      </div>
+
+      <!-- Вкладка: Общее -->
+      <div x-show="settingsTab==='general'">
       <div class="card" style="margin-bottom:16px">
         <h3 style="font-size:14px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.05em;margin:0 0 16px">Общее</h3>
         <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Название сервиса</label>
         <input x-model="settings.server_name" class="input" placeholder="VPN Server"/>
       </div>
+      </div>
 
+      <!-- Вкладка: Провайдеры -->
+      <div x-show="settingsTab==='providers'">
       <!-- Провайдеры -->
       <div class="card" style="margin-bottom:16px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
@@ -695,7 +712,10 @@
           Добавить провайдера
         </button>
       </div>
+      </div>
 
+      <!-- Вкладка: Почта -->
+      <div x-show="settingsTab==='email'">
       <!-- SMTP / Email -->
       <div class="card" style="margin-bottom:16px">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
@@ -746,13 +766,19 @@
         <div x-show="testEmailResult" x-text="testEmailResult" :class="testEmailOk ? 'alert alert-success' : 'alert alert-error'" style="margin-top:10px"></div>
         <p style="color:#94a3b8;font-size:11px;margin-top:10px;margin-bottom:0">Не забудьте нажать «Сохранить настройки» после изменения SMTP</p>
       </div>
+      </div>
 
-      <div x-show="settingsSaved" class="alert alert-success" style="margin-bottom:12px">Настройки сохранены</div>
-      <div x-show="settingsError" x-text="settingsError" class="alert alert-error" style="margin-bottom:12px"></div>
-      <button class="btn btn-primary" @click="saveSettings()">Сохранить настройки</button>
+      <!-- Кнопка сохранения (на всех вкладках кроме обновления) -->
+      <div x-show="settingsTab!=='update'">
+        <div x-show="settingsSaved" class="alert alert-success" style="margin-bottom:12px">Настройки сохранены</div>
+        <div x-show="settingsError" x-text="settingsError" class="alert alert-error" style="margin-bottom:12px"></div>
+        <button class="btn btn-primary" @click="saveSettings()">Сохранить настройки</button>
+      </div>
 
+      <!-- Вкладка: Обновление -->
+      <div x-show="settingsTab==='update'">
       <!-- Обновление системы -->
-      <div class="card" style="margin-top:16px">
+      <div class="card">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
           <div style="width:40px;height:40px;background:#f0fdf4;border-radius:10px;display:flex;align-items:center;justify-content:center">
             <svg width="20" height="20" fill="none" stroke="#16a34a" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
@@ -784,6 +810,7 @@
           </button>
           <button x-show="updateOutput && !updateRunning" class="btn btn-gray" @click="updateOutput='';updateSuccess=null">Очистить</button>
         </div>
+      </div>
       </div>
     </div>
 
@@ -1243,6 +1270,13 @@ function app() {
     ispColors: ['#6366f1','#10b981','#f59e0b','#ef4444'],
     settingsSaved: false,
     settingsError: '',
+    settingsTab: 'general',
+    settingsTabs: [
+      { id:'general',   label:'Общее',      icon:'<svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/></svg>' },
+      { id:'providers', label:'Провайдеры', icon:'<svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-18 0 9 9 0 0118 0zM3 12h18"/></svg>' },
+      { id:'email',     label:'Почта',      icon:'<svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>' },
+      { id:'update',    label:'Обновление', icon:'<svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>' },
+    ],
     sysVersion: {},
     testEmailAddr: '',
     testEmailRunning: false,
