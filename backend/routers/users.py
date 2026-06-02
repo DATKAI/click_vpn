@@ -196,8 +196,8 @@ def download_profile(
     user = db.query(VPNUser).filter(VPNUser.id == user_id).first()
     if not user:
         raise HTTPException(404, "Пользователь не найден")
-    if user.cert_status == CertStatus.revoked:
-        raise HTTPException(400, "Сертификат отозван")
+    if not user.cert_pem:
+        raise HTTPException(400, "Сертификат не найден")
 
     ovpn = _build_user_ovpn(db, user)
     filename = f"{user.username}.ovpn"
@@ -220,8 +220,8 @@ def send_profile_email(
         raise HTTPException(404, "Пользователь не найден")
     if not user.email:
         raise HTTPException(400, "У клиента не указан email")
-    if user.cert_status == CertStatus.revoked:
-        raise HTTPException(400, "Сертификат отозван")
+    if not user.cert_pem:
+        raise HTTPException(400, "Сертификат не найден")
 
     settings = db.query(Settings).filter(Settings.id == 1).first()
     if not settings or not settings.smtp_host or not settings.smtp_from:
