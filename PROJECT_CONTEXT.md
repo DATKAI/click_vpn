@@ -176,6 +176,15 @@ CSV-импорт, массовый ZIP, email (SMTP)+тест, история п
 **Важно про Chart.js + Alpine:** инстансы графиков хранятся в нереактивной переменной
 `const _charts = {}` внутри `app()` (НЕ в возвращаемом объекте — иначе Alpine проксирует и ломает canvas).
 
+**WireGuard** (второй протокол). `VPNServer.kind` = openvpn|wireguard. Для WG: серверные
+ключи `wg_private_key/wg_public_key`, клиент — `wg_private_key/wg_public_key/wg_address`.
+`services/wireguard.py`: gen_keypair (через `wg`), build_server_conf (с PostUp NAT),
+systemd-юнит `click-vpn-wg-{id}` через `wg-quick up`, peer sync через `wg syncconf`.
+Клиент скачивает `.conf` (не .ovpn). Включение/выключение/удаление → `_wg_resync` пересобирает
+пиров и применяет на лету. Требует `wireguard-tools` + модуль ядра wireguard на ХОСТЕ Proxmox.
+Ограничение: дашборд «онлайн» и статистика трафика пока только для OpenVPN (парсинг status-логов);
+для WG статус есть через `wg show` (не выведен в UI).
+
 ## 10. Что осталось (бэклог, по приоритету)
 
 **Критично для прода:**

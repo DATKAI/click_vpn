@@ -26,6 +26,33 @@ router = APIRouter(prefix="/api/users", tags=["users"])
 from services.crl import rebuild_crl  # единая пересборка CRL
 
 
+def _wg_resync(db: Session, server):
+    """Пересобирает список пиров WireGuard сервера (только включённые, не архив)."""
+    from services import wireguard
+    peers = [
+        {"public_key": u.wg_public_key, "address": u.wg_address}
+        for u in db.query(VPNUser).filter(
+            VPNUser.server_id == server.id,
+            VPNUser.is_active == True,
+            VPNUser.archived == False,
+            VPNUser.wg_public_key.isnot(None),
+        ).all()
+    ]
+    try:
+        wireguard.write_and_sync(server, peers)
+    except Exception:
+        pass
+
+
+def _apply_user_change(db: Session, user):
+    """Применяет изменение доступа: CRL (OpenVPN) или resync пиров (WireGuard)."""
+    server = db.query(VPNServer).filter(VPNServer.id == user.server_id).first()
+    if server and server.kind == "wireguard":
+        _wg_resync(db, server)
+    elif user.ca_id:
+        rebuild_crl(db, user.ca_id)
+
+
 @router.post("", response_model=UserOut)
 def create_user(
     data: UserCreate,
@@ -53,10 +80,31 @@ def create_user(
     exists = db.query(VPNUser).filter(
         VPNUser.server_id == server.id,
         VPNUser.username == data.username,
-        VPNUser.cert_status == CertStatus.active,
+        VPNUser.archived == False,
     ).first()
     if exists:
         raise HTTPException(400, f"Пользователь '{data.username}' уже существует на этом сервере")
+
+    # ── WireGuard клиент ───────────────────────────────────────────────────
+    if server.kind == "wireguard":
+        from services import wireguard
+        priv, pub = wireguard.gen_keypair()
+        used = [u.wg_address for u in db.query(VPNUser).filter(
+            VPNUser.server_id == server.id, VPNUser.wg_address.isnot(None)
+        ).all() if u.wg_address]
+        addr = wireguard.next_client_ip(server.network, server.netmask, used)
+        user = VPNUser(
+            username=data.username, full_name=data.full_name, email=data.email,
+            server_id=server.id, org_id=data.org_id,
+            wg_private_key=priv, wg_public_key=pub, wg_address=addr,
+            notes=data.notes,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        _wg_resync(db, server)
+        audit.log(db, admin.username, "user.create", user.username, f"wg org={org.name}")
+        return user
 
     ca = db.query(CA).filter(CA.id == server.ca_id).first()
     ca.serial += 1
@@ -206,16 +254,20 @@ def bulk_download(
     used = {}
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for u in users:
-            if not u.cert_pem:
-                continue
+            srv = db.query(VPNServer).filter(VPNServer.id == u.server_id).first()
             try:
-                ovpn = _build_user_ovpn(db, u)
+                if srv and srv.kind == "wireguard":
+                    content = _build_wg_conf(db, u, srv); ext = "conf"
+                else:
+                    if not u.cert_pem:
+                        continue
+                    content = _build_user_ovpn(db, u); ext = "ovpn"
             except Exception:
                 continue
             name = u.username
             used[name] = used.get(name, 0) + 1
-            fname = f"{name}.ovpn" if used[name] == 1 else f"{name}_{used[name]}.ovpn"
-            zf.writestr(fname, ovpn)
+            fname = f"{name}.{ext}" if used[name] == 1 else f"{name}_{used[name]}.{ext}"
+            zf.writestr(fname, content)
     buf.seek(0)
 
     return StreamingResponse(
@@ -269,7 +321,7 @@ def update_user(
             user.cert_status = CertStatus.active if value else CertStatus.revoked
     db.commit()
     if crl_dirty:
-        rebuild_crl(db, user.ca_id)
+        _apply_user_change(db, user)
     db.refresh(user)
     return user
 
@@ -280,6 +332,28 @@ def get_user(user_id: int, db: Session = Depends(get_db), _: AdminUser = Depends
     if not user:
         raise HTTPException(404, "Пользователь не найден")
     return user
+
+
+def _build_wg_conf(db: Session, user: VPNUser, server) -> str:
+    from services import wireguard
+    settings = db.query(Settings).filter(Settings.id == 1).first()
+    if not settings or not settings.isp1_host:
+        raise HTTPException(400, "Не настроены хосты провайдеров в настройках")
+    # AllowedIPs: push_routes если заданы, иначе сеть сервера
+    routes = [r.strip() for r in (server.push_routes or "").splitlines() if r.strip()]
+    if not routes:
+        import ipaddress
+        routes = [str(ipaddress.ip_network(f"{server.network}/{server.netmask}", strict=False))]
+    allowed = ", ".join(routes)
+    return wireguard.build_client_conf(
+        client_priv=user.wg_private_key,
+        client_addr=user.wg_address,
+        server_pub=server.wg_public_key,
+        endpoint_host=settings.isp1_host,
+        endpoint_port=server.port,
+        dns=server.dns_servers,
+        allowed_ips=allowed,
+    )
 
 
 def _build_user_ovpn(db: Session, user: VPNUser) -> str:
@@ -318,19 +392,25 @@ def download_profile(
     db: Session = Depends(get_db),
     _: AdminUser = Depends(get_current_user),
 ):
-    """Скачать .ovpn файл для клиента."""
+    """Скачать профиль клиента (.ovpn или .conf для WireGuard)."""
     user = db.query(VPNUser).filter(VPNUser.id == user_id).first()
     if not user:
         raise HTTPException(404, "Пользователь не найден")
+
+    server = db.query(VPNServer).filter(VPNServer.id == user.server_id).first()
+    if server and server.kind == "wireguard":
+        conf = _build_wg_conf(db, user, server)
+        return Response(
+            content=conf, media_type="text/plain",
+            headers={"Content-Disposition": f'attachment; filename="{user.username}.conf"'},
+        )
+
     if not user.cert_pem:
         raise HTTPException(400, "Сертификат не найден")
-
     ovpn = _build_user_ovpn(db, user)
-    filename = f"{user.username}.ovpn"
     return Response(
-        content=ovpn,
-        media_type="application/x-openvpn-profile",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        content=ovpn, media_type="application/x-openvpn-profile",
+        headers={"Content-Disposition": f'attachment; filename="{user.username}.ovpn"'},
     )
 
 
@@ -383,7 +463,7 @@ def enable_user(user_id: int, db: Session = Depends(get_db), admin: AdminUser = 
     user.cert_status = CertStatus.active
     user.revoked_at = None
     db.commit()
-    rebuild_crl(db, user.ca_id)
+    _apply_user_change(db, user)
     audit.log(db, admin.username, "user.enable", user.username)
     db.refresh(user)
     return user
@@ -399,8 +479,8 @@ def disable_user(user_id: int, db: Session = Depends(get_db), admin: AdminUser =
     user.cert_status = CertStatus.revoked
     user.revoked_at = datetime.utcnow()
     db.commit()
-    rebuild_crl(db, user.ca_id)
-    ovpn_mgmt.kill_client(user.server_id, user.username)  # разрыв сейчас
+    _apply_user_change(db, user)
+    ovpn_mgmt.kill_client(user.server_id, user.username)  # разрыв сейчас (OpenVPN)
     audit.log(db, admin.username, "user.disable", user.username)
     db.refresh(user)
     return user
@@ -427,7 +507,7 @@ def archive_user(user_id: int, db: Session = Depends(get_db), admin: AdminUser =
         raise HTTPException(404, "Пользователь не найден")
     user.archived = True
     db.commit()
-    rebuild_crl(db, user.ca_id)
+    _apply_user_change(db, user)
     ovpn_mgmt.kill_client(user.server_id, user.username)
     audit.log(db, admin.username, "user.archive", user.username)
     db.refresh(user)
@@ -442,7 +522,7 @@ def unarchive_user(user_id: int, db: Session = Depends(get_db), admin: AdminUser
         raise HTTPException(404, "Пользователь не найден")
     user.archived = False
     db.commit()
-    rebuild_crl(db, user.ca_id)
+    _apply_user_change(db, user)
     audit.log(db, admin.username, "user.unarchive", user.username)
     db.refresh(user)
     return user
@@ -554,17 +634,23 @@ def delete_user(user_id: int, db: Session = Depends(get_db), admin: AdminUser = 
         raise HTTPException(404, "Пользователь не найден")
     ca_id = user.ca_id
     uname = user.username
-    # Серийник навсегда в CRL чтобы удалённый сертификат не работал
+    srv_id = user.server_id
+    server = db.query(VPNServer).filter(VPNServer.id == srv_id).first()
+
+    # OpenVPN: серийник навсегда в CRL
     if user.cert_serial:
         already = db.query(RevokedSerial).filter(
             RevokedSerial.ca_id == ca_id, RevokedSerial.serial == user.cert_serial
         ).first()
         if not already:
             db.add(RevokedSerial(ca_id=ca_id, serial=user.cert_serial))
-    srv_id = user.server_id
+
     db.delete(user)
     db.commit()
-    rebuild_crl(db, ca_id)
-    ovpn_mgmt.kill_client(srv_id, uname)  # разрыв активной сессии
+
+    if server and server.kind == "wireguard":
+        _wg_resync(db, server)              # убираем пир — клиент отваливается
+    else:
+        rebuild_crl(db, ca_id)
+        ovpn_mgmt.kill_client(srv_id, uname)
     audit.log(db, admin.username, "user.delete", uname)
-    rebuild_crl(db, ca_id)

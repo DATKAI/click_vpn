@@ -78,6 +78,12 @@ def _migrate_db():
         ("vpn_users", "last_connected_at", "DATETIME"),
         ("vpn_servers", "obfuscation",   "BOOLEAN DEFAULT 0"),
         ("vpn_servers", "tls_crypt_key", "TEXT"),
+        ("vpn_servers", "kind",          "VARCHAR(16) DEFAULT 'openvpn'"),
+        ("vpn_servers", "wg_private_key","TEXT"),
+        ("vpn_servers", "wg_public_key", "TEXT"),
+        ("vpn_users",   "wg_private_key","TEXT"),
+        ("vpn_users",   "wg_public_key", "TEXT"),
+        ("vpn_users",   "wg_address",    "VARCHAR(64)"),
     ]
     with engine.connect() as conn:
         for table, column, col_type in migrations:

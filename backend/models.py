@@ -105,7 +105,12 @@ class VPNServer(Base):
 
     id = Column(Integer, primary_key=True)
     name = Column(String(128), nullable=False)
-    ca_id = Column(Integer, ForeignKey("ca.id"), nullable=False)
+    kind = Column(String(16), default="openvpn")   # openvpn | wireguard
+    ca_id = Column(Integer, ForeignKey("ca.id"), nullable=True)  # WG не нужен CA
+
+    # WireGuard серверные ключи
+    wg_private_key = Column(Text, nullable=True)
+    wg_public_key = Column(Text, nullable=True)
 
     network = Column(String(64), default="10.8.0.0")
     netmask = Column(String(64), default="255.255.255.0")
@@ -145,6 +150,11 @@ class VPNUser(Base):
     cert_status = Column(Enum(CertStatus), default=CertStatus.active)
     cert_expires_at = Column(DateTime, nullable=True)
     cert_password = Column(String(256), nullable=True)  # пароль приватного ключа
+
+    # WireGuard
+    wg_private_key = Column(Text, nullable=True)
+    wg_public_key = Column(Text, nullable=True)
+    wg_address = Column(String(64), nullable=True)
 
     is_active = Column(Boolean, default=True)     # доступ включён/выключен
     archived = Column(Boolean, default=False)     # в архиве (скрыт)

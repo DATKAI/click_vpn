@@ -84,7 +84,8 @@ class CAOut(BaseModel):
 
 class ServerCreate(BaseModel):
     name: str
-    ca_id: int
+    kind: str = "openvpn"            # openvpn | wireguard
+    ca_id: Optional[int] = None      # обязателен только для openvpn
     network: str = "10.8.0.0"
     netmask: str = "255.255.255.0"
     port: int = 1194
@@ -102,7 +103,8 @@ class ServerUpdate(BaseModel):
 class ServerOut(BaseModel):
     id: int
     name: str
-    ca_id: int
+    kind: str = "openvpn"
+    ca_id: Optional[int] = None
     network: str
     netmask: str
     port: int

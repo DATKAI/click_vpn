@@ -37,6 +37,7 @@ info "Установка зависимостей..."
 apt-get install -y -qq \
   python3 python3-venv python3-pip \
   openvpn \
+  wireguard-tools \
   git curl openssl \
   iptables iproute2
 

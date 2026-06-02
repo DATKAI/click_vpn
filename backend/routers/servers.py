@@ -64,6 +64,32 @@ def create_server(
     db: Session = Depends(get_db),
     _: AdminUser = Depends(get_current_user),
 ):
+    # ── WireGuard ──────────────────────────────────────────────────────────
+    if data.kind == "wireguard":
+        from services import wireguard
+        try:
+            priv, pub = wireguard.gen_keypair()
+        except Exception as e:
+            raise HTTPException(500, f"WireGuard не установлен или ошибка ключей: {e}")
+        server = VPNServer(
+            name=data.name, kind="wireguard", ca_id=None,
+            network=data.network, netmask=data.netmask,
+            port=(data.port if data.port not in (1194,) else 51820),
+            protocol="udp",
+            dns_servers=data.dns_servers, push_routes=data.push_routes,
+            wg_private_key=priv, wg_public_key=pub,
+        )
+        db.add(server)
+        db.commit()
+        db.refresh(server)
+        # пустой конфиг (без пиров) + unit
+        wireguard.write_and_sync(server, [])
+        server.config_path = wireguard._conf_path(server.id)
+        db.commit()
+        db.refresh(server)
+        return _server_out(server, db)
+
+    # ── OpenVPN ────────────────────────────────────────────────────────────
     ca = db.query(CA).filter(CA.id == data.ca_id).first()
     if not ca:
         raise HTTPException(404, "CA не найден")
@@ -136,12 +162,16 @@ def create_server(
 def _server_out(s: VPNServer, db: Session, running: bool = None) -> dict:
     from schemas import ServerOut as SO
     if running is None:
-        running = ovpn_manager.is_running(s.id, DATA_DIR)
+        if s.kind == "wireguard":
+            from services import wireguard
+            running = wireguard.is_running(s.id)
+        else:
+            running = ovpn_manager.is_running(s.id, DATA_DIR)
     user_count = db.query(VPNUser).filter(
         VPNUser.server_id == s.id, VPNUser.archived == False
     ).count()
     return SO(
-        id=s.id, name=s.name, ca_id=s.ca_id,
+        id=s.id, name=s.name, kind=s.kind or "openvpn", ca_id=s.ca_id,
         network=s.network, netmask=s.netmask,
         port=s.port, protocol=s.protocol,
         dns_servers=s.dns_servers, push_routes=s.push_routes,
@@ -183,14 +213,6 @@ def update_server(
 @router.get("/servers")
 def list_servers(db: Session = Depends(get_db), _: AdminUser = Depends(get_current_user)):
     servers = db.query(VPNServer).all()
-    result = []
-    for s in servers:
-        running = ovpn_manager.is_running(s.id, DATA_DIR)
-        if running:
-            s.status = ServerStatus.running
-        else:
-            s.status = ServerStatus.stopped
-    db.commit()
     return [_server_out(s, db) for s in servers]
 
 
@@ -199,21 +221,24 @@ def start_server(server_id: int, db: Session = Depends(get_db), _: AdminUser = D
     server = db.query(VPNServer).filter(VPNServer.id == server_id).first()
     if not server:
         raise HTTPException(404, "Сервер не найден")
+
+    if server.kind == "wireguard":
+        from services import wireguard
+        ok, msg = wireguard.start(server_id)
+        if not ok:
+            raise HTTPException(500, f"Не удалось запустить WireGuard: {msg}")
+        return {"status": "started"}
+
     if not server.config_path or not os.path.exists(server.config_path):
         raise HTTPException(400, "Конфиг не найден")
-
-    # Актуализируем CRL перед стартом (включит все отозванные серийники)
     from services.crl import rebuild_crl
     rebuild_crl(db, server.ca_id)
-
-    # Запускаем (юнит с NAT/forward создаётся внутри start_server)
     ok = ovpn_manager.start_server(
         server_id, server.config_path, DATA_DIR,
         network=server.network, netmask=server.netmask
     )
     if not ok:
-        raise HTTPException(500, "Не удалось запустить OpenVPN. Проверьте: journalctl -u click-vpn-server-" + str(server_id))
-
+        raise HTTPException(500, "Не удалось запустить OpenVPN. journalctl -u click-vpn-server-" + str(server_id))
     server.status = ServerStatus.running
     db.commit()
     return {"status": "started"}
@@ -225,8 +250,12 @@ def stop_server(server_id: int, db: Session = Depends(get_db), _: AdminUser = De
     if not server:
         raise HTTPException(404, "Сервер не найден")
 
-    ovpn_manager.stop_server(server_id, DATA_DIR,
-                              network=server.network, netmask=server.netmask)
+    if server.kind == "wireguard":
+        from services import wireguard
+        wireguard.stop(server_id)
+    else:
+        ovpn_manager.stop_server(server_id, DATA_DIR,
+                                 network=server.network, netmask=server.netmask)
     server.status = ServerStatus.stopped
     db.commit()
     return {"status": "stopped"}
@@ -237,6 +266,17 @@ def delete_server(server_id: int, db: Session = Depends(get_db), _: AdminUser = 
     server = db.query(VPNServer).filter(VPNServer.id == server_id).first()
     if not server:
         raise HTTPException(404, "Сервер не найден")
+
+    # WireGuard — отдельный путь: снимаем интерфейс/юнит, удаляем клиентов без CRL
+    if server.kind == "wireguard":
+        from services import wireguard
+        wireguard.remove(server_id)
+        db.query(VPNUser).filter(VPNUser.server_id == server_id).delete()
+        server.organizations = []
+        db.flush()
+        db.delete(server)
+        db.commit()
+        return
 
     # Останавливаем процесс и снимаем юнит
     ovpn_manager.remove_unit(server_id, DATA_DIR,

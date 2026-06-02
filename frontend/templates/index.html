@@ -442,6 +442,7 @@
             <div style="flex:1;min-width:0">
               <div style="font-weight:700;font-size:15px;display:flex;align-items:center;gap:8px">
                 <span x-text="s.name"></span>
+                <span :style="s.kind==='wireguard' ? 'background:#dcfce7;color:#15803d' : 'background:#dbeafe;color:#1d4ed8'" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:50px" x-text="s.kind==='wireguard'?'WireGuard':'OpenVPN'"></span>
                 <span x-show="s.obfuscation" style="background:#ede9fe;color:#6d28d9;font-size:10px;font-weight:700;padding:2px 8px;border-radius:50px">🛡 ОБФУСКАЦИЯ</span>
               </div>
               <div style="color:#94a3b8;font-size:12px;margin-top:2px" x-text="s.network + '/' + s.netmask + ' · ' + s.port + '/' + s.protocol.toUpperCase() + ' · клиентов: ' + (s.user_count||0) + ' · орг.: ' + (s.org_ids?.length||0)"></div>
@@ -1108,11 +1109,25 @@
   <div class="modal fade-in">
     <h3 style="font-size:18px;font-weight:700;margin:0 0 20px">Новый сервер</h3>
     <div style="display:flex;flex-direction:column;gap:14px">
+      <!-- Тип сервера -->
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Тип VPN</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <label style="display:flex;align-items:center;gap:8px;padding:12px;border:1.5px solid #e2e8f0;border-radius:10px;cursor:pointer" :style="serverForm.kind==='openvpn'?'border-color:#6366f1;background:#fafaff':''">
+            <input type="radio" value="openvpn" x-model="serverForm.kind" @change="if(serverForm.port==51820)serverForm.port=1194" style="accent-color:#4f46e5"/>
+            <div><div style="font-weight:600;font-size:14px">OpenVPN</div><div style="font-size:11px;color:#94a3b8">сертификаты, обфускация</div></div>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;padding:12px;border:1.5px solid #e2e8f0;border-radius:10px;cursor:pointer" :style="serverForm.kind==='wireguard'?'border-color:#6366f1;background:#fafaff':''">
+            <input type="radio" value="wireguard" x-model="serverForm.kind" @change="serverForm.port=51820; serverForm.network='10.9.0.0'" style="accent-color:#4f46e5"/>
+            <div><div style="font-weight:600;font-size:14px">WireGuard</div><div style="font-size:11px;color:#94a3b8">быстрый, лёгкий</div></div>
+          </label>
+        </div>
+      </div>
       <div>
         <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Название</label>
         <input x-model="serverForm.name" class="input" placeholder="Главный офис"/>
       </div>
-      <div>
+      <div x-show="serverForm.kind==='openvpn'">
         <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">CA</label>
         <select x-model="serverForm.ca_id" class="input">
           <option value="">— выберите CA —</option>
@@ -1134,9 +1149,9 @@
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div>
           <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Порт</label>
-          <input x-model="serverForm.port" type="number" class="input" placeholder="1194"/>
+          <input x-model="serverForm.port" type="number" class="input" :placeholder="serverForm.kind==='wireguard'?'51820':'1194'"/>
         </div>
-        <div>
+        <div x-show="serverForm.kind==='openvpn'">
           <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Протокол</label>
           <select x-model="serverForm.protocol" class="input"><option value="udp">UDP</option><option value="tcp">TCP</option></select>
         </div>
@@ -1150,8 +1165,8 @@
         <textarea x-model="serverForm.push_routes" class="input" placeholder="192.168.1.0/24&#10;10.0.0.0/8"></textarea>
       </div>
 
-      <!-- Обфускация -->
-      <div style="border:1.5px solid #e2e8f0;border-radius:12px;padding:14px">
+      <!-- Обфускация (только OpenVPN) -->
+      <div x-show="serverForm.kind==='openvpn'" style="border:1.5px solid #e2e8f0;border-radius:12px;padding:14px">
         <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
           <input type="checkbox" x-model="serverForm.obfuscation" @change="if(serverForm.obfuscation){serverForm.protocol='tcp'; if(serverForm.port==1194)serverForm.port=443}" style="width:16px;height:16px;accent-color:#4f46e5"/>
           <div>
@@ -1661,7 +1676,7 @@ function app() {
     serverCreating: false,
     serverCreateTimer: 0,
     _timerInterval: null,
-    serverForm: { name:'', ca_id:'', network:'10.8.0.0', netmask:'255.255.255.0', port:1194, protocol:'udp', dns_servers:'8.8.8.8,8.8.4.4', push_routes:'', obfuscation:false },
+    serverForm: { name:'', kind:'openvpn', ca_id:'', network:'10.8.0.0', netmask:'255.255.255.0', port:1194, protocol:'udp', dns_servers:'8.8.8.8,8.8.4.4', push_routes:'', obfuscation:false },
     userForm: { username:'', full_name:'', email:'', server_id:'', org_id:'', valid_days:365, password:'', notes:'' },
     showPassword: false,
     caForm: { common_name:'', country:'RU', org:'', valid_days:3650 },
@@ -2048,19 +2063,20 @@ function app() {
 
     async createServer() {
       this.formError = '';
-      if (!this.serverForm.ca_id) { this.formError = 'Выберите CA'; return; }
+      if (this.serverForm.kind === 'openvpn' && !this.serverForm.ca_id) { this.formError = 'Выберите CA'; return; }
       this.serverCreating = true;
       this.serverCreateTimer = 0;
       this._timerInterval = setInterval(() => this.serverCreateTimer++, 1000);
       try {
-        await this.api('POST', '/servers', {
+        const payload = {
           ...this.serverForm,
-          ca_id: +this.serverForm.ca_id,
-          port: +this.serverForm.port
-        });
+          port: +this.serverForm.port,
+        };
+        payload.ca_id = this.serverForm.kind === 'openvpn' ? +this.serverForm.ca_id : null;
+        await this.api('POST', '/servers', payload);
         await this.loadServers();
         this.showCreateServer = false;
-        this.serverForm = { name:'', ca_id:'', network:'10.8.0.0', netmask:'255.255.255.0', port:1194, protocol:'udp', dns_servers:'8.8.8.8,8.8.4.4', push_routes:'', obfuscation:false };
+        this.serverForm = { name:'', kind:'openvpn', ca_id:'', network:'10.8.0.0', netmask:'255.255.255.0', port:1194, protocol:'udp', dns_servers:'8.8.8.8,8.8.4.4', push_routes:'', obfuscation:false };
       } catch(e) {
         this.formError = e.message;
       } finally {
@@ -2316,11 +2332,15 @@ function app() {
           alert('Ошибка: ' + (err.detail || 'Не удалось скачать'));
           return;
         }
+        // расширение по типу сервера клиента
+        const u = this.users.find(x => x.id === userId);
+        const srv = u ? this.servers.find(s => s.id === u.server_id) : null;
+        const ext = (srv && srv.kind === 'wireguard') ? 'conf' : 'ovpn';
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${username}.ovpn`;
+        a.download = `${username}.${ext}`;
         a.click();
         URL.revokeObjectURL(url);
       } catch(e) {
