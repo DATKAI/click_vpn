@@ -435,7 +435,7 @@
             </div>
             <div style="flex:1;min-width:0">
               <div style="font-weight:700;font-size:15px" x-text="s.name"></div>
-              <div style="color:#94a3b8;font-size:12px;margin-top:2px" x-text="s.network + '/' + s.netmask + ' · ' + s.port + '/' + s.protocol.toUpperCase()"></div>
+              <div style="color:#94a3b8;font-size:12px;margin-top:2px" x-text="s.network + '/' + s.netmask + ' · ' + s.port + '/' + s.protocol.toUpperCase() + ' · клиентов: ' + (s.user_count||0) + ' · орг.: ' + (s.org_ids?.length||0)"></div>
             </div>
             <span :class="s.status==='running'?'badge badge-green':'badge badge-gray'">
               <span class="badge-dot"></span>
@@ -2234,9 +2234,20 @@ function app() {
     },
 
     async deleteServer(id) {
-      if (!confirm('Удалить сервер? Все пользователи потеряют доступ.')) return;
-      try { await this.api('DELETE', '/servers/'+id); await this.loadServers(); }
-      catch(e) { alert(e.message); }
+      const s = this.servers.find(x => x.id === id);
+      const orgN = s?.org_ids?.length || 0;
+      const userN = s?.user_count || 0;
+      let msg = 'Удалить сервер "' + (s?.name || '') + '"?';
+      if (orgN || userN) {
+        msg += '\n\nК серверу привязано:';
+        if (orgN) msg += '\n• организаций: ' + orgN;
+        if (userN) msg += '\n• клиентов: ' + userN;
+        msg += '\n\nВсе клиенты будут УДАЛЕНЫ, их сертификаты отозваны. Привязки организаций снимутся.';
+      }
+      msg += '\n\nДействие необратимо.';
+      if (!confirm(msg)) return;
+      try { await this.api('DELETE', '/servers/'+id); await this.loadServers(); await this.loadOrgs(); }
+      catch(e) { alert('Ошибка: ' + e.message); }
     },
 
     async createUser() {

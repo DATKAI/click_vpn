@@ -110,6 +110,7 @@ class ServerOut(BaseModel):
     push_routes: str
     status: str
     org_ids: List[int] = []
+    user_count: int = 0
     created_at: datetime
     class Config:
         from_attributes = True

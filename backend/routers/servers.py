@@ -132,6 +132,9 @@ def _server_out(s: VPNServer, db: Session, running: bool = None) -> dict:
     from schemas import ServerOut as SO
     if running is None:
         running = ovpn_manager.is_running(s.id, DATA_DIR)
+    user_count = db.query(VPNUser).filter(
+        VPNUser.server_id == s.id, VPNUser.archived == False
+    ).count()
     return SO(
         id=s.id, name=s.name, ca_id=s.ca_id,
         network=s.network, netmask=s.netmask,
@@ -139,6 +142,7 @@ def _server_out(s: VPNServer, db: Session, running: bool = None) -> dict:
         dns_servers=s.dns_servers, push_routes=s.push_routes,
         status="running" if running else "stopped",
         org_ids=[o.id for o in s.organizations],
+        user_count=user_count,
         created_at=s.created_at,
     )
 
