@@ -329,7 +329,7 @@
             <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
             Импорт CSV
           </button>
-          <button class="btn btn-primary" @click="showCreateUser=true">
+          <button class="btn btn-primary" @click="availableServers=[]; showCreateUser=true">
             <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
             Новый клиент
           </button>
@@ -989,7 +989,7 @@ petrov,Петров Пётр,petrov@co.ru,ЗПК,730,secret</code>
       </div>
 
       <!-- Сервер — только если у организации несколько серверов -->
-      <div x-show="availableServers.length > 1">
+      <div x-show="userForm.org_id && availableServers.length > 1">
         <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Сервер <span style="color:#94a3b8;font-weight:400">(у организации несколько)</span></label>
         <select x-model="userForm.server_id" class="input">
           <option value="">— выберите сервер —</option>
@@ -1000,9 +1000,15 @@ petrov,Петров Пётр,petrov@co.ru,ЗПК,730,secret</code>
       </div>
 
       <!-- Автосервер — если один -->
-      <div x-show="availableServers.length === 1" style="padding:10px 14px;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:10px;display:flex;align-items:center;gap:8px">
+      <div x-show="userForm.org_id && availableServers.length === 1" style="padding:10px 14px;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:10px;display:flex;align-items:center;gap:8px">
         <svg width="16" height="16" fill="none" stroke="#16a34a" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M12 5l7 7-7 7"/></svg>
         <span style="font-size:13px;color:#166534">Сервер: <strong x-text="availableServers[0]?.name"></strong></span>
+      </div>
+
+      <!-- Организация без серверов -->
+      <div x-show="userForm.org_id && availableServers.length === 0" style="padding:10px 14px;background:#fffbeb;border:1.5px solid #fde68a;border-radius:10px;display:flex;align-items:center;gap:8px">
+        <svg width="16" height="16" fill="none" stroke="#d97706" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+        <span style="font-size:13px;color:#92400e">У организации нет серверов. Привяжите её к серверу.</span>
       </div>
       <div>
         <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Срок действия (дней)</label>
@@ -1739,9 +1745,9 @@ function app() {
 
     filterServersByOrg() {
       const orgId = +this.userForm.org_id;
-      if (!orgId) { this.availableServers = this.servers; return; }
+      if (!orgId) { this.availableServers = []; this.userForm.server_id = ''; return; }
       const org = this.orgs.find(o => o.id === orgId);
-      this.availableServers = org ? this.servers.filter(s => org.server_ids.includes(s.id)) : this.servers;
+      this.availableServers = org ? this.servers.filter(s => org.server_ids.includes(s.id)) : [];
       // Сбросить выбранный сервер если он не в организации
       if (this.userForm.server_id && !this.availableServers.find(s => s.id === +this.userForm.server_id)) {
         this.userForm.server_id = '';
@@ -1909,7 +1915,7 @@ function app() {
         this.showCreateUser = false;
         this.showPassword = false;
         this.userForm = { username:'', full_name:'', email:'', server_id:'', org_id:'', valid_days:365, password:'' };
-        this.availableServers = this.servers;
+        this.availableServers = [];
         // Автоскачивание .ovpn
         await this.downloadOvpn(u.id, u.username);
       } catch(e) { this.formError = e.message; }
