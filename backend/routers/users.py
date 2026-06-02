@@ -22,25 +22,7 @@ DATA_DIR = os.getenv("DATA_DIR", "./data")
 router = APIRouter(prefix="/api/users", tags=["users"])
 
 
-def rebuild_crl(db: Session, ca_id: int):
-    """Пересобирает CRL: блокирует выключенных, архивных и удалённых клиентов."""
-    ca = db.query(CA).filter(CA.id == ca_id).first()
-    if not ca:
-        return
-    serials = set()
-    # Выключенные или архивные активные пользователи
-    for u in db.query(VPNUser).filter(VPNUser.ca_id == ca_id, VPNUser.cert_serial.isnot(None)).all():
-        if not u.is_active or u.archived:
-            serials.add(u.cert_serial)
-    # Удалённые (постоянно отозванные)
-    for r in db.query(RevokedSerial).filter(RevokedSerial.ca_id == ca_id).all():
-        serials.add(r.serial)
-
-    crl_pem = pki.build_crl(ca.cert_pem, ca.key_pem, list(serials))
-    crl_path = os.path.join(DATA_DIR, "pki", f"crl_{ca_id}.pem")
-    os.makedirs(os.path.dirname(crl_path), exist_ok=True)
-    with open(crl_path, "w") as f:
-        f.write(crl_pem)
+from services.crl import rebuild_crl  # единая пересборка CRL
 
 
 @router.post("", response_model=UserOut)

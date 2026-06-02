@@ -91,12 +91,11 @@ def create_server(
     db.commit()
     db.refresh(server)
 
-    # CRL (пустой изначально)
+    # CRL — ВАЖНО: включаем все ранее отозванные/удалённые серийники этого CA,
+    # иначе старые сертификаты снова заработают на пересозданном сервере
+    from services.crl import rebuild_crl
     crl_path = os.path.join(DATA_DIR, "pki", f"crl_{ca.id}.pem")
-    os.makedirs(os.path.dirname(crl_path), exist_ok=True)
-    crl_pem = pki.build_crl(ca.cert_pem, ca.key_pem, [])
-    with open(crl_path, "w") as f:
-        f.write(crl_pem)
+    rebuild_crl(db, ca.id)
 
     # DH параметры (2048 бит, генерируется ~5-10 сек)
     dh_pem = pki.generate_dh_params(2048)
@@ -196,6 +195,10 @@ def start_server(server_id: int, db: Session = Depends(get_db), _: AdminUser = D
     if not server.config_path or not os.path.exists(server.config_path):
         raise HTTPException(400, "Конфиг не найден")
 
+    # Актуализируем CRL перед стартом (включит все отозванные серийники)
+    from services.crl import rebuild_crl
+    rebuild_crl(db, server.ca_id)
+
     # Запускаем (юнит с NAT/forward создаётся внутри start_server)
     ok = ovpn_manager.start_server(
         server_id, server.config_path, DATA_DIR,
@@ -248,5 +251,10 @@ def delete_server(server_id: int, db: Session = Depends(get_db), _: AdminUser = 
     server.organizations = []
     db.flush()
 
+    ca_id = server.ca_id
     db.delete(server)
     db.commit()
+
+    # Пересобираем CRL чтобы отозванные серийники попали в него
+    from services.crl import rebuild_crl
+    rebuild_crl(db, ca_id)
