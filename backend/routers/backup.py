@@ -62,3 +62,19 @@ async def restore_backup(
     except Exception as e:
         raise HTTPException(400, f"Ошибка восстановления: {e}")
     return {"status": "restored", "note": "Перезапустите сервис: systemctl restart click-vpn"}
+
+
+@router.post("/restore/{name}")
+def restore_from_server(name: str, _: AdminUser = Depends(get_current_user)):
+    """Восстановить из копии, лежащей на сервере."""
+    if "/" in name or "\\" in name or not name.endswith(".tar.gz"):
+        raise HTTPException(400, "Некорректное имя")
+    path = os.path.join(backup_svc.BACKUP_DIR, name)
+    if not os.path.exists(path):
+        raise HTTPException(404, "Файл не найден")
+    try:
+        with open(path, "rb") as f:
+            backup_svc.restore_from_bytes(f.read())
+    except Exception as e:
+        raise HTTPException(400, f"Ошибка восстановления: {e}")
+    return {"status": "restored", "note": "Перезапустите сервис: systemctl restart click-vpn"}

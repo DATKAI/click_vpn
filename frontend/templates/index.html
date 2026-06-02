@@ -901,7 +901,8 @@
                   <div style="font-size:13px;font-weight:600;font-family:monospace" x-text="b.name"></div>
                   <div style="font-size:11px;color:#94a3b8" x-text="formatDateTime(b.created) + ' · ' + fmtBytes(b.size)"></div>
                 </div>
-                <a :href="'/api/backup/file/' + b.name + '?token=' + token" @click.prevent="downloadBackupFile(b.name)" class="btn btn-gray btn-sm">Скачать</a>
+                <button @click="downloadBackupFile(b.name)" class="btn btn-gray btn-sm">Скачать</button>
+                <button @click="restoreFromServer(b.name)" class="btn btn-sm" style="background:#fff7ed;color:#c2410c;border:1.5px solid #fed7aa">Восстановить</button>
                 <button @click="deleteBackup(b.name)" class="btn btn-danger btn-sm">Удалить</button>
               </div>
             </template>
@@ -2280,6 +2281,16 @@ function app() {
       if (!confirm('Удалить копию ' + name + '?')) return;
       try { await this.api('DELETE', '/backup/file/' + name); await this.loadBackups(); }
       catch(e) { alert(e.message); }
+    },
+
+    async restoreFromServer(name) {
+      if (!confirm('Восстановить из ' + name + '?\nТекущие данные будут перезаписаны.')) return;
+      this.backupMsg = '';
+      try {
+        await this.api('POST', '/backup/restore/' + name);
+        this.backupOk = true;
+        this.backupMsg = '✅ Восстановлено из ' + name + '. Перезапустите сервис: systemctl restart click-vpn';
+      } catch(e) { this.backupOk = false; this.backupMsg = '❌ ' + e.message; }
     },
 
     async restoreBackup(ev) {
