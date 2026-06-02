@@ -91,6 +91,7 @@ class ServerCreate(BaseModel):
     protocol: str = "udp"
     dns_servers: str = "8.8.8.8,8.8.4.4"
     push_routes: str = ""
+    obfuscation: bool = False
 
 class ServerUpdate(BaseModel):
     name: Optional[str] = None
@@ -111,6 +112,7 @@ class ServerOut(BaseModel):
     status: str
     org_ids: List[int] = []
     user_count: int = 0
+    obfuscation: bool = False
     created_at: datetime
     class Config:
         from_attributes = True

@@ -114,6 +114,9 @@ class VPNServer(Base):
     dns_servers = Column(String(256), default="8.8.8.8,8.8.4.4")
     push_routes = Column(Text, default="")
 
+    obfuscation = Column(Boolean, default=False)   # TCP/443 + tls-crypt (обход DPI)
+    tls_crypt_key = Column(Text, nullable=True)    # статический ключ tls-crypt
+
     status = Column(Enum(ServerStatus), default=ServerStatus.stopped)
     config_path = Column(String(512), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

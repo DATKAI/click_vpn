@@ -165,6 +165,17 @@ def create_client_cert(
     return cert_to_pem(cert), key_to_pem(key, password=password), expires_at
 
 
+def generate_tls_crypt_key() -> str:
+    """Генерирует статический ключ OpenVPN (формат tls-crypt/tls-auth), 2048 бит."""
+    import binascii
+    data = os.urandom(256)
+    hexstr = binascii.hexlify(data).decode()
+    lines = [hexstr[i:i + 32] for i in range(0, len(hexstr), 32)]
+    body = "\n".join(lines)
+    return ("-----BEGIN OpenVPN Static key V1-----\n"
+            + body + "\n-----END OpenVPN Static key V1-----\n")
+
+
 def generate_dh_params(key_size: int = 2048) -> str:
     """Генерирует DH параметры для OpenVPN сервера."""
     parameters = dh.generate_parameters(

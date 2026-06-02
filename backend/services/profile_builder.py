@@ -8,6 +8,7 @@ def build_ovpn_profile(
     isps: list[dict],   # [{"host": ..., "port": ..., "label": ...}, ...]
     protocol: str = "udp",
     tls_auth_key: str | None = None,
+    tls_crypt_key: str | None = None,
 ) -> str:
     # Фильтруем только заполненные провайдеры
     active_isps = [i for i in isps if i.get("host")]
@@ -57,7 +58,14 @@ def build_ovpn_profile(
         "</key>",
     ]
 
-    if tls_auth_key:
+    if tls_crypt_key:
+        lines += [
+            "",
+            "<tls-crypt>",
+            tls_crypt_key.strip(),
+            "</tls-crypt>",
+        ]
+    elif tls_auth_key:
         lines += [
             "",
             "key-direction 1",
@@ -84,6 +92,7 @@ def build_server_config(
     crl_path: str,
     data_dir: str,
     tls_auth_key: str | None = None,
+    tls_crypt_key: str | None = None,
 ) -> str:
     dns_list = [d.strip() for d in dns_servers.split(",") if d.strip()]
     dns_lines = "\n".join(f'push "dhcp-option DNS {d}"' for d in dns_list)
@@ -143,7 +152,13 @@ crl-verify {crl_path}
 </dh>
 """
 
-    if tls_auth_key:
+    if tls_crypt_key:
+        config += f"""
+<tls-crypt>
+{tls_crypt_key.strip()}
+</tls-crypt>
+"""
+    elif tls_auth_key:
         config += f"""
 key-direction 0
 <tls-auth>

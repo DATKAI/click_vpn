@@ -76,6 +76,8 @@ def _migrate_db():
         ("settings",  "backup_keep",    "INTEGER DEFAULT 7"),
         ("vpn_users", "notes",          "TEXT"),
         ("vpn_users", "last_connected_at", "DATETIME"),
+        ("vpn_servers", "obfuscation",   "BOOLEAN DEFAULT 0"),
+        ("vpn_servers", "tls_crypt_key", "TEXT"),
     ]
     with engine.connect() as conn:
         for table, column, col_type in migrations:

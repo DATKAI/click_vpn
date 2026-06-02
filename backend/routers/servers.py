@@ -77,15 +77,20 @@ def create_server(
         common_name=f"server-{data.name}",
     )
 
+    # Обфускация: TCP + tls-crypt ключ
+    tls_crypt_key = pki.generate_tls_crypt_key() if data.obfuscation else None
+
     server = VPNServer(
         name=data.name,
         ca_id=data.ca_id,
         network=data.network,
         netmask=data.netmask,
         port=data.port,
-        protocol=data.protocol,
+        protocol=("tcp" if data.obfuscation else data.protocol),
         dns_servers=data.dns_servers,
         push_routes=data.push_routes,
+        obfuscation=data.obfuscation,
+        tls_crypt_key=tls_crypt_key,
     )
     db.add(server)
     db.commit()
@@ -115,6 +120,7 @@ def create_server(
         push_routes=server.push_routes,
         crl_path=crl_path,
         data_dir=DATA_DIR,
+        tls_crypt_key=server.tls_crypt_key,
     )
     config_path = os.path.join(DATA_DIR, "openvpn", f"server_{server.id}.conf")
     os.makedirs(os.path.dirname(config_path), exist_ok=True)
@@ -142,6 +148,7 @@ def _server_out(s: VPNServer, db: Session, running: bool = None) -> dict:
         status="running" if running else "stopped",
         org_ids=[o.id for o in s.organizations],
         user_count=user_count,
+        obfuscation=bool(s.obfuscation),
         created_at=s.created_at,
     )
 

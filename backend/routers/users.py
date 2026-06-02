@@ -307,6 +307,7 @@ def _build_user_ovpn(db: Session, user: VPNUser) -> str:
         client_key_pem=user.key_pem,
         isps=isps,
         protocol=server.protocol,
+        tls_crypt_key=server.tls_crypt_key,
     )
 
 
