@@ -175,6 +175,7 @@ class UserOut(BaseModel):
     is_active: bool
     archived: bool = False
     notes: Optional[str] = None
+    last_connected_at: Optional[datetime] = None
     created_at: datetime
     class Config:
         from_attributes = True

@@ -148,6 +148,7 @@ class VPNUser(Base):
     notes = Column(Text, nullable=True)           # комментарий админа
     created_at = Column(DateTime, default=datetime.utcnow)
     revoked_at = Column(DateTime, nullable=True)
+    last_connected_at = Column(DateTime, nullable=True)  # последнее подключение
 
     ca = relationship("CA", back_populates="users")
     server = relationship("VPNServer", back_populates="users")

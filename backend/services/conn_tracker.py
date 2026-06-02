@@ -75,16 +75,20 @@ def _poll_once(SessionLocal, VPNServer, VPNUser, ConnectionLog):
                         VPNUser.server_id == s.id,
                         VPNUser.username == c["common_name"],
                     ).first()
+                    now = datetime.utcnow()
                     row = ConnectionLog(
                         user_id=user.id if user else None,
                         common_name=c["common_name"],
                         server_id=s.id,
                         real_address=c["real_address"],
                         virtual_address=c["virtual_address"],
-                        connected_at=datetime.utcnow(),
+                        connected_at=now,
                         bytes_received=rx, bytes_sent=tx,
                     )
-                    db.add(row); db.commit()
+                    db.add(row)
+                    if user:
+                        user.last_connected_at = now
+                    db.commit()
                     _open_sessions[key] = row.id
                 else:
                     row = db.query(ConnectionLog).filter(ConnectionLog.id == _open_sessions[key]).first()
@@ -144,16 +148,19 @@ def start_tracker(SessionLocal, VPNServer, VPNUser, ConnectionLog, TrafficSample
     _stop = False
 
     def loop():
-        # при старте закрываем «висящие» сессии прошлого запуска
+        # при старте «усыновляем» открытые сессии прошлого запуска,
+        # чтобы рестарт панели не создавал ложный обрыв+переподключение в истории
         db = SessionLocal()
         try:
             for row in db.query(ConnectionLog).filter(ConnectionLog.disconnected_at.is_(None)).all():
-                row.disconnected_at = datetime.utcnow()
-            db.commit()
+                key = (row.server_id, row.common_name, row.real_address)
+                _open_sessions[key] = row.id
+                _last_bytes[key] = (row.bytes_received or 0, row.bytes_sent or 0)
         except Exception:
             db.rollback()
         finally:
             db.close()
+        # реально отвалившиеся закроются на первом же опросе (их не будет в seen)
 
         ticks = 0
         while not _stop:

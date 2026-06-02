@@ -535,6 +535,7 @@
             <th>Организация</th>
             <th>Сервер</th>
             <th>Статус</th>
+            <th>Последний вход</th>
             <th>Истекает</th>
             <th style="padding-right:20px">Действия</th>
           </tr></thead>
@@ -563,6 +564,7 @@
                     <span x-text="u.is_active ? 'Включён' : 'Выключен'"></span>
                   </span>
                 </td>
+                <td style="color:#94a3b8;font-size:12px;white-space:nowrap" x-text="u.last_connected_at ? formatDateTime(u.last_connected_at) : 'не заходил'"></td>
                 <td style="color:#94a3b8;font-size:12px" x-text="u.cert_expires_at ? formatDate(u.cert_expires_at) : '—'"></td>
                 <td style="padding-right:20px">
                   <div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -608,7 +610,7 @@
               </tr>
             </template>
             <tr x-show="filteredUsers.length===0">
-              <td colspan="7" style="text-align:center;padding:40px;color:#94a3b8">Клиентов нет</td>
+              <td colspan="8" style="text-align:center;padding:40px;color:#94a3b8">Клиентов нет</td>
             </tr>
           </tbody>
         </table>
