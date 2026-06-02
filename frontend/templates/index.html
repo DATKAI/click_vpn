@@ -71,6 +71,7 @@
     /* Layout */
     html, body { height: 100%; margin: 0; }
     #app { display: flex !important; width: 100vw; height: 100vh; overflow: hidden; }
+    #login { display: flex !important; min-height: 100vh; align-items: center; justify-content: center; }
 
     /* Scrollbar */
     ::-webkit-scrollbar{width:6px}
@@ -87,7 +88,7 @@
 <body class="bg-slate-50 text-slate-900" style="margin:0;padding:0;overflow:hidden;height:100vh">
 
 <!-- Login -->
-<div x-show="!token" x-cloak style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1e1b4b 0%,#312e81 50%,#1e1b4b 100%)">
+<div id="login" x-show="!token" x-cloak style="background:linear-gradient(135deg,#1e1b4b 0%,#312e81 50%,#1e1b4b 100%)">
   <div style="background:#fff;border-radius:24px;padding:40px;width:100%;max-width:380px;box-shadow:0 25px 60px rgba(0,0,0,.3)">
     <div style="text-align:center;margin-bottom:28px">
       <div style="width:56px;height:56px;background:linear-gradient(135deg,#6366f1,#4f46e5);border-radius:16px;display:inline-flex;align-items:center;justify-content:center;margin-bottom:16px;box-shadow:0 8px 20px rgba(99,102,241,.4)">
