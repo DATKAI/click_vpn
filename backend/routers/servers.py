@@ -223,7 +223,26 @@ def delete_server(server_id: int, db: Session = Depends(get_db), _: AdminUser = 
     server = db.query(VPNServer).filter(VPNServer.id == server_id).first()
     if not server:
         raise HTTPException(404, "Сервер не найден")
+
+    # Останавливаем процесс и снимаем юнит
     ovpn_manager.remove_unit(server_id, DATA_DIR,
-                              network=server.network, netmask=server.netmask)
+                             network=server.network, netmask=server.netmask)
+
+    # Удаляем клиентов сервера (их сертификаты теряют смысл)
+    from models import RevokedSerial
+    users = db.query(VPNUser).filter(VPNUser.server_id == server_id).all()
+    for u in users:
+        if u.cert_serial:
+            exists = db.query(RevokedSerial).filter(
+                RevokedSerial.ca_id == u.ca_id, RevokedSerial.serial == u.cert_serial
+            ).first()
+            if not exists:
+                db.add(RevokedSerial(ca_id=u.ca_id, serial=u.cert_serial))
+        db.delete(u)
+
+    # Снимаем привязки к организациям (M2M)
+    server.organizations = []
+    db.flush()
+
     db.delete(server)
     db.commit()
