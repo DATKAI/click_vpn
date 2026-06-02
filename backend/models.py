@@ -118,6 +118,7 @@ class VPNUser(Base):
 
     id = Column(Integer, primary_key=True)
     username = Column(String(128), nullable=False)
+    full_name = Column(String(256), nullable=True)   # ФИО
     email = Column(String(256), nullable=True)
     ca_id = Column(Integer, ForeignKey("ca.id"), nullable=False)
     server_id = Column(Integer, ForeignKey("vpn_servers.id"), nullable=False)

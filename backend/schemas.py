@@ -127,6 +127,7 @@ class OrgOut(BaseModel):
 
 class UserCreate(BaseModel):
     username: str
+    full_name: Optional[str] = None
     email: Optional[str] = None
     org_id: int                          # обязательно — сервер берётся из организации
     server_id: Optional[int] = None      # если у орг несколько серверов — указать явно
@@ -134,6 +135,7 @@ class UserCreate(BaseModel):
     password: Optional[str] = None
 
 class UserUpdate(BaseModel):
+    full_name: Optional[str] = None
     email: Optional[str] = None
     is_active: Optional[bool] = None
     org_id: Optional[int] = None
@@ -144,6 +146,7 @@ class UserChangePassword(BaseModel):
 class UserOut(BaseModel):
     id: int
     username: str
+    full_name: Optional[str]
     email: Optional[str]
     server_id: int
     org_id: Optional[int]

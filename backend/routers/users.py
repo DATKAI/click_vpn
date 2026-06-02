@@ -83,9 +83,10 @@ def create_user(
 
     user = VPNUser(
         username=data.username,
+        full_name=data.full_name,
         email=data.email,
         ca_id=ca.id,
-        server_id=data.server_id,
+        server_id=server.id,
         org_id=data.org_id,
         cert_pem=cert_pem,
         key_pem=key_pem,

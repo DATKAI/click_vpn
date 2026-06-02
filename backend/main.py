@@ -38,6 +38,7 @@ def _migrate_db():
         ("vpn_users", "org_id",         "INTEGER REFERENCES organizations(id)"),
         ("vpn_users", "cert_password",  "VARCHAR(256)"),
         ("vpn_users", "archived",       "BOOLEAN DEFAULT 0"),
+        ("vpn_users", "full_name",      "VARCHAR(256)"),
     ]
     with engine.connect() as conn:
         for table, column, col_type in migrations:

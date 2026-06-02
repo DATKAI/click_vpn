@@ -369,8 +369,12 @@
             <template x-for="u in filteredUsers" :key="u.id">
               <tr>
                 <td style="padding-left:20px">
-                  <div style="font-weight:600" x-text="u.username"></div>
-                  <div style="color:#94a3b8;font-size:12px" x-text="u.email || ''"></div>
+                  <div style="font-weight:600" x-text="u.full_name || u.username"></div>
+                  <div style="color:#94a3b8;font-size:12px">
+                    <span x-text="u.full_name ? u.username : ''"></span>
+                    <span x-show="u.full_name && u.email"> · </span>
+                    <span x-text="u.email || ''"></span>
+                  </div>
                 </td>
                 <td style="font-size:13px;color:#475569" x-text="orgName(u.org_id)"></td>
                 <td style="font-size:13px" x-text="serverName(u.server_id)"></td>
@@ -783,7 +787,11 @@
     <h3 style="font-size:18px;font-weight:700;margin:0 0 20px">Новый клиент</h3>
     <div style="display:flex;flex-direction:column;gap:14px">
       <div>
-        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Имя пользователя</label>
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">ФИО</label>
+        <input x-model="userForm.full_name" class="input" placeholder="Иванов Иван Иванович"/>
+      </div>
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Логин (имя пользователя)</label>
         <input x-model="userForm.username" class="input" placeholder="ivanov"/>
         <p style="color:#94a3b8;font-size:12px;margin-top:4px">Используется как CN сертификата. Только латиница, без пробелов.</p>
       </div>
@@ -990,6 +998,10 @@
     <p style="color:#94a3b8;font-size:13px;margin:0 0 20px" x-text="editUserForm.username"></p>
     <div style="display:flex;flex-direction:column;gap:14px">
       <div>
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">ФИО</label>
+        <input x-model="editUserForm.full_name" class="input" placeholder="Иванов Иван Иванович"/>
+      </div>
+      <div>
         <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Email</label>
         <input x-model="editUserForm.email" type="email" class="input" placeholder="user@company.ru"/>
       </div>
@@ -1075,7 +1087,7 @@ function app() {
     serverCreateTimer: 0,
     _timerInterval: null,
     serverForm: { name:'', ca_id:'', network:'10.8.0.0', netmask:'255.255.255.0', port:1194, protocol:'udp', dns_servers:'8.8.8.8,8.8.4.4', push_routes:'' },
-    userForm: { username:'', email:'', server_id:'', org_id:'', valid_days:365, password:'' },
+    userForm: { username:'', full_name:'', email:'', server_id:'', org_id:'', valid_days:365, password:'' },
     showPassword: false,
     caForm: { common_name:'', country:'RU', org:'', valid_days:3650 },
     userFilter: { server_id:'', org_id:'', search:'', sort:'created', archived:false },
@@ -1242,7 +1254,7 @@ function app() {
     filterUsers() {
       const q = (this.userFilter.search || '').toLowerCase();
       this.filteredUsers = q
-        ? this.users.filter(u => u.username.toLowerCase().includes(q) || (u.email||'').toLowerCase().includes(q))
+        ? this.users.filter(u => u.username.toLowerCase().includes(q) || (u.full_name||'').toLowerCase().includes(q) || (u.email||'').toLowerCase().includes(q))
         : [...this.users];
     },
 
@@ -1462,7 +1474,7 @@ function app() {
 
     openEditUser(u) {
       this.editUserForm = {
-        id: u.id, username: u.username,
+        id: u.id, username: u.username, full_name: u.full_name || '',
         email: u.email || '', is_active: u.is_active,
         org_id: u.org_id || '', cert_password: u.cert_password, new_password: '',
       };
@@ -1475,6 +1487,7 @@ function app() {
       this.formError = '';
       try {
         await this.api('PUT', '/users/' + this.editUserForm.id, {
+          full_name: this.editUserForm.full_name || null,
           email: this.editUserForm.email || null,
           is_active: this.editUserForm.is_active,
           org_id: this.editUserForm.org_id ? +this.editUserForm.org_id : null,
@@ -1505,6 +1518,7 @@ function app() {
       try {
         const payload = {
           username: this.userForm.username,
+          full_name: this.userForm.full_name || null,
           email: this.userForm.email || null,
           org_id: +this.userForm.org_id,
           valid_days: +this.userForm.valid_days,
@@ -1517,7 +1531,7 @@ function app() {
         await this.loadUsers();
         this.showCreateUser = false;
         this.showPassword = false;
-        this.userForm = { username:'', email:'', server_id:'', org_id:'', valid_days:365, password:'' };
+        this.userForm = { username:'', full_name:'', email:'', server_id:'', org_id:'', valid_days:365, password:'' };
         this.availableServers = this.servers;
         // Автоскачивание .ovpn
         await this.downloadOvpn(u.id, u.username);
