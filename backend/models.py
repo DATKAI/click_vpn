@@ -180,6 +180,18 @@ class ConnectionLog(Base):
     bytes_sent = Column(Integer, default=0)
 
 
+class TrafficSample(Base):
+    """Временной ряд трафика: дельты за интервал (для графиков)."""
+    __tablename__ = "traffic_samples"
+
+    id = Column(Integer, primary_key=True)
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+    server_id = Column(Integer, nullable=True)   # None = глобально
+    rx = Column(Integer, default=0)              # принято байт за интервал
+    tx = Column(Integer, default=0)              # отдано байт за интервал
+    online = Column(Integer, default=0)          # пик онлайн за интервал
+
+
 class AuditLog(Base):
     """Журнал действий администраторов."""
     __tablename__ = "audit_logs"

@@ -11,7 +11,7 @@ from fastapi.responses import HTMLResponse
 from database import engine, SessionLocal, Base
 from models import AdminUser, Settings
 from auth import hash_password
-from routers import auth, settings, servers, users, status, organizations, logs, system, audit, backup
+from routers import auth, settings, servers, users, status, organizations, logs, system, audit, backup, stats
 
 DATA_DIR = os.getenv("DATA_DIR", "./data")
 os.makedirs(os.path.join(DATA_DIR, "pki"), exist_ok=True)
@@ -29,10 +29,10 @@ async def lifespan(app: FastAPI):
 
 def _start_background():
     """Запуск фоновых потоков: трекер подключений + автобэкап."""
-    from models import VPNServer, VPNUser, ConnectionLog, Settings
+    from models import VPNServer, VPNUser, ConnectionLog, TrafficSample, Settings
     from services import conn_tracker, backup as backup_svc
     try:
-        conn_tracker.start_tracker(SessionLocal, VPNServer, VPNUser, ConnectionLog)
+        conn_tracker.start_tracker(SessionLocal, VPNServer, VPNUser, ConnectionLog, TrafficSample)
     except Exception:
         pass
 
@@ -135,6 +135,7 @@ app.include_router(logs.router)
 app.include_router(system.router)
 app.include_router(audit.router)
 app.include_router(backup.router)
+app.include_router(stats.router)
 
 # Статика и шаблоны
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")

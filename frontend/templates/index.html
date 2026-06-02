@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title x-text="pageTitle">Click VPN</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <style>
     [x-cloak]{display:none!important}
@@ -59,6 +60,11 @@
     .stab:hover{color:#334155}
     .stab.active{background:#fff;color:#4f46e5;box-shadow:0 2px 6px rgba(0,0,0,.08)}
     .stab.active svg{opacity:1}
+
+    /* Pin button */
+    .pin-btn{background:#f1f5f9;border:none;border-radius:8px;width:30px;height:30px;cursor:pointer;font-size:14px;opacity:.4;filter:grayscale(1);transition:all .15s}
+    .pin-btn:hover{opacity:.8}
+    .pin-btn.pinned{opacity:1;filter:none;background:#eef2ff}
     .stat-card{background:#fff;border-radius:16px;border:1px solid #f1f5f9;box-shadow:0 1px 4px rgba(0,0,0,.06);padding:24px;text-align:center;transition:all .2s}
     .stat-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.1);transform:translateY(-2px)}
 
@@ -150,6 +156,10 @@
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1" stroke-width="2"/><rect x="14" y="3" width="7" height="7" rx="1" stroke-width="2"/><rect x="3" y="14" width="7" height="7" rx="1" stroke-width="2"/><rect x="14" y="14" width="7" height="7" rx="1" stroke-width="2"/></svg>
         Дашборд
       </button>
+      <button class="nav-item" :class="{active:page==='stats'}" @click="navigate('stats')">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+        Статистика
+      </button>
       <button class="nav-item" :class="{active:page==='servers'}" @click="navigate('servers')">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M12 5l7 7-7 7"/></svg>
         Серверы
@@ -224,6 +234,38 @@
         </div>
       </div>
 
+      <!-- Закреплённые графики -->
+      <div x-show="pinnedCharts.length > 0" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;margin-bottom:24px">
+        <div x-show="isPinned('traffic')" class="card">
+          <h3 style="font-size:14px;font-weight:700;margin:0 0 12px">Трафик по времени</h3>
+          <div style="height:200px"><canvas id="dash-traffic"></canvas></div>
+        </div>
+        <div x-show="isPinned('online')" class="card">
+          <h3 style="font-size:14px;font-weight:700;margin:0 0 12px">Онлайн по времени</h3>
+          <div style="height:200px"><canvas id="dash-online"></canvas></div>
+        </div>
+        <div x-show="isPinned('servers')" class="card">
+          <h3 style="font-size:14px;font-weight:700;margin:0 0 12px">Трафик по серверам</h3>
+          <div style="height:200px"><canvas id="dash-servers"></canvas></div>
+        </div>
+        <div x-show="isPinned('orgs')" class="card">
+          <h3 style="font-size:14px;font-weight:700;margin:0 0 12px">Трафик по организациям</h3>
+          <div style="height:200px"><canvas id="dash-orgs"></canvas></div>
+        </div>
+        <div x-show="isPinned('topclients')" class="card">
+          <h3 style="font-size:14px;font-weight:700;margin:0 0 12px">Топ клиентов</h3>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <template x-for="(c,i) in topClients.slice(0,5)" :key="c.name">
+              <div style="display:flex;align-items:center;gap:10px">
+                <span style="width:18px;color:#94a3b8;font-size:12px;font-weight:700" x-text="(i+1)"></span>
+                <span style="flex:1;font-size:13px;font-weight:600" x-text="c.name"></span>
+                <span style="font-size:12px;color:#475569" x-text="fmtBytes(c.total)"></span>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+
       <!-- Online clients -->
       <div class="card">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
@@ -265,6 +307,103 @@
             </table>
           </div>
         </template>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div x-show="page==='stats'" class="fade-in" style="padding:32px">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:24px">
+        <div>
+          <h2 style="font-size:22px;font-weight:700;color:#0f172a;margin:0">Статистика трафика</h2>
+          <p style="color:#94a3b8;font-size:13px;margin-top:4px">Аналитика по всей системе · 📌 — закрепить на дашборде</p>
+        </div>
+        <div style="display:flex;background:#f1f5f9;border-radius:50px;padding:3px">
+          <template x-for="r in ['24h','7d','30d']" :key="r">
+            <button @click="statsRange=r; loadStats()" class="btn-sm" style="border:none;border-radius:50px;cursor:pointer;font-weight:600"
+                    :style="statsRange===r ? 'background:#fff;color:#4f46e5;box-shadow:0 1px 3px rgba(0,0,0,.1)' : 'background:transparent;color:#94a3b8'"
+                    x-text="r==='24h'?'24 часа':(r==='7d'?'7 дней':'30 дней')"></button>
+          </template>
+        </div>
+      </div>
+
+      <!-- Счётчики -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:20px">
+        <div class="stat-card">
+          <div style="font-size:24px;font-weight:800;color:#4f46e5" x-text="fmtBytes(statsSummary.total_bytes)"></div>
+          <div style="color:#94a3b8;font-size:12px;margin-top:4px">Всего трафика</div>
+        </div>
+        <div class="stat-card">
+          <div style="font-size:24px;font-weight:800;color:#10b981" x-text="fmtBytes(statsSummary.today_bytes)"></div>
+          <div style="color:#94a3b8;font-size:12px;margin-top:4px">За 24 часа</div>
+        </div>
+        <div class="stat-card">
+          <div style="font-size:24px;font-weight:800;color:#f59e0b" x-text="statsSummary.online_now ?? 0"></div>
+          <div style="color:#94a3b8;font-size:12px;margin-top:4px">Онлайн сейчас</div>
+        </div>
+        <div class="stat-card">
+          <div style="font-size:24px;font-weight:800;color:#6366f1" x-text="statsSummary.sessions_today ?? 0"></div>
+          <div style="color:#94a3b8;font-size:12px;margin-top:4px">Сессий за сутки</div>
+        </div>
+        <div class="stat-card">
+          <div style="font-size:24px;font-weight:800;color:#0ea5e9" x-text="statsSummary.active_clients ?? 0"></div>
+          <div style="color:#94a3b8;font-size:12px;margin-top:4px">Активных клиентов</div>
+        </div>
+      </div>
+
+      <!-- График: трафик по времени -->
+      <div class="card" style="margin-bottom:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <h3 style="font-size:15px;font-weight:700;margin:0">Трафик по времени</h3>
+          <button @click="togglePin('traffic')" class="pin-btn" :class="{pinned: isPinned('traffic')}" title="Закрепить на дашборде">📌</button>
+        </div>
+        <div style="height:260px"><canvas id="chart-traffic"></canvas></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+        <!-- Онлайн по времени -->
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <h3 style="font-size:15px;font-weight:700;margin:0">Онлайн по времени</h3>
+            <button @click="togglePin('online')" class="pin-btn" :class="{pinned: isPinned('online')}">📌</button>
+          </div>
+          <div style="height:220px"><canvas id="chart-online"></canvas></div>
+        </div>
+        <!-- Трафик по серверам -->
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <h3 style="font-size:15px;font-weight:700;margin:0">По серверам</h3>
+            <button @click="togglePin('servers')" class="pin-btn" :class="{pinned: isPinned('servers')}">📌</button>
+          </div>
+          <div style="height:220px"><canvas id="chart-servers"></canvas></div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <!-- Топ клиентов -->
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <h3 style="font-size:15px;font-weight:700;margin:0">Топ клиентов</h3>
+            <button @click="togglePin('topclients')" class="pin-btn" :class="{pinned: isPinned('topclients')}">📌</button>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <template x-if="topClients.length===0"><p style="color:#94a3b8;font-size:13px;margin:0">Нет данных</p></template>
+            <template x-for="(c,i) in topClients" :key="c.name">
+              <div style="display:flex;align-items:center;gap:10px">
+                <span style="width:20px;color:#94a3b8;font-size:12px;font-weight:700" x-text="(i+1)"></span>
+                <span style="flex:1;font-size:13px;font-weight:600" x-text="c.name"></span>
+                <span style="font-size:12px;color:#475569" x-text="fmtBytes(c.total)"></span>
+              </div>
+            </template>
+          </div>
+        </div>
+        <!-- По организациям -->
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <h3 style="font-size:15px;font-weight:700;margin:0">По организациям</h3>
+            <button @click="togglePin('orgs')" class="pin-btn" :class="{pinned: isPinned('orgs')}">📌</button>
+          </div>
+          <div style="height:220px"><canvas id="chart-orgs"></canvas></div>
+        </div>
       </div>
     </div>
 
@@ -1435,10 +1574,19 @@ petrov,Петров Пётр,petrov@co.ru,ЗПК,730,secret</code>
 
 <script>
 function app() {
+  // Нереактивное хранилище Chart.js-инстансов (Alpine не должен их проксировать)
+  const _charts = {};
   return {
     token: localStorage.getItem('token') || '',
     page: 'dashboard',
     loading: false,
+    statsRange: '24h',
+    statsSummary: {},
+    statsTimeseries: { labels:[], rx:[], tx:[], online:[] },
+    byServer: [],
+    topClients: [],
+    byOrg: [],
+    pinnedCharts: JSON.parse(localStorage.getItem('cvpn_pinned') || '[]'),
     loginError: '',
     formError: '',
     loginForm: { username: '', password: '' },
@@ -1532,7 +1680,7 @@ function app() {
     },
 
     get pageTitle() {
-      const titles = { dashboard:'Дашборд', servers:'Серверы', users:'Клиенты', orgs:'Организации', logs:'Логи', audit:'Журнал', ca:'Сертификаты', settings:'Настройки' };
+      const titles = { dashboard:'Дашборд', stats:'Статистика', servers:'Серверы', users:'Клиенты', orgs:'Организации', logs:'Логи', audit:'Журнал', ca:'Сертификаты', settings:'Настройки' };
       return (titles[this.page] || '') + ' — Click VPN';
     },
     get totalOnline() {
@@ -1549,7 +1697,7 @@ function app() {
       // Фоново загружаем свежие данные
       this.loadVersion();
       Promise.all([this.loadSettings(), this.loadServers(), this.loadCA(), this.loadOrgs()])
-        .then(() => { this.loadDashboard(); this.loadUsers(); this.availableServers = this.servers; });
+        .then(() => { this.loadDashboard(); this.loadUsers(); this.availableServers = this.servers; if (this.pinnedCharts.length) this.loadStats(true); });
       this._startRefresh();
     },
 
@@ -1609,6 +1757,8 @@ function app() {
       if (p === 'logs') { this.loadLogs(); this.startLogsRefresh(); }
       else { this.stopLogsRefresh(); }
       if (p === 'audit') this.loadAudit();
+      if (p === 'stats') this.loadStats();
+      if (p === 'dashboard' && this.pinnedCharts.length) this.loadStats(true);
     },
 
     async api(method, path, body) {
@@ -2226,6 +2376,110 @@ function app() {
 
     serverName(id) { return this.servers.find(s => s.id === id)?.name || '—'; },
     orgName(id) { return id ? (this.orgs.find(o => o.id === id)?.name || '—') : '—'; },
+
+    // ── Статистика ──
+    async loadStats(forDashboard = false) {
+      try {
+        const r = '?range=' + this.statsRange;
+        const [summary, ts, srv, top, org] = await Promise.all([
+          this.api('GET', '/stats/summary'),
+          this.api('GET', '/stats/timeseries' + r),
+          this.api('GET', '/stats/by-server' + r),
+          this.api('GET', '/stats/top-clients' + r),
+          this.api('GET', '/stats/by-org' + r),
+        ]);
+        this.statsSummary = summary || {};
+        this.statsTimeseries = ts || { labels:[], rx:[], tx:[], online:[] };
+        this.byServer = srv || [];
+        this.topClients = top || [];
+        this.byOrg = org || [];
+        this.$nextTick(() => {
+          if (forDashboard || this.page === 'dashboard') this.renderDashCharts();
+          if (this.page === 'stats') this.renderStatsCharts();
+        });
+      } catch {}
+    },
+
+    _palette: ['#6366f1','#10b981','#f59e0b','#ef4444','#0ea5e9','#8b5cf6','#ec4899','#14b8a6'],
+
+    _lineChart(id, labels, datasets) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (_charts[id]) { _charts[id].destroy(); }
+      _charts[id] = new Chart(el, {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          interaction: { intersect:false, mode:'index' },
+          plugins: { legend: { display: datasets.length > 1, labels:{boxWidth:12,font:{size:11}} } },
+          scales: {
+            x: { grid:{display:false}, ticks:{maxTicksLimit:8,font:{size:10},color:'#94a3b8'} },
+            y: { beginAtZero:true, ticks:{font:{size:10},color:'#94a3b8',callback:(v)=>this.fmtBytes(v)} },
+          },
+        },
+      });
+    },
+
+    _barChart(id, labels, data, money=true) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (_charts[id]) { _charts[id].destroy(); }
+      _charts[id] = new Chart(el, {
+        type: 'doughnut',
+        data: { labels, datasets: [{ data, backgroundColor: this._palette, borderWidth:0 }] },
+        options: {
+          responsive:true, maintainAspectRatio:false,
+          plugins:{ legend:{position:'right',labels:{boxWidth:12,font:{size:11}}},
+            tooltip:{callbacks:{label:(c)=> c.label+': '+(money?this.fmtBytes(c.raw):c.raw)}} },
+        },
+      });
+    },
+
+    renderStatsCharts() {
+      const ts = this.statsTimeseries;
+      this._lineChart('chart-traffic', ts.labels, [
+        { label:'Принято', data: ts.rx, borderColor:'#6366f1', backgroundColor:'rgba(99,102,241,.1)', fill:true, tension:.3, pointRadius:0, borderWidth:2 },
+        { label:'Отдано', data: ts.tx, borderColor:'#10b981', backgroundColor:'rgba(16,185,129,.1)', fill:true, tension:.3, pointRadius:0, borderWidth:2 },
+      ]);
+      this._onlineChart('chart-online', ts);
+      this._barChart('chart-servers', this.byServer.map(s=>s.name), this.byServer.map(s=>s.total));
+      this._barChart('chart-orgs', this.byOrg.map(o=>o.name), this.byOrg.map(o=>o.total));
+    },
+
+    _onlineChart(id, ts) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (_charts[id]) { _charts[id].destroy(); }
+      _charts[id] = new Chart(el, {
+        type:'line',
+        data:{ labels: ts.labels, datasets:[{ label:'Онлайн', data: ts.online, borderColor:'#f59e0b', backgroundColor:'rgba(245,158,11,.12)', fill:true, tension:.3, pointRadius:0, borderWidth:2 }] },
+        options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+          scales:{ x:{grid:{display:false},ticks:{maxTicksLimit:8,font:{size:10},color:'#94a3b8'}},
+            y:{beginAtZero:true,ticks:{stepSize:1,font:{size:10},color:'#94a3b8'}} } },
+      });
+    },
+
+    renderDashCharts() {
+      const ts = this.statsTimeseries;
+      if (this.isPinned('traffic'))
+        this._lineChart('dash-traffic', ts.labels, [
+          { label:'Принято', data: ts.rx, borderColor:'#6366f1', backgroundColor:'rgba(99,102,241,.1)', fill:true, tension:.3, pointRadius:0, borderWidth:2 },
+          { label:'Отдано', data: ts.tx, borderColor:'#10b981', backgroundColor:'rgba(16,185,129,.1)', fill:true, tension:.3, pointRadius:0, borderWidth:2 },
+        ]);
+      if (this.isPinned('online')) this._onlineChart('dash-online', ts);
+      if (this.isPinned('servers')) this._barChart('dash-servers', this.byServer.map(s=>s.name), this.byServer.map(s=>s.total));
+      if (this.isPinned('orgs')) this._barChart('dash-orgs', this.byOrg.map(o=>o.name), this.byOrg.map(o=>o.total));
+    },
+
+    isPinned(id) { return this.pinnedCharts.includes(id); },
+
+    togglePin(id) {
+      const i = this.pinnedCharts.indexOf(id);
+      if (i >= 0) this.pinnedCharts.splice(i, 1);
+      else this.pinnedCharts.push(id);
+      localStorage.setItem('cvpn_pinned', JSON.stringify(this.pinnedCharts));
+    },
 
     formatDate(dt) {
       if (!dt) return '—';
