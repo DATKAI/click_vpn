@@ -313,10 +313,26 @@
           <h2 style="font-size:22px;font-weight:700;color:#0f172a;margin:0">Клиенты</h2>
           <p style="color:#94a3b8;font-size:13px;margin-top:4px" x-text="'Всего: ' + users.length"></p>
         </div>
-        <button class="btn btn-primary" @click="showCreateUser=true">
-          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
-          Новый клиент
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-gray" @click="openImport()">
+            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+            Импорт CSV
+          </button>
+          <button class="btn btn-primary" @click="showCreateUser=true">
+            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+            Новый клиент
+          </button>
+        </div>
+      </div>
+
+      <!-- Панель массовых действий -->
+      <div x-show="selectedUsers.length > 0" class="fade-in" style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:#eef2ff;border:1.5px solid #c7d2fe;border-radius:12px;margin-bottom:16px">
+        <span style="font-weight:600;color:#4338ca;font-size:14px" x-text="'Выбрано: ' + selectedUsers.length"></span>
+        <button class="btn btn-primary btn-sm" @click="bulkDownload()">
+          <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+          Скачать .ovpn (ZIP)
         </button>
+        <button class="btn btn-gray btn-sm" @click="selectedUsers=[]">Снять выделение</button>
       </div>
 
       <!-- Filters -->
@@ -358,7 +374,10 @@
       <div class="card" style="padding:0;overflow:hidden">
         <table class="table">
           <thead><tr>
-            <th style="padding-left:20px">Клиент</th>
+            <th style="padding-left:20px;width:36px">
+              <input type="checkbox" @change="toggleSelectAll($event)" :checked="allSelected" style="width:15px;height:15px;accent-color:#4f46e5;cursor:pointer"/>
+            </th>
+            <th>Клиент</th>
             <th>Организация</th>
             <th>Сервер</th>
             <th>Статус</th>
@@ -369,6 +388,9 @@
             <template x-for="u in filteredUsers" :key="u.id">
               <tr>
                 <td style="padding-left:20px">
+                  <input type="checkbox" :checked="selectedUsers.includes(u.id)" @change="toggleSelect(u.id)" style="width:15px;height:15px;accent-color:#4f46e5;cursor:pointer"/>
+                </td>
+                <td>
                   <div style="font-weight:600" x-text="u.full_name || u.username"></div>
                   <div style="color:#94a3b8;font-size:12px">
                     <span x-text="u.full_name ? u.username : ''"></span>
@@ -429,7 +451,7 @@
               </tr>
             </template>
             <tr x-show="filteredUsers.length===0">
-              <td colspan="6" style="text-align:center;padding:40px;color:#94a3b8">Клиентов нет</td>
+              <td colspan="7" style="text-align:center;padding:40px;color:#94a3b8">Клиентов нет</td>
             </tr>
           </tbody>
         </table>
@@ -837,6 +859,61 @@
   </div>
 </div>
 
+<!-- Modal: Import CSV -->
+<div x-show="showImport" x-cloak class="modal-backdrop" @click.self="showImport=false">
+  <div class="modal fade-in" style="max-width:560px">
+    <h3 style="font-size:18px;font-weight:700;margin:0 0 6px">Импорт клиентов из CSV</h3>
+    <p style="color:#94a3b8;font-size:13px;margin:0 0 16px">Массовое создание клиентов из файла</p>
+
+    <div style="background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:12px;padding:14px;margin-bottom:16px">
+      <div style="font-size:13px;font-weight:600;color:#475569;margin-bottom:8px">Формат CSV (первая строка — заголовки):</div>
+      <code style="display:block;background:#0f172a;color:#94a3b8;padding:10px;border-radius:8px;font-size:12px;overflow-x:auto;white-space:pre">username,full_name,email,org,valid_days,password
+ivanov,Иванов Иван,ivanov@co.ru,ЗПК,365,
+petrov,Петров Пётр,petrov@co.ru,ЗПК,730,secret</code>
+      <ul style="margin:10px 0 0;padding-left:18px;color:#94a3b8;font-size:12px;line-height:1.7">
+        <li><strong>username</strong> — логин (латиница), обязательно</li>
+        <li><strong>org</strong> — точное название организации, обязательно</li>
+        <li>full_name, email, password — необязательно</li>
+        <li>valid_days — срок (по умолчанию 365)</li>
+        <li>Сервер берётся из организации автоматически</li>
+      </ul>
+      <button class="btn btn-gray btn-sm" style="margin-top:10px" @click="downloadCsvTemplate()">
+        <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+        Скачать шаблон
+      </button>
+    </div>
+
+    <div style="margin-bottom:14px">
+      <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Файл CSV</label>
+      <input type="file" accept=".csv" @change="importFile=$event.target.files[0]" class="input" style="padding:8px"/>
+    </div>
+
+    <!-- Результат -->
+    <div x-show="importResult" style="margin-bottom:14px">
+      <div class="alert alert-success" style="margin-bottom:8px" x-show="importResult && importResult.created>0">
+        ✅ Создано клиентов: <strong x-text="importResult?.created"></strong>
+      </div>
+      <div x-show="importResult && importResult.errors && importResult.errors.length" class="alert alert-error" style="flex-direction:column;align-items:stretch">
+        <div style="font-weight:600;margin-bottom:6px" x-text="'Ошибок: ' + (importResult?.errors.length||0)"></div>
+        <div style="max-height:140px;overflow-y:auto;font-size:12px">
+          <template x-for="e in (importResult?.errors||[])" :key="e.row">
+            <div x-text="'Строка ' + e.row + ' (' + e.username + '): ' + e.error"></div>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <div x-show="importError" x-text="importError" class="alert alert-error" style="margin-bottom:14px"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-gray" @click="showImport=false" :disabled="importRunning">Закрыть</button>
+      <button class="btn btn-primary" @click="doImport()" :disabled="importRunning || !importFile">
+        <svg x-show="importRunning" class="spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-dasharray="31" stroke-dashoffset="10"/></svg>
+        <span x-text="importRunning ? 'Импорт...' : 'Импортировать'"></span>
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal: Create User -->
 <div x-show="showCreateUser" x-cloak class="modal-backdrop" @click.self="showCreateUser=false">
   <div class="modal fade-in">
@@ -1204,6 +1281,12 @@ function app() {
     showPassword: false,
     caForm: { common_name:'', country:'RU', org:'', valid_days:3650 },
     userFilter: { server_id:'', org_id:'', search:'', sort:'created', archived:false },
+    selectedUsers: [],
+    showImport: false,
+    importFile: null,
+    importResult: null,
+    importError: '',
+    importRunning: false,
     _refreshTimer: null,
 
     // Logs state
@@ -1229,6 +1312,9 @@ function app() {
     },
     get totalOnline() {
       return this.statusList.reduce((s, srv) => s + srv.connected_clients.length, 0);
+    },
+    get allSelected() {
+      return this.filteredUsers.length > 0 && this.filteredUsers.every(u => this.selectedUsers.includes(u.id));
     },
 
     async init() {
@@ -1362,6 +1448,81 @@ function app() {
         this.filterUsers();
         this._saveCache();
       } catch {}
+    },
+
+    toggleSelect(id) {
+      const i = this.selectedUsers.indexOf(id);
+      if (i >= 0) this.selectedUsers.splice(i, 1);
+      else this.selectedUsers.push(id);
+    },
+
+    toggleSelectAll(ev) {
+      if (ev.target.checked) {
+        this.selectedUsers = this.filteredUsers.map(u => u.id);
+      } else {
+        this.selectedUsers = [];
+      }
+    },
+
+    async bulkDownload() {
+      if (!this.selectedUsers.length) return;
+      try {
+        const res = await fetch('/api/users/bulk-download', {
+          method: 'POST',
+          headers: { 'Content-Type':'application/json', 'Authorization':'Bearer ' + this.token },
+          body: JSON.stringify({ ids: this.selectedUsers }),
+        });
+        if (!res.ok) { alert('Ошибка скачивания'); return; }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'vpn_profiles.zip'; a.click();
+        URL.revokeObjectURL(url);
+      } catch(e) { alert('Ошибка: ' + e.message); }
+    },
+
+    openImport() {
+      this.importFile = null;
+      this.importResult = null;
+      this.importError = '';
+      this.showImport = true;
+    },
+
+    downloadCsvTemplate() {
+      const csv = 'username,full_name,email,org,valid_days,password\n'
+        + 'ivanov,Иванов Иван Иванович,ivanov@company.ru,' + (this.orgs[0]?.name || 'Организация') + ',365,\n';
+      const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'clients_template.csv'; a.click();
+      URL.revokeObjectURL(url);
+    },
+
+    async doImport() {
+      if (!this.importFile) return;
+      this.importRunning = true;
+      this.importError = '';
+      this.importResult = null;
+      try {
+        const fd = new FormData();
+        fd.append('file', this.importFile);
+        const res = await fetch('/api/users/import', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + this.token },
+          body: fd,
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          this.importError = err.detail || 'Ошибка импорта';
+          return;
+        }
+        this.importResult = await res.json();
+        await this.loadUsers();
+      } catch(e) {
+        this.importError = e.message;
+      } finally {
+        this.importRunning = false;
+      }
     },
 
     filterUsers() {

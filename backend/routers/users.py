@@ -1,6 +1,11 @@
 import os
+import io
+import csv
+import zipfile
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile, File
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -99,6 +104,120 @@ def create_user(
     db.commit()
     db.refresh(user)
     return user
+
+
+def _create_one(db: Session, username: str, full_name: str | None, email: str | None,
+                org: Organization, server: VPNServer, valid_days: int, password: str | None) -> VPNUser:
+    """Создаёт одного клиента (для импорта). Бросает ValueError при проблеме."""
+    exists = db.query(VPNUser).filter(
+        VPNUser.server_id == server.id,
+        VPNUser.username == username,
+        VPNUser.archived == False,
+    ).first()
+    if exists:
+        raise ValueError(f"'{username}' уже существует на сервере {server.name}")
+
+    ca = db.query(CA).filter(CA.id == server.ca_id).first()
+    ca.serial += 1
+    cert_pem, key_pem, expires_at = pki.create_client_cert(
+        ca_cert_pem=ca.cert_pem, ca_key_pem=ca.key_pem, serial=ca.serial,
+        common_name=username, valid_days=valid_days, password=password or None,
+    )
+    user = VPNUser(
+        username=username, full_name=full_name, email=email,
+        ca_id=ca.id, server_id=server.id, org_id=org.id,
+        cert_pem=cert_pem, key_pem=key_pem, cert_serial=ca.serial,
+        cert_expires_at=expires_at, cert_password=password or None,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@router.post("/import")
+async def import_users(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    _: AdminUser = Depends(get_current_user),
+):
+    """Массовый импорт клиентов из CSV.
+    Колонки: username, full_name, email, org, valid_days, password
+    """
+    content = (await file.read()).decode("utf-8-sig")
+    reader = csv.DictReader(io.StringIO(content))
+    if not reader.fieldnames or "username" not in [f.strip().lower() for f in reader.fieldnames]:
+        raise HTTPException(400, "CSV должен содержать колонку 'username'")
+
+    # нормализуем имена колонок
+    def norm(row):
+        return {(k or "").strip().lower(): (v or "").strip() for k, v in row.items()}
+
+    created, errors = [], []
+    for i, raw in enumerate(reader, start=2):  # строка 1 — заголовок
+        r = norm(raw)
+        username = r.get("username", "")
+        if not username:
+            continue
+        org_name = r.get("org", "")
+        try:
+            org = db.query(Organization).filter(Organization.name == org_name).first()
+            if not org:
+                raise ValueError(f"организация '{org_name}' не найдена")
+            if not org.servers:
+                raise ValueError(f"у организации '{org_name}' нет серверов")
+            server = org.servers[0]  # берём первый сервер организации
+            valid_days = int(r["valid_days"]) if r.get("valid_days", "").isdigit() else 365
+            u = _create_one(
+                db, username=username,
+                full_name=r.get("full_name") or None,
+                email=r.get("email") or None,
+                org=org, server=server, valid_days=valid_days,
+                password=r.get("password") or None,
+            )
+            created.append({"username": username, "id": u.id})
+        except Exception as e:
+            errors.append({"row": i, "username": username, "error": str(e)})
+
+    return {"created": len(created), "errors": errors, "created_list": created}
+
+
+class BulkIds(BaseModel):
+    ids: list[int]
+
+
+@router.post("/bulk-download")
+def bulk_download(
+    data: BulkIds,
+    db: Session = Depends(get_db),
+    _: AdminUser = Depends(get_current_user),
+):
+    """Скачать .ovpn профили нескольких клиентов одним ZIP."""
+    users = db.query(VPNUser).filter(VPNUser.id.in_(data.ids)).all()
+    if not users:
+        raise HTTPException(404, "Клиенты не найдены")
+
+    buf = io.BytesIO()
+    used = {}
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for u in users:
+            if not u.cert_pem:
+                continue
+            try:
+                ovpn = _build_user_ovpn(db, u)
+            except Exception:
+                continue
+            name = u.username
+            used[name] = used.get(name, 0) + 1
+            fname = f"{name}.ovpn" if used[name] == 1 else f"{name}_{used[name]}.ovpn"
+            zf.writestr(fname, ovpn)
+    buf.seek(0)
+
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="vpn_profiles.zip"'},
+    )
 
 
 @router.get("", response_model=UserListOut)
