@@ -159,6 +159,10 @@ def write_and_sync(server, peers: list[dict]):
 def create_unit(server_id: int, kind: str):
     path = _conf_path(server_id)
     _, quick = _engine(kind)
+    # AmneziaWG в LXC: модуля ядра нет -> userspace amneziawg-go
+    env = ""
+    if is_amnezia(kind):
+        env = "Environment=AWG_QUICK_USERSPACE_IMPLEMENTATION=amneziawg-go\n"
     unit = f"""[Unit]
 Description=Click VPN WireGuard {server_id}
 After=network-online.target
@@ -167,7 +171,7 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/bin/{quick} up {path}
+{env}ExecStart=/usr/bin/{quick} up {path}
 ExecStop=/usr/bin/{quick} down {path}
 
 [Install]
