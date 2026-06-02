@@ -48,6 +48,17 @@
 
     /* Cards */
     .card{background:#fff;border-radius:16px;border:1px solid #f1f5f9;box-shadow:0 1px 4px rgba(0,0,0,.06);padding:24px}
+
+    /* Settings tabs */
+    .settings-tabs{display:flex;gap:4px;background:#eef0f4;border-radius:14px;padding:5px;margin-bottom:22px}
+    .stab{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:7px;
+      border:none;border-radius:10px;padding:10px 8px;cursor:pointer;
+      font-size:13px;font-weight:600;color:#64748b;background:transparent;
+      transition:all .18s;white-space:nowrap}
+    .stab svg{flex-shrink:0;opacity:.7;transition:opacity .18s}
+    .stab:hover{color:#334155}
+    .stab.active{background:#fff;color:#4f46e5;box-shadow:0 2px 6px rgba(0,0,0,.08)}
+    .stab.active svg{opacity:1}
     .stat-card{background:#fff;border-radius:16px;border:1px solid #f1f5f9;box-shadow:0 1px 4px rgba(0,0,0,.06);padding:24px;text-align:center;transition:all .2s}
     .stat-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.1);transform:translateY(-2px)}
 
@@ -646,15 +657,23 @@
       </div>
 
       <!-- Вкладки -->
-      <div style="display:flex;gap:4px;background:#f1f5f9;border-radius:12px;padding:4px;margin-bottom:20px;flex-wrap:wrap">
-        <template x-for="t in settingsTabs" :key="t.id">
-          <button @click="settingsTab=t.id"
-                  style="flex:1;min-width:100px;border:none;border-radius:9px;padding:9px 12px;cursor:pointer;font-weight:600;font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px;transition:all .15s"
-                  :style="settingsTab===t.id ? 'background:#fff;color:#4f46e5;box-shadow:0 1px 3px rgba(0,0,0,.1)' : 'background:transparent;color:#64748b'">
-            <span x-html="t.icon"></span>
-            <span x-text="t.label"></span>
-          </button>
-        </template>
+      <div class="settings-tabs">
+        <button class="stab" :class="{active: settingsTab==='general'}" @click="settingsTab='general'">
+          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/></svg>
+          <span>Общее</span>
+        </button>
+        <button class="stab" :class="{active: settingsTab==='providers'}" @click="settingsTab='providers'">
+          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-18 0 9 9 0 0118 0zM3 12h18M12 3a15 15 0 010 18M12 3a15 15 0 000 18"/></svg>
+          <span>Провайдеры</span>
+        </button>
+        <button class="stab" :class="{active: settingsTab==='email'}" @click="settingsTab='email'">
+          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+          <span>Почта</span>
+        </button>
+        <button class="stab" :class="{active: settingsTab==='update'}" @click="settingsTab='update'">
+          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          <span>Обновление</span>
+        </button>
       </div>
 
       <!-- Вкладка: Общее -->
