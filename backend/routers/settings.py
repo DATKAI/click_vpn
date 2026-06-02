@@ -4,8 +4,9 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import AdminUser, Settings
-from schemas import SettingsUpdate, SettingsOut
+from schemas import SettingsUpdate, SettingsOut, TestEmailRequest
 from auth import get_current_user
+from services import mailer
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -38,3 +39,28 @@ def update_settings(
     db.commit()
     db.refresh(s)
     return s
+
+
+@router.post("/test-email")
+def test_email(
+    data: TestEmailRequest,
+    db: Session = Depends(get_db),
+    _: AdminUser = Depends(get_current_user),
+):
+    s = _get_or_create(db)
+    if not s.smtp_host or not s.smtp_from:
+        raise HTTPException(400, "Заполните SMTP хост и адрес отправителя")
+    try:
+        mailer.send_test_email(
+            smtp_host=s.smtp_host,
+            smtp_port=s.smtp_port or 587,
+            smtp_user=s.smtp_user,
+            smtp_password=s.smtp_password,
+            smtp_from=s.smtp_from,
+            smtp_tls=s.smtp_tls if s.smtp_tls is not None else True,
+            to_email=data.to_email,
+            server_name=s.server_name or "VPN",
+        )
+    except Exception as e:
+        raise HTTPException(500, f"Ошибка: {e}")
+    return {"status": "sent", "to": data.to_email}

@@ -9,6 +9,7 @@ from schemas import UserCreate, UserUpdate, UserChangePassword, UserReissue, Use
 from auth import get_current_user
 from services import pki
 from services.profile_builder import build_ovpn_profile
+from services import mailer
 
 DATA_DIR = os.getenv("DATA_DIR", "./data")
 
@@ -157,6 +158,34 @@ def get_user(user_id: int, db: Session = Depends(get_db), _: AdminUser = Depends
     return user
 
 
+def _build_user_ovpn(db: Session, user: VPNUser) -> str:
+    """Собирает .ovpn профиль для пользователя."""
+    settings = db.query(Settings).filter(Settings.id == 1).first()
+    if not settings or not settings.isp1_host:
+        raise HTTPException(400, "Не настроены хосты провайдеров в настройках")
+
+    server = db.query(VPNServer).filter(VPNServer.id == user.server_id).first()
+    ca = db.query(CA).filter(CA.id == user.ca_id).first()
+
+    isps = []
+    for n in range(1, 5):
+        host = getattr(settings, f"isp{n}_host", None)
+        if host:
+            isps.append({
+                "host": host,
+                "port": getattr(settings, f"isp{n}_port", 1194),
+                "label": getattr(settings, f"isp{n}_label", f"ISP{n}"),
+            })
+
+    return build_ovpn_profile(
+        ca_cert_pem=ca.cert_pem,
+        client_cert_pem=user.cert_pem,
+        client_key_pem=user.key_pem,
+        isps=isps,
+        protocol=server.protocol,
+    )
+
+
 @router.get("/{user_id}/profile")
 def download_profile(
     user_id: int,
@@ -170,38 +199,52 @@ def download_profile(
     if user.cert_status == CertStatus.revoked:
         raise HTTPException(400, "Сертификат отозван")
 
-    settings = db.query(Settings).filter(Settings.id == 1).first()
-    if not settings or not settings.isp1_host:
-        raise HTTPException(400, "Не настроены хосты провайдеров в настройках")
-
-    server = db.query(VPNServer).filter(VPNServer.id == user.server_id).first()
-    ca = db.query(CA).filter(CA.id == user.ca_id).first()
-
-    # Собираем все активные провайдеры
-    isps = []
-    for n in range(1, 5):
-        host = getattr(settings, f"isp{n}_host", None)
-        if host:
-            isps.append({
-                "host": host,
-                "port": getattr(settings, f"isp{n}_port", 1194),
-                "label": getattr(settings, f"isp{n}_label", f"ISP{n}"),
-            })
-
-    ovpn = build_ovpn_profile(
-        ca_cert_pem=ca.cert_pem,
-        client_cert_pem=user.cert_pem,
-        client_key_pem=user.key_pem,
-        isps=isps,
-        protocol=server.protocol,
-    )
-
+    ovpn = _build_user_ovpn(db, user)
     filename = f"{user.username}.ovpn"
     return Response(
         content=ovpn,
         media_type="application/x-openvpn-profile",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.post("/{user_id}/send-email")
+def send_profile_email(
+    user_id: int,
+    db: Session = Depends(get_db),
+    _: AdminUser = Depends(get_current_user),
+):
+    """Отправить .ovpn на email клиента."""
+    user = db.query(VPNUser).filter(VPNUser.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "Пользователь не найден")
+    if not user.email:
+        raise HTTPException(400, "У клиента не указан email")
+    if user.cert_status == CertStatus.revoked:
+        raise HTTPException(400, "Сертификат отозван")
+
+    settings = db.query(Settings).filter(Settings.id == 1).first()
+    if not settings or not settings.smtp_host or not settings.smtp_from:
+        raise HTTPException(400, "Не настроен SMTP в настройках")
+
+    ovpn = _build_user_ovpn(db, user)
+    try:
+        mailer.send_ovpn_email(
+            smtp_host=settings.smtp_host,
+            smtp_port=settings.smtp_port or 587,
+            smtp_user=settings.smtp_user,
+            smtp_password=settings.smtp_password,
+            smtp_from=settings.smtp_from,
+            smtp_tls=settings.smtp_tls if settings.smtp_tls is not None else True,
+            to_email=user.email,
+            client_name=user.full_name or user.username,
+            ovpn_content=ovpn,
+            server_name=settings.server_name or "VPN",
+        )
+    except Exception as e:
+        raise HTTPException(500, f"Ошибка отправки: {e}")
+
+    return {"status": "sent", "to": user.email}
 
 
 @router.post("/{user_id}/enable", response_model=UserOut)

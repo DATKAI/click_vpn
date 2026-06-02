@@ -48,6 +48,13 @@ class Settings(Base):
     isp4_port = Column(Integer, default=1194)
     isp4_label = Column(String(64), default="ISP4")
     server_name = Column(String(128), default="VPN Server")
+    # SMTP
+    smtp_host = Column(String(256), nullable=True)
+    smtp_port = Column(Integer, default=587)
+    smtp_user = Column(String(256), nullable=True)
+    smtp_password = Column(String(256), nullable=True)
+    smtp_from = Column(String(256), nullable=True)
+    smtp_tls = Column(Boolean, default=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 

@@ -42,12 +42,22 @@ class SettingsUpdate(BaseModel):
     isp4_port: Optional[int] = 1194
     isp4_label: Optional[str] = "ISP4"
     server_name: Optional[str] = None
+    # SMTP
+    smtp_host: Optional[str] = None
+    smtp_port: Optional[int] = 587
+    smtp_user: Optional[str] = None
+    smtp_password: Optional[str] = None
+    smtp_from: Optional[str] = None
+    smtp_tls: Optional[bool] = True
 
 class SettingsOut(SettingsUpdate):
     id: int
     updated_at: Optional[datetime] = None
     class Config:
         from_attributes = True
+
+class TestEmailRequest(BaseModel):
+    to_email: str
 
 
 # ── CA ────────────────────────────────────────────────────────────────────────

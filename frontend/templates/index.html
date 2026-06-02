@@ -394,6 +394,11 @@
                       <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
                       .ovpn
                     </button>
+                    <button x-show="u.is_active && !u.archived && u.email"
+                       @click="sendUserEmail(u.id, u.email)"
+                       class="btn btn-sm" style="background:#eff6ff;color:#2563eb;border:1.5px solid #bfdbfe" title="Отправить на email">
+                      <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                    </button>
 
                     <!-- Вкл/Выкл доступ (не в архиве) -->
                     <button x-show="!u.archived && u.is_active" @click="disableUser(u.id)" class="btn btn-sm" style="background:#fff7ed;color:#c2410c;border:1.5px solid #fed7aa" title="Выключить доступ">
@@ -667,6 +672,57 @@
           <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
           Добавить провайдера
         </button>
+      </div>
+
+      <!-- SMTP / Email -->
+      <div class="card" style="margin-bottom:16px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+          <div style="width:32px;height:32px;background:#fef3c7;border-radius:8px;display:flex;align-items:center;justify-content:center">
+            <svg width="16" height="16" fill="none" stroke="#d97706" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+          </div>
+          <div>
+            <div style="font-size:14px;font-weight:700">Отправка email (SMTP)</div>
+            <div style="font-size:12px;color:#94a3b8">Для отправки .ovpn клиентам на почту</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 100px;gap:10px;margin-bottom:10px">
+          <div>
+            <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5px">SMTP сервер</label>
+            <input x-model="settings.smtp_host" class="input" placeholder="smtp.yandex.ru"/>
+          </div>
+          <div>
+            <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5px">Порт</label>
+            <input x-model="settings.smtp_port" type="number" class="input" placeholder="587"/>
+          </div>
+        </div>
+        <div style="margin-bottom:10px">
+          <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5px">Логин</label>
+          <input x-model="settings.smtp_user" class="input" placeholder="noreply@company.ru"/>
+        </div>
+        <div style="margin-bottom:10px">
+          <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5px">Пароль</label>
+          <input x-model="settings.smtp_password" type="password" class="input" placeholder="••••••••"/>
+        </div>
+        <div style="margin-bottom:10px">
+          <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5px">Адрес отправителя (From)</label>
+          <input x-model="settings.smtp_from" class="input" placeholder="VPN <noreply@company.ru>"/>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#475569;cursor:pointer;margin-bottom:14px">
+          <input type="checkbox" x-model="settings.smtp_tls" style="width:16px;height:16px;accent-color:#4f46e5"/>
+          Использовать TLS/STARTTLS (порт 587) или SSL (порт 465)
+        </label>
+        <div style="display:flex;gap:10px;align-items:flex-end;border-top:1px solid #f1f5f9;padding-top:14px">
+          <div style="flex:1">
+            <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5px">Проверка — отправить тест на адрес</label>
+            <input x-model="testEmailAddr" type="email" class="input" placeholder="test@company.ru"/>
+          </div>
+          <button class="btn btn-gray" @click="sendTestEmail()" :disabled="testEmailRunning">
+            <svg x-show="testEmailRunning" class="spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-dasharray="31" stroke-dashoffset="10"/></svg>
+            <span x-text="testEmailRunning ? 'Отправка...' : 'Тест'"></span>
+          </button>
+        </div>
+        <div x-show="testEmailResult" x-text="testEmailResult" :class="testEmailOk ? 'alert alert-success' : 'alert alert-error'" style="margin-top:10px"></div>
+        <p style="color:#94a3b8;font-size:11px;margin-top:10px;margin-bottom:0">Не забудьте нажать «Сохранить настройки» после изменения SMTP</p>
       </div>
 
       <div x-show="settingsSaved" class="alert alert-success" style="margin-bottom:12px">Настройки сохранены</div>
@@ -1111,6 +1167,10 @@ function app() {
     settingsSaved: false,
     settingsError: '',
     sysVersion: {},
+    testEmailAddr: '',
+    testEmailRunning: false,
+    testEmailResult: '',
+    testEmailOk: false,
     updateRunning: false,
     updateOutput: '',
     updateSuccess: null,
@@ -1374,6 +1434,28 @@ function app() {
 
     removeIsp(idx) {
       this.ispList.splice(idx, 1);
+    },
+
+    async sendTestEmail() {
+      this.testEmailResult = '';
+      if (!this.testEmailAddr) { this.testEmailResult = 'Укажите адрес'; this.testEmailOk = false; return; }
+      this.testEmailRunning = true;
+      try {
+        await this.api('POST', '/settings/test-email', { to_email: this.testEmailAddr });
+        this.testEmailOk = true;
+        this.testEmailResult = '✅ Письмо отправлено на ' + this.testEmailAddr;
+      } catch(e) {
+        this.testEmailOk = false;
+        this.testEmailResult = '❌ ' + e.message;
+      } finally { this.testEmailRunning = false; }
+    },
+
+    async sendUserEmail(id, email) {
+      if (!confirm('Отправить .ovpn на ' + email + '?')) return;
+      try {
+        await this.api('POST', '/users/' + id + '/send-email');
+        alert('✅ Профиль отправлен на ' + email);
+      } catch(e) { alert('❌ ' + e.message); }
     },
 
     async saveSettings() {

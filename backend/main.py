@@ -39,6 +39,12 @@ def _migrate_db():
         ("vpn_users", "cert_password",  "VARCHAR(256)"),
         ("vpn_users", "archived",       "BOOLEAN DEFAULT 0"),
         ("vpn_users", "full_name",      "VARCHAR(256)"),
+        ("settings",  "smtp_host",      "VARCHAR(256)"),
+        ("settings",  "smtp_port",      "INTEGER DEFAULT 587"),
+        ("settings",  "smtp_user",      "VARCHAR(256)"),
+        ("settings",  "smtp_password",  "VARCHAR(256)"),
+        ("settings",  "smtp_from",      "VARCHAR(256)"),
+        ("settings",  "smtp_tls",       "BOOLEAN DEFAULT 1"),
     ]
     with engine.connect() as conn:
         for table, column, col_type in migrations:
