@@ -898,7 +898,7 @@
       <div class="card" style="margin-bottom:16px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
           <h3 style="font-size:14px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.05em;margin:0">Провайдеры</h3>
-          <span style="font-size:12px;color:#94a3b8">Все активные хосты попадут в .ovpn</span>
+          <span style="font-size:12px;color:#94a3b8">Только публичные хосты. Порт — из настроек сервера</span>
         </div>
 
         <template x-for="(isp, idx) in ispList" :key="idx">
@@ -916,15 +916,9 @@
                 <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
               </button>
             </div>
-            <div style="display:grid;grid-template-columns:1fr 90px;gap:10px;margin-bottom:10px">
-              <div>
-                <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5px">Хост / IP</label>
-                <input x-model="isp.host" class="input" :placeholder="'vpn' + (idx>0?idx+1:'') + '.company.ru'"/>
-              </div>
-              <div>
-                <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5px">Порт</label>
-                <input x-model="isp.port" type="number" class="input" placeholder="1194"/>
-              </div>
+            <div style="margin-bottom:10px">
+              <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5px">Хост / IP (публичный адрес провайдера)</label>
+              <input x-model="isp.host" class="input" :placeholder="'vpn' + (idx>0?idx+1:'') + '.company.ru или 1.2.3.4'"/>
             </div>
             <div>
               <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5px">Метка провайдера</label>

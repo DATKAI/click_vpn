@@ -291,13 +291,14 @@ def _build_user_ovpn(db: Session, user: VPNUser) -> str:
     server = db.query(VPNServer).filter(VPNServer.id == user.server_id).first()
     ca = db.query(CA).filter(CA.id == user.ca_id).first()
 
+    # Порт берём из СЕРВЕРА (провайдер = только публичный хост/IP)
     isps = []
     for n in range(1, 5):
         host = getattr(settings, f"isp{n}_host", None)
         if host:
             isps.append({
                 "host": host,
-                "port": getattr(settings, f"isp{n}_port", 1194),
+                "port": server.port,
                 "label": getattr(settings, f"isp{n}_label", f"ISP{n}"),
             })
 
