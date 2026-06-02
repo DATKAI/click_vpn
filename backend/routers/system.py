@@ -1,11 +1,15 @@
 import subprocess
 import threading
 import os
+import re
 from fastapi import APIRouter, Depends
-from fastapi.responses import JSONResponse
 
 from models import AdminUser
 from auth import get_current_user
+
+
+def _strip_ansi(text: str) -> str:
+    return re.sub(r'\x1b\[[0-9;]*m|\x1b\[[0-9;]*[a-zA-Z]', '', text)
 
 router = APIRouter(prefix="/api/system", tags=["system"])
 
@@ -26,7 +30,7 @@ def _run_update():
             cwd=INSTALL_DIR,
         )
         for line in proc.stdout:
-            _update_state["output"] += line
+            _update_state["output"] += _strip_ansi(line)
         proc.wait()
         _update_state["success"] = proc.returncode == 0
     except Exception as e:
