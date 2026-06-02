@@ -51,6 +51,21 @@ def start_update(_: AdminUser = Depends(get_current_user)):
     return {"status": "started"}
 
 
+@router.post("/restart")
+def restart_service(_: AdminUser = Depends(get_current_user)):
+    """Перезапускает сервис click-vpn (отложенно, чтобы ответ успел вернуться)."""
+    try:
+        subprocess.Popen(
+            ["bash", "-c", "sleep 1; systemctl restart click-vpn"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except Exception as e:
+        from fastapi import HTTPException
+        raise HTTPException(500, f"Не удалось перезапустить: {e}")
+    return {"status": "restarting"}
+
+
 @router.get("/update/status")
 def update_status(_: AdminUser = Depends(get_current_user)):
     return {

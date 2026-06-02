@@ -697,9 +697,16 @@
 
     <!-- Settings -->
     <div x-show="page==='settings'" class="fade-in" style="padding:32px;max-width:680px">
-      <div style="margin-bottom:20px">
-        <h2 style="font-size:22px;font-weight:700;color:#0f172a;margin:0">Настройки</h2>
-        <p style="color:#94a3b8;font-size:13px;margin-top:4px">Конфигурация сервиса</p>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:20px;flex-wrap:wrap">
+        <div>
+          <h2 style="font-size:22px;font-weight:700;color:#0f172a;margin:0">Настройки</h2>
+          <p style="color:#94a3b8;font-size:13px;margin-top:4px">Конфигурация сервиса</p>
+        </div>
+        <button class="btn btn-sm" style="background:#fff7ed;color:#c2410c;border:1.5px solid #fed7aa" @click="restartService()" :disabled="restarting">
+          <svg x-show="restarting" class="spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-dasharray="31" stroke-dashoffset="10"/></svg>
+          <svg x-show="!restarting" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          <span x-text="restarting ? 'Перезапуск...' : 'Перезапустить сервис'"></span>
+        </button>
       </div>
 
       <!-- Вкладки -->
@@ -1499,6 +1506,7 @@ function app() {
     backupBusy: false,
     backupMsg: '',
     backupOk: false,
+    restarting: false,
     showImport: false,
     importFile: null,
     importResult: null,
@@ -2281,6 +2289,26 @@ function app() {
       if (!confirm('Удалить копию ' + name + '?')) return;
       try { await this.api('DELETE', '/backup/file/' + name); await this.loadBackups(); }
       catch(e) { alert(e.message); }
+    },
+
+    async restartService() {
+      if (!confirm('Перезапустить сервис Click VPN? Панель ненадолго станет недоступна (~5–10 сек).')) return;
+      this.restarting = true;
+      try {
+        await this.api('POST', '/system/restart');
+      } catch {}
+      // Ждём пока поднимется и перезагружаем страницу
+      let tries = 0;
+      const check = async () => {
+        tries++;
+        try {
+          const r = await fetch('/api/auth/me', { headers: { 'Authorization':'Bearer '+this.token } });
+          if (r.ok || r.status === 401) { location.reload(); return; }
+        } catch {}
+        if (tries < 30) setTimeout(check, 1000);
+        else { this.restarting = false; alert('Сервис не ответил вовремя. Обновите страницу вручную.'); }
+      };
+      setTimeout(check, 3000);
     },
 
     async restoreFromServer(name) {
