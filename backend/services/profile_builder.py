@@ -124,6 +124,9 @@ persist-tun
 status {status_path} 10
 verb 3
 
+# management-интерфейс для мгновенного разрыва сессий
+management {data_dir}/openvpn/mgmt_{server_id}.sock unix
+
 crl-verify {crl_path}
 
 <ca>

@@ -292,7 +292,7 @@
             </div>
             <table class="table">
               <thead><tr>
-                <th>Клиент</th><th>Реальный IP</th><th>VPN IP</th><th>Подключён</th>
+                <th>Клиент</th><th>Реальный IP</th><th>VPN IP</th><th>Подключён</th><th></th>
               </tr></thead>
               <tbody>
                 <template x-for="c in srv.connected_clients" :key="c.common_name">
@@ -301,6 +301,12 @@
                     <td style="font-family:monospace;font-size:13px" x-text="c.real_address"></td>
                     <td style="font-family:monospace;font-size:13px" x-text="c.virtual_address"></td>
                     <td style="color:#94a3b8;font-size:12px" x-text="c.connected_since"></td>
+                    <td style="text-align:right">
+                      <button @click="disconnectClient(srv.server_id, c.common_name)" class="btn btn-danger btn-sm" title="Разорвать сессию">
+                        <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1M9 15l6-6"/></svg>
+                        Отключить
+                      </button>
+                    </td>
                   </tr>
                 </template>
               </tbody>
@@ -2174,7 +2180,7 @@ function app() {
         'login':'Вход','login.failed':'Неудачный вход',
         'user.create':'Создан клиент','user.delete':'Удалён клиент',
         'user.enable':'Включён','user.disable':'Выключен',
-        'user.archive':'В архив','user.unarchive':'Из архива','user.reissue':'Перевыпуск',
+        'user.archive':'В архив','user.unarchive':'Из архива','user.reissue':'Перевыпуск','user.kill':'Разрыв сессии',
       };
       return m[a] || a;
     },
@@ -2231,6 +2237,15 @@ function app() {
         await this.loadUsers();
         this.showEditUser = false;
       } catch(e) { this.formError = e.message; }
+    },
+
+    async disconnectClient(serverId, commonName) {
+      if (!confirm('Разорвать сессию клиента "' + commonName + '"?\nОн отключится сейчас, но сможет переподключиться (если не выключен).')) return;
+      try {
+        const r = await this.api('POST', '/users/disconnect', { server_id: serverId, common_name: commonName });
+        await this.loadDashboard();
+        alert(r?.message || 'Сессия разорвана');
+      } catch(e) { alert('Ошибка: ' + e.message); }
     },
 
     async deleteServer(id) {

@@ -16,6 +16,7 @@ from services import pki
 from services.profile_builder import build_ovpn_profile
 from services import mailer
 from services import audit
+from services import ovpn_mgmt
 
 DATA_DIR = os.getenv("DATA_DIR", "./data")
 
@@ -169,6 +170,25 @@ async def import_users(
 
 class BulkIds(BaseModel):
     ids: list[int]
+
+
+class DisconnectReq(BaseModel):
+    server_id: int
+    common_name: str
+
+
+@router.post("/disconnect")
+def disconnect_cn(
+    data: DisconnectReq,
+    db: Session = Depends(get_db),
+    admin: AdminUser = Depends(get_current_user),
+):
+    """Разорвать сессию по серверу и common name (для дашборда)."""
+    ok, msg = ovpn_mgmt.kill_client(data.server_id, data.common_name)
+    if not ok:
+        raise HTTPException(400, msg)
+    audit.log(db, admin.username, "user.kill", data.common_name)
+    return {"status": "ok", "message": msg}
 
 
 @router.post("/bulk-download")
@@ -369,7 +389,7 @@ def enable_user(user_id: int, db: Session = Depends(get_db), admin: AdminUser = 
 
 @router.post("/{user_id}/disable", response_model=UserOut)
 def disable_user(user_id: int, db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_user)):
-    """Выключить доступ клиенту (обратимо)."""
+    """Выключить доступ клиенту (обратимо) + мгновенно разорвать сессию."""
     user = db.query(VPNUser).filter(VPNUser.id == user_id).first()
     if not user:
         raise HTTPException(404, "Пользователь не найден")
@@ -378,20 +398,35 @@ def disable_user(user_id: int, db: Session = Depends(get_db), admin: AdminUser =
     user.revoked_at = datetime.utcnow()
     db.commit()
     rebuild_crl(db, user.ca_id)
+    ovpn_mgmt.kill_client(user.server_id, user.username)  # разрыв сейчас
     audit.log(db, admin.username, "user.disable", user.username)
     db.refresh(user)
     return user
 
 
+@router.post("/{user_id}/kill")
+def kill_session(user_id: int, db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_user)):
+    """Мгновенно разорвать активную сессию клиента (не меняя статус)."""
+    user = db.query(VPNUser).filter(VPNUser.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "Пользователь не найден")
+    ok, msg = ovpn_mgmt.kill_client(user.server_id, user.username)
+    if not ok:
+        raise HTTPException(400, msg)
+    audit.log(db, admin.username, "user.kill", user.username)
+    return {"status": "ok", "message": msg}
+
+
 @router.post("/{user_id}/archive", response_model=UserOut)
 def archive_user(user_id: int, db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_user)):
-    """Архивировать клиента (скрыть + заблокировать доступ)."""
+    """Архивировать клиента (скрыть + заблокировать доступ) + разорвать сессию."""
     user = db.query(VPNUser).filter(VPNUser.id == user_id).first()
     if not user:
         raise HTTPException(404, "Пользователь не найден")
     user.archived = True
     db.commit()
     rebuild_crl(db, user.ca_id)
+    ovpn_mgmt.kill_client(user.server_id, user.username)
     audit.log(db, admin.username, "user.archive", user.username)
     db.refresh(user)
     return user
@@ -457,6 +492,7 @@ def reissue_cert(
     db.commit()
 
     rebuild_crl(db, ca.id)
+    ovpn_mgmt.kill_client(user.server_id, user.username)  # старая сессия со старым сертом — разорвать
     audit.log(db, admin.username, "user.reissue", user.username)
     db.refresh(user)
     return user
@@ -523,8 +559,10 @@ def delete_user(user_id: int, db: Session = Depends(get_db), admin: AdminUser = 
         ).first()
         if not already:
             db.add(RevokedSerial(ca_id=ca_id, serial=user.cert_serial))
+    srv_id = user.server_id
     db.delete(user)
     db.commit()
     rebuild_crl(db, ca_id)
+    ovpn_mgmt.kill_client(srv_id, uname)  # разрыв активной сессии
     audit.log(db, admin.username, "user.delete", uname)
     rebuild_crl(db, ca_id)
