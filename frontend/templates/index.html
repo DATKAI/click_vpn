@@ -1032,11 +1032,59 @@
           <input x-model="editUserForm.new_password" :type="showEditPassword?'text':'password'" class="input" placeholder="Новый пароль (оставьте пустым чтобы убрать)"/>
         </div>
       </div>
+
+      <!-- Перевыпуск сертификата -->
+      <div style="border-top:1px solid #f1f5f9;padding-top:14px">
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:4px">Сертификат</label>
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:10px">
+          <svg width="16" height="16" fill="none" stroke="#64748b" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+          <span style="font-size:13px;color:#475569;flex:1">Истекает: <strong x-text="editUserForm.cert_expires_at ? formatDate(editUserForm.cert_expires_at) : '—'"></strong></span>
+          <button type="button" @click="openReissue()" class="btn btn-sm" style="background:#fff7ed;color:#c2410c;border:1.5px solid #fed7aa">
+            <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            Перевыпустить
+          </button>
+        </div>
+      </div>
     </div>
     <div x-show="formError" x-text="formError" class="alert alert-error" style="margin-top:14px"></div>
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
       <button class="btn btn-gray" @click="showEditUser=false;formError=''">Отмена</button>
       <button class="btn btn-primary" @click="saveUser()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Reissue Certificate -->
+<div x-show="showReissue" x-cloak class="modal-backdrop" @click.self="showReissue=false">
+  <div class="modal fade-in">
+    <h3 style="font-size:18px;font-weight:700;margin:0 0 4px">Перевыпустить сертификат</h3>
+    <p style="color:#94a3b8;font-size:13px;margin:0 0 16px" x-text="reissueForm.username"></p>
+
+    <div class="alert alert-warning" style="margin-bottom:16px">
+      <svg style="flex-shrink:0" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+      <span>Старый сертификат будет отозван. Клиенту нужно заново скачать <strong>.ovpn</strong> — старый перестанет работать.</span>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Срок действия (дней)</label>
+        <input x-model="reissueForm.valid_days" type="number" class="input" placeholder="365"/>
+      </div>
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Пароль сертификата (необязательно)</label>
+        <input x-model="reissueForm.password" :type="showReissuePassword?'text':'password'" class="input" placeholder="Оставьте пустым если без пароля"/>
+        <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:12px;color:#94a3b8;cursor:pointer">
+          <input type="checkbox" x-model="showReissuePassword" style="accent-color:#4f46e5"/> Показать пароль
+        </label>
+      </div>
+    </div>
+    <div x-show="reissueError" x-text="reissueError" class="alert alert-error" style="margin-top:14px"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+      <button class="btn btn-gray" @click="showReissue=false;reissueError=''" :disabled="reissueRunning">Отмена</button>
+      <button class="btn btn-primary" @click="doReissue()" :disabled="reissueRunning">
+        <svg x-show="reissueRunning" class="spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-dasharray="31" stroke-dashoffset="10"/></svg>
+        <span x-text="reissueRunning ? 'Выпуск...' : 'Перевыпустить и скачать'"></span>
+      </button>
     </div>
   </div>
 </div>
@@ -1078,6 +1126,11 @@ function app() {
     serverOrgsForm: { id:null, name:'', org_ids:[] },
     serverOrgsError: '',
     showEditPassword: false,
+    showReissue: false,
+    showReissuePassword: false,
+    reissueForm: { id:null, username:'', valid_days:365, password:'' },
+    reissueRunning: false,
+    reissueError: '',
     editServerForm: { id:null, name:'', dns_servers:'', push_routes:'', org_ids:[] },
     editUserForm: { id:null, username:'', email:'', is_active:true, org_id:'', cert_password:null, new_password:'' },
     orgForm: { id:null, name:'', description:'', server_ids:[] },
@@ -1477,10 +1530,38 @@ function app() {
         id: u.id, username: u.username, full_name: u.full_name || '',
         email: u.email || '', is_active: u.is_active,
         org_id: u.org_id || '', cert_password: u.cert_password, new_password: '',
+        cert_expires_at: u.cert_expires_at,
       };
       this.showEditPassword = false;
       this.formError = '';
       this.showEditUser = true;
+    },
+
+    openReissue() {
+      this.reissueForm = { id: this.editUserForm.id, username: this.editUserForm.username, valid_days: 365, password: '' };
+      this.reissueError = '';
+      this.showReissuePassword = false;
+      this.showReissue = true;
+    },
+
+    async doReissue() {
+      this.reissueError = '';
+      this.reissueRunning = true;
+      try {
+        const u = await this.api('POST', '/users/' + this.reissueForm.id + '/reissue', {
+          valid_days: +this.reissueForm.valid_days,
+          password: this.reissueForm.password || null,
+        });
+        await this.loadUsers();
+        this.showReissue = false;
+        this.showEditUser = false;
+        // Скачиваем новый профиль
+        await this.downloadOvpn(u.id, u.username);
+      } catch(e) {
+        this.reissueError = e.message;
+      } finally {
+        this.reissueRunning = false;
+      }
     },
 
     async saveUser() {

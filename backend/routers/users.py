@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import AdminUser, CA, VPNServer, VPNUser, Organization, RevokedSerial, CertStatus, Settings
-from schemas import UserCreate, UserUpdate, UserChangePassword, UserOut, UserListOut
+from schemas import UserCreate, UserUpdate, UserChangePassword, UserReissue, UserOut, UserListOut
 from auth import get_current_user
 from services import pki
 from services.profile_builder import build_ovpn_profile
@@ -256,6 +256,56 @@ def unarchive_user(user_id: int, db: Session = Depends(get_db), _: AdminUser = D
     user.archived = False
     db.commit()
     rebuild_crl(db, user.ca_id)
+    db.refresh(user)
+    return user
+
+
+@router.post("/{user_id}/reissue", response_model=UserOut)
+def reissue_cert(
+    user_id: int,
+    data: UserReissue,
+    db: Session = Depends(get_db),
+    _: AdminUser = Depends(get_current_user),
+):
+    """Перевыпустить сертификат: старый отзывается, выдаётся новый с новым серийником."""
+    user = db.query(VPNUser).filter(VPNUser.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "Пользователь не найден")
+
+    ca = db.query(CA).filter(CA.id == user.ca_id).first()
+    if not ca:
+        raise HTTPException(404, "CA не найден")
+
+    # Старый серийник — навсегда в отозванные
+    if user.cert_serial:
+        already = db.query(RevokedSerial).filter(
+            RevokedSerial.ca_id == ca.id, RevokedSerial.serial == user.cert_serial
+        ).first()
+        if not already:
+            db.add(RevokedSerial(ca_id=ca.id, serial=user.cert_serial))
+
+    # Новый сертификат
+    ca.serial += 1
+    cert_pem, key_pem, expires_at = pki.create_client_cert(
+        ca_cert_pem=ca.cert_pem,
+        ca_key_pem=ca.key_pem,
+        serial=ca.serial,
+        common_name=user.username,
+        valid_days=data.valid_days,
+        password=data.password or None,
+    )
+
+    user.cert_pem = cert_pem
+    user.key_pem = key_pem
+    user.cert_serial = ca.serial
+    user.cert_expires_at = expires_at
+    user.cert_password = data.password or None
+    user.cert_status = CertStatus.active
+    user.is_active = True
+    user.revoked_at = None
+    db.commit()
+
+    rebuild_crl(db, ca.id)
     db.refresh(user)
     return user
 

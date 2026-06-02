@@ -143,6 +143,10 @@ class UserUpdate(BaseModel):
 class UserChangePassword(BaseModel):
     new_password: Optional[str] = None  # None = убрать пароль
 
+class UserReissue(BaseModel):
+    valid_days: int = 365
+    password: Optional[str] = None  # пароль нового приватного ключа
+
 class UserOut(BaseModel):
     id: int
     username: str
