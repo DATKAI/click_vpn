@@ -143,34 +143,53 @@ def remove_unit(server_id: int, data_dir: str,
 
 
 def parse_status(status_log_path: str) -> list[dict]:
-    """Парсит status log OpenVPN для получения подключённых клиентов."""
-    clients = []
+    """Парсит status log OpenVPN (формат v1).
+
+    CLIENT LIST:  Common Name, Real Address, Bytes Received, Bytes Sent, Connected Since
+    ROUTING TABLE: Virtual Address, Common Name, Real Address, Last Ref
+    """
+    clients = {}        # common_name -> dict
     if not os.path.exists(status_log_path):
-        return clients
+        return []
     try:
         with open(status_log_path) as f:
             lines = f.readlines()
     except OSError:
-        return clients
+        return []
 
-    in_client_list = False
-    for line in lines:
-        line = line.strip()
+    section = None
+    for raw in lines:
+        line = raw.strip()
+        if not line:
+            continue
         if line.startswith("Common Name,Real Address"):
-            in_client_list = True
+            section = "clients"
             continue
-        if line.startswith("ROUTING TABLE") or line.startswith("GLOBAL STATS"):
-            in_client_list = False
+        if line.startswith("Virtual Address,"):
+            section = "routing"
             continue
-        if in_client_list and line:
-            parts = line.split(",")
-            if len(parts) >= 5:
-                clients.append({
-                    "common_name": parts[0],
-                    "real_address": parts[1],
-                    "virtual_address": parts[2],
-                    "bytes_received": int(parts[3]) if parts[3].isdigit() else 0,
-                    "bytes_sent": int(parts[4]) if parts[4].isdigit() else 0,
-                    "connected_since": parts[5] if len(parts) > 5 else "",
-                })
-    return clients
+        if line.startswith("ROUTING TABLE"):
+            section = None
+            continue
+        if line.startswith("GLOBAL STATS") or line.startswith("Updated,") or line.startswith("END"):
+            section = None
+            continue
+
+        parts = line.split(",")
+
+        if section == "clients" and len(parts) >= 5:
+            cn = parts[0]
+            clients[cn] = {
+                "common_name": cn,
+                "real_address": parts[1],
+                "virtual_address": "",
+                "bytes_received": int(parts[2]) if parts[2].isdigit() else 0,
+                "bytes_sent": int(parts[3]) if parts[3].isdigit() else 0,
+                "connected_since": parts[4],
+            }
+        elif section == "routing" and len(parts) >= 2:
+            vaddr, cn = parts[0], parts[1]
+            if cn in clients and not clients[cn]["virtual_address"]:
+                clients[cn]["virtual_address"] = vaddr
+
+    return list(clients.values())

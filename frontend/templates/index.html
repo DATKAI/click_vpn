@@ -2379,25 +2379,17 @@ function app() {
 
     // ── Статистика ──
     async loadStats(forDashboard = false) {
-      try {
-        const r = '?range=' + this.statsRange;
-        const [summary, ts, srv, top, org] = await Promise.all([
-          this.api('GET', '/stats/summary'),
-          this.api('GET', '/stats/timeseries' + r),
-          this.api('GET', '/stats/by-server' + r),
-          this.api('GET', '/stats/top-clients' + r),
-          this.api('GET', '/stats/by-org' + r),
-        ]);
-        this.statsSummary = summary || {};
-        this.statsTimeseries = ts || { labels:[], rx:[], tx:[], online:[] };
-        this.byServer = srv || [];
-        this.topClients = top || [];
-        this.byOrg = org || [];
-        this.$nextTick(() => {
-          if (forDashboard || this.page === 'dashboard') this.renderDashCharts();
-          if (this.page === 'stats') this.renderStatsCharts();
-        });
-      } catch {}
+      const r = '?range=' + this.statsRange;
+      // Каждый запрос независимо — падение одного не обнуляет остальные
+      try { this.statsSummary = await this.api('GET', '/stats/summary') || {}; } catch(e) { console.warn('summary', e); }
+      try { this.statsTimeseries = await this.api('GET', '/stats/timeseries' + r) || { labels:[], rx:[], tx:[], online:[] }; } catch(e) { console.warn('timeseries', e); }
+      try { this.byServer = await this.api('GET', '/stats/by-server' + r) || []; } catch(e) { console.warn('by-server', e); }
+      try { this.topClients = await this.api('GET', '/stats/top-clients' + r) || []; } catch(e) { console.warn('top', e); }
+      try { this.byOrg = await this.api('GET', '/stats/by-org' + r) || []; } catch(e) { console.warn('by-org', e); }
+      this.$nextTick(() => {
+        if (forDashboard || this.page === 'dashboard') this.renderDashCharts();
+        if (this.page === 'stats') this.renderStatsCharts();
+      });
     },
 
     _palette: ['#6366f1','#10b981','#f59e0b','#ef4444','#0ea5e9','#8b5cf6','#ec4899','#14b8a6'],
