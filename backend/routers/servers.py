@@ -192,8 +192,7 @@ def start_server(server_id: int, db: Session = Depends(get_db), _: AdminUser = D
     if not server.config_path or not os.path.exists(server.config_path):
         raise HTTPException(400, "Конфиг не найден")
 
-    # Создаём systemd unit и запускаем
-    ovpn_manager.create_systemd_unit(server_id, server.config_path)
+    # Запускаем (юнит с NAT/forward создаётся внутри start_server)
     ok = ovpn_manager.start_server(
         server_id, server.config_path, DATA_DIR,
         network=server.network, netmask=server.netmask

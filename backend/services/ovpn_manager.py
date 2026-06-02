@@ -13,18 +13,27 @@ def _unit_path(server_id: int) -> str:
 
 
 def _get_default_iface() -> str:
-    """Определяет основной сетевой интерфейс."""
+    """Определяет основной сетевой интерфейс (токен после 'dev')."""
     try:
         out = subprocess.check_output(
             ["ip", "route", "get", "8.8.8.8"],
             stderr=subprocess.DEVNULL, text=True
-        )
-        for part in out.split():
-            if part not in ("8.8.8.8", "via", "dev", "src", "uid") and "." not in part and part.isalpha() or "eth" in part or "ens" in part or "enp" in part:
-                return part
+        ).split()
+        if "dev" in out:
+            return out[out.index("dev") + 1]
     except Exception:
         pass
-    # Fallback
+    # Fallback: дефолтный маршрут
+    try:
+        out = subprocess.check_output(
+            ["ip", "route", "show", "default"],
+            stderr=subprocess.DEVNULL, text=True
+        ).split()
+        if "dev" in out:
+            return out[out.index("dev") + 1]
+    except Exception:
+        pass
+    # Fallback: первый не-lo/не-tun интерфейс
     try:
         out = subprocess.check_output(["ip", "-o", "link", "show", "up"], text=True, stderr=subprocess.DEVNULL)
         for line in out.splitlines():
@@ -36,32 +45,47 @@ def _get_default_iface() -> str:
     return "eth0"
 
 
-def _nat_rules(action: str, network: str, netmask: str, iface: str):
-    """Добавляет или удаляет NAT правило iptables."""
+def _cidr(network: str, netmask: str) -> str:
     try:
-        net = ipaddress.ip_network(f"{network}/{netmask}", strict=False)
-        cidr = str(net)
-        flag = "-A" if action == "add" else "-D"
-        subprocess.run(
-            ["iptables", flag, "POSTROUTING", "-t", "nat",
-             "-s", cidr, "-o", iface, "-j", "MASQUERADE"],
-            check=False, stderr=subprocess.DEVNULL
-        )
+        return str(ipaddress.ip_network(f"{network}/{netmask}", strict=False))
     except Exception:
-        pass
+        return f"{network}/24"
 
 
-def create_systemd_unit(server_id: int, config_path: str):
-    """Создаёт systemd unit файл для OpenVPN сервера."""
+def create_systemd_unit(server_id: int, config_path: str,
+                        network: str = "10.8.0.0", netmask: str = "255.255.255.0"):
+    """Создаёт systemd unit с настройкой NAT/forward (переживает ребут)."""
+    cidr = _cidr(network, netmask)
+    iface = _get_default_iface()
+    pid = f"/var/lib/click-vpn/openvpn/server_{server_id}.pid"
+
+    # Идемпотентные правила (-C проверка перед -A), удаление в ExecStopPost
+    add_nat = (f"iptables -t nat -C POSTROUTING -s {cidr} -o {iface} -j MASQUERADE 2>/dev/null || "
+               f"iptables -t nat -A POSTROUTING -s {cidr} -o {iface} -j MASQUERADE")
+    add_fwd_s = (f"iptables -C FORWARD -s {cidr} -j ACCEPT 2>/dev/null || "
+                 f"iptables -A FORWARD -s {cidr} -j ACCEPT")
+    add_fwd_d = (f"iptables -C FORWARD -d {cidr} -j ACCEPT 2>/dev/null || "
+                 f"iptables -A FORWARD -d {cidr} -j ACCEPT")
+    del_nat = f"iptables -t nat -D POSTROUTING -s {cidr} -o {iface} -j MASQUERADE 2>/dev/null || true"
+    del_fwd_s = f"iptables -D FORWARD -s {cidr} -j ACCEPT 2>/dev/null || true"
+    del_fwd_d = f"iptables -D FORWARD -d {cidr} -j ACCEPT 2>/dev/null || true"
+
     unit = f"""[Unit]
 Description=Click VPN Server {server_id}
-After=network.target click-vpn.service
-PartOf=click-vpn.service
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=forking
-PIDFile=/var/lib/click-vpn/openvpn/server_{server_id}.pid
-ExecStart=/usr/sbin/openvpn --config {config_path} --writepid /var/lib/click-vpn/openvpn/server_{server_id}.pid --daemon click-vpn-{server_id}
+PIDFile={pid}
+ExecStartPre=/sbin/sysctl -w net.ipv4.ip_forward=1
+ExecStart=/usr/sbin/openvpn --config {config_path} --writepid {pid} --daemon click-vpn-{server_id}
+ExecStartPost=/bin/sh -c '{add_nat}'
+ExecStartPost=/bin/sh -c '{add_fwd_s}'
+ExecStartPost=/bin/sh -c '{add_fwd_d}'
+ExecStopPost=/bin/sh -c '{del_nat}'
+ExecStopPost=/bin/sh -c '{del_fwd_s}'
+ExecStopPost=/bin/sh -c '{del_fwd_d}'
 ExecStop=/bin/kill -TERM $MAINPID
 Restart=on-failure
 RestartSec=5
@@ -76,45 +100,28 @@ WantedBy=multi-user.target
 
 def start_server(server_id: int, config_path: str, data_dir: str,
                  network: str = "10.8.0.0", netmask: str = "255.255.255.0") -> bool:
-    """Запускает OpenVPN сервер через systemd."""
+    """Запускает OpenVPN сервер через systemd (NAT/forward — в юните)."""
     try:
-        # Создаём unit если нет
-        if not os.path.exists(_unit_path(server_id)):
-            create_systemd_unit(server_id, config_path)
-
+        # Всегда пересоздаём unit (вдруг сменился интерфейс/сеть)
+        create_systemd_unit(server_id, config_path, network, netmask)
+        # включаем enable чтобы поднимался при ребуте
+        subprocess.run(["systemctl", "enable", _unit_name(server_id)],
+                       capture_output=True)
         result = subprocess.run(
-            ["systemctl", "start", _unit_name(server_id)],
+            ["systemctl", "restart", _unit_name(server_id)],
             capture_output=True, text=True
         )
-        if result.returncode != 0:
-            return False
-
-        # NAT
-        iface = _get_default_iface()
-        _nat_rules("add", network, netmask, iface)
-
-        # ip_forward
-        try:
-            with open("/proc/sys/net/ipv4/ip_forward", "w") as f:
-                f.write("1")
-        except Exception:
-            pass
-
-        return True
+        return result.returncode == 0
     except Exception:
         return False
 
 
 def stop_server(server_id: int, data_dir: str,
                 network: str = "10.8.0.0", netmask: str = "255.255.255.0") -> bool:
-    """Останавливает OpenVPN сервер."""
+    """Останавливает OpenVPN сервер (ExecStopPost снимет правила)."""
     try:
-        subprocess.run(
-            ["systemctl", "stop", _unit_name(server_id)],
-            capture_output=True
-        )
-        iface = _get_default_iface()
-        _nat_rules("remove", network, netmask, iface)
+        subprocess.run(["systemctl", "disable", _unit_name(server_id)], capture_output=True)
+        subprocess.run(["systemctl", "stop", _unit_name(server_id)], capture_output=True)
         return True
     except Exception:
         return False

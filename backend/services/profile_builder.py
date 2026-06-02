@@ -117,8 +117,7 @@ auth SHA256
 tls-version-min 1.2
 tls-server
 
-user nobody
-group nogroup
+# работаем от root — нужно для записи status-файла и управления маршрутами
 persist-key
 persist-tun
 
