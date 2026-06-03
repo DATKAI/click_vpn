@@ -1076,6 +1076,13 @@
                        class="btn btn-sm" style="background:#eff6ff;color:#2563eb;border:1.5px solid #bfdbfe" title="Отправить на email">
                       <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
                     </button>
+                    <!-- Windows-установщик (.exe) — только OpenVPN -->
+                    <button x-show="!u.archived && userKind(u)==='openvpn'"
+                       @click="downloadInstaller(u.id, u.username)"
+                       class="btn btn-sm" style="background:#f0f9ff;color:#0369a1;border:1.5px solid #bae6fd" title="Скачать установщик Windows (.exe)">
+                      <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24"><path d="M3 5.1L10 4v7.5H3V5.1zM3 12.5h7V20l-7-1.1V12.5zM11 3.9L21 2.5v9H11V3.9zM11 12.5h10V21.5L11 20.1V12.5z"/></svg>
+                      .exe
+                    </button>
 
                     <!-- Вкл/Выкл доступ (не в архиве) -->
                     <button x-show="!u.archived && u.is_active" @click="disableUser(u.id)" class="btn btn-sm" style="background:#fff7ed;color:#c2410c;border:1.5px solid #fed7aa" title="Выключить доступ">
@@ -2931,6 +2938,29 @@ function app() {
         const a = document.createElement('a');
         a.href = url;
         a.download = `${username}.${ext}`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch(e) {
+        alert('Ошибка скачивания: ' + e.message);
+      }
+    },
+
+    async downloadInstaller(userId, username) {
+      const btnNote = 'Сборка установщика может занять 10–30 секунд...';
+      try {
+        const res = await fetch(`/api/users/${userId}/installer`, {
+          headers: { 'Authorization': 'Bearer ' + this.token }
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          alert('Ошибка: ' + (err.detail || 'Не удалось собрать установщик'));
+          return;
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `ClickVPN-${username}-setup.exe`;
         a.click();
         URL.revokeObjectURL(url);
       } catch(e) {

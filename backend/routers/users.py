@@ -491,6 +491,39 @@ def download_profile(
     )
 
 
+@router.get("/{user_id}/installer")
+def download_installer(
+    user_id: int,
+    db: Session = Depends(get_db),
+    _: AdminUser = Depends(get_current_user),
+):
+    """Скачать персональный Windows-установщик (.exe): OpenVPN GUI + профиль."""
+    user = db.query(VPNUser).filter(VPNUser.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "Пользователь не найден")
+    server = db.query(VPNServer).filter(VPNServer.id == user.server_id).first()
+    if not server or server.kind != "openvpn":
+        raise HTTPException(400, "Установщик доступен только для OpenVPN-клиентов")
+    if not user.cert_pem:
+        raise HTTPException(400, "Сертификат не найден")
+
+    from services import win_installer
+    ok, msg = win_installer.is_available()
+    if not ok:
+        raise HTTPException(400, msg)
+
+    ovpn = _build_user_ovpn(db, user)
+    try:
+        exe = win_installer.build_installer(user.username, ovpn)
+    except Exception as e:
+        raise HTTPException(500, f"Не удалось собрать установщик: {e}")
+
+    return Response(
+        content=exe, media_type="application/vnd.microsoft.portable-executable",
+        headers={"Content-Disposition": f'attachment; filename="ClickVPN-{user.username}-setup.exe"'},
+    )
+
+
 @router.post("/{user_id}/send-email")
 def send_profile_email(
     user_id: int,
