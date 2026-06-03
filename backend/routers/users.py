@@ -51,11 +51,36 @@ def _is_wg(kind) -> bool:
     return kind in WG_KINDS
 
 
+def ikev2_resync(db: Session, server):
+    """Пересобирает swanctl-конфиг IKEv2: серт сервера + активные EAP-пользователи."""
+    from services import ikev2
+    from models import Settings
+    import ipaddress
+    s = db.query(Settings).filter(Settings.id == 1).first()
+    sans = [getattr(s, f"isp{n}_host") for n in range(1, 5) if s and getattr(s, f"isp{n}_host", None)]
+    ca = db.query(CA).filter(CA.id == server.ca_id).first()
+    eap_users = [
+        {"id": u.username, "secret": u.eap_password}
+        for u in db.query(VPNUser).filter(
+            VPNUser.server_id == server.id, VPNUser.is_active == True,
+            VPNUser.archived == False, VPNUser.eap_password.isnot(None),
+        ).all()
+    ]
+    pool_cidr = str(ipaddress.ip_network(f"{server.network}/{server.netmask}", strict=False))
+    try:
+        ikev2.write_server(server, ca.cert_pem, server.ikev2_cert_pem, server.ikev2_key_pem,
+                           sans, eap_users, server.dns_servers, pool_cidr)
+    except Exception:
+        pass
+
+
 def _apply_user_change(db: Session, user):
-    """Применяет изменение доступа: CRL (OpenVPN) или resync пиров (WireGuard/AmneziaWG)."""
+    """Применяет изменение доступа: CRL (OpenVPN) / resync (WireGuard/IKEv2)."""
     server = db.query(VPNServer).filter(VPNServer.id == user.server_id).first()
     if server and _is_wg(server.kind):
         _wg_resync(db, server)
+    elif server and server.kind == "ikev2":
+        ikev2_resync(db, server)
     elif user.ca_id:
         rebuild_crl(db, user.ca_id)
 
@@ -111,6 +136,22 @@ def create_user(
         db.refresh(user)
         _wg_resync(db, server)
         audit.log(db, admin.username, "user.create", user.username, f"wg org={org.name}")
+        return user
+
+    # ── IKEv2 клиент (EAP логин/пароль) ────────────────────────────────────
+    if server.kind == "ikev2":
+        import secrets as _secrets
+        eap_pwd = data.password or _secrets.token_urlsafe(10)
+        user = VPNUser(
+            username=data.username, full_name=data.full_name, email=data.email,
+            server_id=server.id, org_id=data.org_id,
+            eap_password=eap_pwd, notes=data.notes,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        ikev2_resync(db, server)
+        audit.log(db, admin.username, "user.create", user.username, f"ikev2 org={org.name}")
         return user
 
     ca = db.query(CA).filter(CA.id == server.ca_id).first()
@@ -420,6 +461,23 @@ def download_profile(
             headers={"Content-Disposition": f'attachment; filename="{user.username}.conf"'},
         )
 
+    if server and server.kind == "ikev2":
+        from services import ikev2
+        s = db.query(Settings).filter(Settings.id == 1).first()
+        if not s or not s.isp1_host:
+            raise HTTPException(400, "Не настроен хост провайдера")
+        ca = db.query(CA).filter(CA.id == server.ca_id).first()
+        mc = ikev2.build_mobileconfig(
+            server_name=(s.server_name or "Click VPN"),
+            remote_host=s.isp1_host, remote_id=s.isp1_host,
+            username=user.username, password=user.eap_password or "",
+            ca_cert_pem=ca.cert_pem,
+        )
+        return Response(
+            content=mc, media_type="application/x-apple-aspen-config",
+            headers={"Content-Disposition": f'attachment; filename="{user.username}.mobileconfig"'},
+        )
+
     if not user.cert_pem:
         raise HTTPException(400, "Сертификат не найден")
     ovpn = _build_user_ovpn(db, user)
@@ -665,6 +723,8 @@ def delete_user(user_id: int, db: Session = Depends(get_db), admin: AdminUser = 
 
     if server and _is_wg(server.kind):
         _wg_resync(db, server)              # убираем пир — клиент отваливается
+    elif server and server.kind == "ikev2":
+        ikev2_resync(db, server)            # убираем EAP-пользователя
     else:
         rebuild_crl(db, ca_id)
         ovpn_mgmt.kill_client(srv_id, uname)

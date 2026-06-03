@@ -101,6 +101,35 @@ def create_server(
         db.refresh(server)
         return _server_out(server, db)
 
+    # ── IKEv2 / IPsec ──────────────────────────────────────────────────────
+    if data.kind == "ikev2":
+        from models import Settings
+        from services import ikev2
+        ca = db.query(CA).filter(CA.id == data.ca_id).first()
+        if not ca:
+            raise HTTPException(404, "Для IKEv2 нужен CA")
+        s = db.query(Settings).filter(Settings.id == 1).first()
+        if not s or not s.isp1_host:
+            raise HTTPException(400, "Сначала настройте хост провайдера (он попадёт в серверный сертификат)")
+        sans = [getattr(s, f"isp{n}_host") for n in range(1, 5) if getattr(s, f"isp{n}_host", None)]
+
+        ca.serial += 1
+        cert_pem, key_pem, _ = pki.create_ikev2_server_cert(
+            ca.cert_pem, ca.key_pem, ca.serial, f"ikev2-{data.name}", sans
+        )
+        server = VPNServer(
+            name=data.name, kind="ikev2", ca_id=data.ca_id,
+            network=data.network, netmask=data.netmask,
+            port=(data.port if data.port not in (1194,) else 500),
+            protocol="udp",
+            dns_servers=data.dns_servers, push_routes=data.push_routes,
+            ikev2_cert_pem=cert_pem, ikev2_key_pem=key_pem,
+        )
+        db.add(server)
+        db.commit()
+        db.refresh(server)
+        return _server_out(server, db)
+
     # ── OpenVPN ────────────────────────────────────────────────────────────
     ca = db.query(CA).filter(CA.id == data.ca_id).first()
     if not ca:
@@ -177,6 +206,9 @@ def _server_out(s: VPNServer, db: Session, running: bool = None) -> dict:
         if _is_wg(s.kind):
             from services import wireguard
             running = wireguard.is_running(s.id)
+        elif s.kind == "ikev2":
+            from services import ikev2
+            running = ikev2.is_running()
         else:
             running = ovpn_manager.is_running(s.id, DATA_DIR)
     user_count = db.query(VPNUser).filter(
@@ -241,6 +273,13 @@ def start_server(server_id: int, db: Session = Depends(get_db), _: AdminUser = D
             raise HTTPException(500, f"Не удалось запустить: {msg}")
         return {"status": "started"}
 
+    if server.kind == "ikev2":
+        from routers.users import ikev2_resync
+        from services import ikev2
+        ikev2.start()
+        ikev2_resync(db, server)   # загрузит конфиг сервера + пользователей
+        return {"status": "started"}
+
     if not server.config_path or not os.path.exists(server.config_path):
         raise HTTPException(400, "Конфиг не найден")
     from services.crl import rebuild_crl
@@ -265,6 +304,9 @@ def stop_server(server_id: int, db: Session = Depends(get_db), _: AdminUser = De
     if _is_wg(server.kind):
         from services import wireguard
         wireguard.stop(server_id)
+    elif server.kind == "ikev2":
+        from services import ikev2
+        ikev2.stop_conn(server_id)
     else:
         ovpn_manager.stop_server(server_id, DATA_DIR,
                                  network=server.network, netmask=server.netmask)
@@ -283,6 +325,17 @@ def delete_server(server_id: int, db: Session = Depends(get_db), _: AdminUser = 
     if _is_wg(server.kind):
         from services import wireguard
         wireguard.remove(server_id)
+        db.query(VPNUser).filter(VPNUser.server_id == server_id).delete()
+        server.organizations = []
+        db.flush()
+        db.delete(server)
+        db.commit()
+        return
+
+    # IKEv2 — снимаем swanctl-конфиг
+    if server.kind == "ikev2":
+        from services import ikev2
+        ikev2.stop_conn(server_id)
         db.query(VPNUser).filter(VPNUser.server_id == server_id).delete()
         server.organizations = []
         db.flush()

@@ -112,6 +112,8 @@ class VPNServer(Base):
     wg_private_key = Column(Text, nullable=True)
     wg_public_key = Column(Text, nullable=True)
     awg_params = Column(Text, nullable=True)        # JSON параметров обфускации AmneziaWG
+    ikev2_cert_pem = Column(Text, nullable=True)    # серверный серт IKEv2
+    ikev2_key_pem = Column(Text, nullable=True)
 
     network = Column(String(64), default="10.8.0.0")
     netmask = Column(String(64), default="255.255.255.0")
@@ -156,6 +158,7 @@ class VPNUser(Base):
     wg_private_key = Column(Text, nullable=True)
     wg_public_key = Column(Text, nullable=True)
     wg_address = Column(String(64), nullable=True)
+    eap_password = Column(String(128), nullable=True)  # пароль IKEv2/EAP
 
     is_active = Column(Boolean, default=True)     # доступ включён/выключен
     archived = Column(Boolean, default=False)     # в архиве (скрыт)

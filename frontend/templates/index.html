@@ -442,7 +442,7 @@
             <div style="flex:1;min-width:0">
               <div style="font-weight:700;font-size:15px;display:flex;align-items:center;gap:8px">
                 <span x-text="s.name"></span>
-                <span :style="(s.kind && s.kind.startsWith('amnezia')) ? 'background:#fef9c3;color:#a16207' : (s.kind==='wireguard' ? 'background:#dcfce7;color:#15803d' : 'background:#dbeafe;color:#1d4ed8')" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:50px" x-text="s.kind==='amneziawg'?'AmneziaWG 2':(s.kind==='amneziawg_legacy'?'AmneziaWG legacy':(s.kind==='wireguard'?'WireGuard':'OpenVPN'))"></span>
+                <span :style="s.kind==='ikev2' ? 'background:#fce7f3;color:#be185d' : ((s.kind && s.kind.startsWith('amnezia')) ? 'background:#fef9c3;color:#a16207' : (s.kind==='wireguard' ? 'background:#dcfce7;color:#15803d' : 'background:#dbeafe;color:#1d4ed8'))" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:50px" x-text="({openvpn:'OpenVPN',wireguard:'WireGuard',amneziawg:'AmneziaWG 2',amneziawg_legacy:'AmneziaWG legacy',ikev2:'IKEv2'})[s.kind]||'OpenVPN'"></span>
                 <span x-show="s.obfuscation" style="background:#ede9fe;color:#6d28d9;font-size:10px;font-weight:700;padding:2px 8px;border-radius:50px">🛡 ОБФУСКАЦИЯ</span>
               </div>
               <div style="color:#94a3b8;font-size:12px;margin-top:2px" x-text="s.network + '/' + s.netmask + ' · ' + s.port + '/' + s.protocol.toUpperCase() + ' · клиентов: ' + (s.user_count||0) + ' · орг.: ' + (s.org_ids?.length||0)"></div>
@@ -1129,13 +1129,17 @@
             <input type="radio" value="amneziawg_legacy" x-model="serverForm.kind" @change="serverForm.port=51820; serverForm.network='10.9.0.0'" style="accent-color:#4f46e5"/>
             <div><div style="font-weight:600;font-size:14px">AmneziaWG legacy</div><div style="font-size:11px;color:#94a3b8">совместимость 1.5</div></div>
           </label>
+          <label style="display:flex;align-items:center;gap:8px;padding:12px;border:1.5px solid #e2e8f0;border-radius:10px;cursor:pointer;grid-column:1/-1" :style="serverForm.kind==='ikev2'?'border-color:#6366f1;background:#fafaff':''">
+            <input type="radio" value="ikev2" x-model="serverForm.kind" @change="serverForm.port=500; serverForm.network='10.10.0.0'" style="accent-color:#4f46e5"/>
+            <div><div style="font-weight:600;font-size:14px">IKEv2 / IPsec</div><div style="font-size:11px;color:#94a3b8">нативные клиенты Windows/macOS/iOS/Android без приложений · логин+пароль</div></div>
+          </label>
         </div>
       </div>
       <div>
         <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Название</label>
         <input x-model="serverForm.name" class="input" placeholder="Главный офис"/>
       </div>
-      <div x-show="serverForm.kind==='openvpn'">
+      <div x-show="serverForm.kind==='openvpn' || serverForm.kind==='ikev2'">
         <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">CA</label>
         <select x-model="serverForm.ca_id" class="input">
           <option value="">— выберите CA —</option>
@@ -1512,8 +1516,19 @@ petrov,Петров Пётр,petrov@co.ru,ЗПК,730,secret</code>
         <label for="userActive" style="font-size:13px;font-weight:600;color:#475569;cursor:pointer">Клиент активен</label>
       </div>
 
+      <!-- IKEv2 логин/пароль -->
+      <div x-show="editUserForm.eap_password" style="border-top:1px solid #f1f5f9;padding-top:14px">
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:4px">Данные для IKEv2</label>
+        <div style="padding:10px 12px;background:#fdf2f8;border:1.5px solid #fbcfe8;border-radius:10px;font-size:13px">
+          <div>Логин: <strong style="font-family:monospace" x-text="editUserForm.username"></strong></div>
+          <div>Пароль: <strong style="font-family:monospace" x-text="showEditPassword ? editUserForm.eap_password : '••••••••'"></strong>
+            <button type="button" @click="showEditPassword=!showEditPassword" style="background:none;border:none;cursor:pointer;color:#be185d;font-size:12px" x-text="showEditPassword?'скрыть':'показать'"></button>
+          </div>
+        </div>
+      </div>
+
       <!-- Пароль сертификата -->
-      <div style="border-top:1px solid #f1f5f9;padding-top:14px">
+      <div x-show="!editUserForm.eap_password" style="border-top:1px solid #f1f5f9;padding-top:14px">
         <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:4px">Пароль сертификата</label>
         <div x-show="editUserForm.cert_password" style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:10px;margin-bottom:10px">
           <svg width="16" height="16" fill="none" stroke="#16a34a" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
@@ -2071,7 +2086,7 @@ function app() {
 
     async createServer() {
       this.formError = '';
-      if (this.serverForm.kind === 'openvpn' && !this.serverForm.ca_id) { this.formError = 'Выберите CA'; return; }
+      if ((this.serverForm.kind === 'openvpn' || this.serverForm.kind === 'ikev2') && !this.serverForm.ca_id) { this.formError = 'Выберите CA'; return; }
       this.serverCreating = true;
       this.serverCreateTimer = 0;
       this._timerInterval = setInterval(() => this.serverCreateTimer++, 1000);
@@ -2080,7 +2095,7 @@ function app() {
           ...this.serverForm,
           port: +this.serverForm.port,
         };
-        payload.ca_id = this.serverForm.kind === 'openvpn' ? +this.serverForm.ca_id : null;
+        payload.ca_id = (this.serverForm.kind === 'openvpn' || this.serverForm.kind === 'ikev2') ? +this.serverForm.ca_id : null;
         await this.api('POST', '/servers', payload);
         await this.loadServers();
         this.showCreateServer = false;
@@ -2193,6 +2208,7 @@ function app() {
         email: u.email || '', is_active: u.is_active,
         org_id: u.org_id || '', cert_password: u.cert_password, new_password: '',
         cert_expires_at: u.cert_expires_at, notes: u.notes || '',
+        eap_password: u.eap_password || '',
       };
       this.showEditPassword = false;
       this.formError = '';
@@ -2343,7 +2359,9 @@ function app() {
         // расширение по типу сервера клиента
         const u = this.users.find(x => x.id === userId);
         const srv = u ? this.servers.find(s => s.id === u.server_id) : null;
-        const ext = (srv && srv.kind && srv.kind !== 'openvpn') ? 'conf' : 'ovpn';
+        let ext = 'ovpn';
+        if (srv && srv.kind === 'ikev2') ext = 'mobileconfig';
+        else if (srv && srv.kind && srv.kind !== 'openvpn') ext = 'conf';
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');

@@ -165,6 +165,41 @@ def create_client_cert(
     return cert_to_pem(cert), key_to_pem(key, password=password), expires_at
 
 
+def create_ikev2_server_cert(
+    ca_cert_pem: str, ca_key_pem: str, serial: int,
+    common_name: str, sans: list[str], valid_days: int = 3650,
+) -> tuple[str, str, datetime]:
+    """Серверный сертификат для IKEv2 с SubjectAltName (IP/DNS)."""
+    ca_cert = x509.load_pem_x509_certificate(ca_cert_pem.encode(), default_backend())
+    ca_key = serialization.load_pem_private_key(ca_key_pem.encode(), password=None, backend=default_backend())
+    key = generate_key()
+    now = _utcnow()
+    expires_at = now + timedelta(days=valid_days)
+
+    san_objs = []
+    for s in sans:
+        try:
+            san_objs.append(x509.IPAddress(ipaddress.ip_address(s)))
+        except ValueError:
+            san_objs.append(x509.DNSName(s))
+
+    builder = (
+        x509.CertificateBuilder()
+        .subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, common_name)]))
+        .issuer_name(ca_cert.subject)
+        .public_key(key.public_key())
+        .serial_number(serial)
+        .not_valid_before(now)
+        .not_valid_after(expires_at)
+        .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
+        .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]), critical=False)
+    )
+    if san_objs:
+        builder = builder.add_extension(x509.SubjectAlternativeName(san_objs), critical=False)
+    cert = builder.sign(ca_key, hashes.SHA256(), default_backend())
+    return cert_to_pem(cert), key_to_pem(key), expires_at
+
+
 def generate_tls_crypt_key() -> str:
     """Генерирует статический ключ OpenVPN (формат tls-crypt/tls-auth), 2048 бит."""
     import binascii

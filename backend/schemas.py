@@ -177,6 +177,7 @@ class UserOut(BaseModel):
     cert_status: str
     cert_expires_at: Optional[datetime]
     cert_password: Optional[str]
+    eap_password: Optional[str] = None
     is_active: bool
     archived: bool = False
     notes: Optional[str] = None
