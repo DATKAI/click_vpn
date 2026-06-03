@@ -220,3 +220,18 @@ class AuditLog(Base):
     action = Column(String(64), nullable=False)   # login, user.create, user.delete...
     target = Column(String(256), nullable=True)
     details = Column(String(512), nullable=True)
+
+
+class ConnectionAttempt(Base):
+    """Неудачные/анонимные попытки подключения (CN=UNDEF) — сканеры/боты.
+    Агрегируется по (server_id, ip): растёт счётчик, обновляется last_seen.
+    НЕ попадает в статистику трафика/сессий — только для аудита безопасности."""
+    __tablename__ = "connection_attempts"
+
+    id = Column(Integer, primary_key=True)
+    ip = Column(String(64), nullable=False, index=True)   # IP без порта
+    server_id = Column(Integer, nullable=True)
+    common_name = Column(String(128), nullable=True)      # обычно UNDEF
+    attempts = Column(Integer, default=1)                 # сколько раз стучался
+    first_seen = Column(DateTime, default=datetime.utcnow)
+    last_seen = Column(DateTime, default=datetime.utcnow, index=True)

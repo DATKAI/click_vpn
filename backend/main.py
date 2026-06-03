@@ -29,10 +29,10 @@ async def lifespan(app: FastAPI):
 
 def _start_background():
     """Запуск фоновых потоков: трекер подключений + автобэкап."""
-    from models import VPNServer, VPNUser, ConnectionLog, TrafficSample, Settings
+    from models import VPNServer, VPNUser, ConnectionLog, TrafficSample, Settings, ConnectionAttempt
     from services import conn_tracker, backup as backup_svc
     try:
-        conn_tracker.start_tracker(SessionLocal, VPNServer, VPNUser, ConnectionLog, TrafficSample)
+        conn_tracker.start_tracker(SessionLocal, VPNServer, VPNUser, ConnectionLog, TrafficSample, ConnectionAttempt)
     except Exception:
         pass
 

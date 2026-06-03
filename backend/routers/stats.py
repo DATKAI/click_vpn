@@ -7,7 +7,8 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import AdminUser, TrafficSample, ConnectionLog, VPNServer, VPNUser, Organization
+from models import (AdminUser, TrafficSample, ConnectionLog, VPNServer, VPNUser,
+                    Organization, ConnectionAttempt)
 from auth import get_current_user
 
 router = APIRouter(prefix="/api/stats", tags=["stats"])
@@ -30,10 +31,12 @@ PROTO_LABELS = {
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 def _status(server_id: int) -> list[dict]:
+    """Реальные OpenVPN-клиенты онлайн (без UNDEF — это боты/неуд. TLS)."""
     import os
     from services.ovpn_manager import parse_status
     DATA_DIR = os.getenv("DATA_DIR", "./data")
-    return parse_status(os.path.join(DATA_DIR, "openvpn", f"status_{server_id}.log"))
+    clients = parse_status(os.path.join(DATA_DIR, "openvpn", f"status_{server_id}.log"))
+    return [c for c in clients if c.get("common_name") != "UNDEF"]
 
 
 def _wg_online(db: Session) -> list[dict]:
@@ -356,7 +359,7 @@ def top_clients(
             func.coalesce(func.sum(ConnectionLog.bytes_sent), 0).label("tx"),
             func.count(ConnectionLog.id).label("sessions"),
         )
-        .filter(ConnectionLog.connected_at >= start)
+        .filter(ConnectionLog.connected_at >= start, ConnectionLog.common_name != "UNDEF")
         .group_by(ConnectionLog.common_name)
         .all()
     )
@@ -383,7 +386,7 @@ def by_org(
             ConnectionLog.common_name,
             func.coalesce(func.sum(ConnectionLog.bytes_received + ConnectionLog.bytes_sent), 0),
         )
-        .filter(ConnectionLog.connected_at >= start)
+        .filter(ConnectionLog.connected_at >= start, ConnectionLog.common_name != "UNDEF")
         .group_by(ConnectionLog.common_name)
         .all()
     )
@@ -407,7 +410,7 @@ def sessions(
     _: AdminUser = Depends(get_current_user),
 ):
     """История сессий из ConnectionLog (с пагинацией)."""
-    q = db.query(ConnectionLog)
+    q = db.query(ConnectionLog).filter(ConnectionLog.common_name != "UNDEF")
     if server_id:
         q = q.filter(ConnectionLog.server_id == server_id)
     total = q.count()
@@ -435,3 +438,42 @@ def sessions(
             "bytes_tx":       r.bytes_sent or 0,
         })
     return {"items": items, "total": total}
+
+
+@router.get("/attempts")
+def attempts(
+    limit: int  = Query(100, ge=1, le=500),
+    db: Session = Depends(get_db),
+    _: AdminUser = Depends(get_current_user),
+):
+    """Неудачные/анонимные попытки подключения (CN=UNDEF) — боты/сканеры.
+    Сгруппировано по IP, отсортировано по последней активности."""
+    srv_names = {s.id: s.name for s in db.query(VPNServer).all()}
+    rows = (
+        db.query(ConnectionAttempt)
+        .order_by(ConnectionAttempt.last_seen.desc())
+        .limit(limit)
+        .all()
+    )
+    items = [{
+        "id":          r.id,
+        "ip":          r.ip,
+        "server_id":   r.server_id,
+        "server_name": srv_names.get(r.server_id, f"#{r.server_id}"),
+        "common_name": r.common_name or "UNDEF",
+        "attempts":    r.attempts or 1,
+        "first_seen":  r.first_seen.isoformat() if r.first_seen else None,
+        "last_seen":   r.last_seen.isoformat() if r.last_seen else None,
+    } for r in rows]
+
+    total_attempts = db.query(func.coalesce(func.sum(ConnectionAttempt.attempts), 0)).scalar() or 0
+    unique_ips     = db.query(func.count(func.distinct(ConnectionAttempt.ip))).scalar() or 0
+    return {"items": items, "unique_ips": int(unique_ips), "total_attempts": int(total_attempts)}
+
+
+@router.delete("/attempts")
+def clear_attempts(db: Session = Depends(get_db), _: AdminUser = Depends(get_current_user)):
+    """Очистить журнал попыток подключения."""
+    db.query(ConnectionAttempt).delete()
+    db.commit()
+    return {"status": "cleared"}

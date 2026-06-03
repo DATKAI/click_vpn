@@ -9,6 +9,7 @@ DATA_DIR = os.getenv("DATA_DIR", "./data")
 
 _thread = None
 _stop = False
+_AttemptModel = None      # модель ConnectionAttempt (передаётся в start_tracker)
 # (server_id, common_name, real_address) -> log row id
 _open_sessions: dict = {}
 # (server_id, common_name, real_address) -> (rx, tx) последнее измерение для дельт
@@ -72,6 +73,55 @@ def _parse_wg_dump(server_id: int, kind: str) -> list[dict]:
             "is_online":  is_online,
         })
     return result
+
+
+def _parse_undef(status_log_path: str) -> list[dict]:
+    """Возвращает ВСЕ строки CLIENT LIST с CN=UNDEF (parse_status их схлопывает).
+    UNDEF = TLS-аутентификация не прошла → сканер/бот."""
+    if not os.path.exists(status_log_path):
+        return []
+    try:
+        with open(status_log_path) as f:
+            lines = f.readlines()
+    except OSError:
+        return []
+    out, section = [], None
+    for raw in lines:
+        line = raw.strip()
+        if not line:
+            continue
+        if line.startswith("Common Name,Real Address"):
+            section = "clients"; continue
+        if line.startswith(("Virtual Address,", "ROUTING TABLE", "GLOBAL STATS", "Updated,", "END")):
+            section = None; continue
+        if section == "clients":
+            parts = line.split(",")
+            if len(parts) >= 2 and parts[0] == "UNDEF":
+                out.append({"common_name": parts[0], "real_address": parts[1]})
+    return out
+
+
+def _record_attempt(db, server_id, common_name, real_address):
+    """Логирует неудачную/анонимную попытку (CN=UNDEF) в ConnectionAttempt.
+    Агрегирует по (server_id, ip): инкремент счётчика + last_seen."""
+    if _AttemptModel is None:
+        return
+    ip = (real_address or "").rsplit(":", 1)[0] or real_address or "?"
+    now = datetime.utcnow()
+    row = db.query(_AttemptModel).filter(
+        _AttemptModel.server_id == server_id,
+        _AttemptModel.ip == ip,
+    ).first()
+    if row:
+        row.attempts = (row.attempts or 0) + 1
+        row.last_seen = now
+        row.common_name = common_name
+    else:
+        db.add(_AttemptModel(
+            ip=ip, server_id=server_id, common_name=common_name,
+            attempts=1, first_seen=now, last_seen=now,
+        ))
+    db.commit()
 
 
 def _poll_once(SessionLocal, VPNServer, VPNUser, ConnectionLog):
@@ -168,6 +218,15 @@ def _poll_once(SessionLocal, VPNServer, VPNUser, ConnectionLog):
             # ── OpenVPN ────────────────────────────────────────────────────
             status_log = os.path.join(DATA_DIR, "openvpn", f"status_{s.id}.log")
             clients = _parse_status(status_log)
+
+            # UNDEF = TLS не прошёл (боты/сканеры) → в ConnectionAttempt, не в статистику
+            for a in _parse_undef(status_log):
+                try:
+                    _record_attempt(db, s.id, a["common_name"], a["real_address"])
+                except Exception:
+                    db.rollback()
+            clients = [c for c in clients if c["common_name"] != "UNDEF"]
+
             server_online = len(clients)
             global_online += server_online
             server_rx_delta = 0
@@ -265,11 +324,12 @@ def _flush(SessionLocal, TrafficSample):
     _buckets.clear()
 
 
-def start_tracker(SessionLocal, VPNServer, VPNUser, ConnectionLog, TrafficSample):
-    global _thread, _stop
+def start_tracker(SessionLocal, VPNServer, VPNUser, ConnectionLog, TrafficSample, ConnectionAttempt=None):
+    global _thread, _stop, _AttemptModel
     if _thread and _thread.is_alive():
         return
     _stop = False
+    _AttemptModel = ConnectionAttempt
 
     def loop():
         # при старте «усыновляем» открытые сессии прошлого запуска,
