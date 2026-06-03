@@ -63,12 +63,40 @@ def delete_ca(ca_id: int, db: Session = Depends(get_db), _: AdminUser = Depends(
 
 # ── VPN Servers ───────────────────────────────────────────────────────────────
 
+def _eff_proto(kind: str, protocol: str, obfuscation: bool) -> str:
+    if kind in WG_KINDS:
+        return "udp"
+    if kind == "ikev2":
+        return "ikev2"
+    return "tcp" if obfuscation else (protocol or "udp")
+
+
+def _check_port_conflict(db, port: int, proto: str, exclude_id: int = None):
+    if proto == "ikev2":
+        return  # strongSwan слушает 500/4500 — отдельный демон
+    q = db.query(VPNServer).filter(VPNServer.port == port)
+    if exclude_id:
+        q = q.filter(VPNServer.id != exclude_id)
+    for s in q.all():
+        if _eff_proto(s.kind, s.protocol, bool(s.obfuscation)) == proto:
+            raise HTTPException(
+                400,
+                f"Порт {port}/{proto.upper()} уже занят сервером «{s.name}». "
+                f"Выберите другой порт."
+            )
+
+
 @router.post("/servers", response_model=ServerOut)
 def create_server(
     data: ServerCreate,
     db: Session = Depends(get_db),
     _: AdminUser = Depends(get_current_user),
 ):
+    # Проверка конфликта порт+протокол с существующими серверами
+    eff_port = 443 if (data.kind == "openvpn" and data.obfuscation) else \
+               (51820 if (data.kind in WG_KINDS and data.port in (1194,)) else data.port)
+    _check_port_conflict(db, eff_port, _eff_proto(data.kind, data.protocol, data.obfuscation))
+
     # ── WireGuard / AmneziaWG ──────────────────────────────────────────────
     if data.kind in ("wireguard", "amneziawg", "amneziawg_legacy"):
         from services import wireguard
