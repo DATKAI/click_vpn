@@ -1318,23 +1318,33 @@ petrov,Петров Пётр,petrov@co.ru,ЗПК,730,secret</code>
         <svg width="16" height="16" fill="none" stroke="#d97706" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
         <span style="font-size:13px;color:#92400e">У организации нет серверов. Привяжите её к серверу.</span>
       </div>
-      <div>
+      <!-- Подсказка по типу протокола -->
+      <div x-show="clientKind()" style="padding:10px 12px;border-radius:10px;font-size:12px"
+           :style="clientKind()==='openvpn' ? 'background:#eff6ff;color:#1e40af' : (clientKind()==='ikev2' ? 'background:#fdf2f8;color:#9d174d' : 'background:#f0fdf4;color:#166534')">
+        <span x-show="clientKind()==='openvpn'">OpenVPN: будет выдан файл <b>.ovpn</b> с сертификатом.</span>
+        <span x-show="isWgKind(clientKind())">WireGuard: ключи сгенерируются автоматически, профиль <b>.conf</b>. Пароль не нужен.</span>
+        <span x-show="clientKind()==='ikev2'">IKEv2: вход по <b>логину и паролю</b>. Логин = имя пользователя. Профиль <b>.mobileconfig</b> (Apple) или ручной ввод.</span>
+      </div>
+
+      <!-- Срок действия — только OpenVPN (у WG/IKEv2 нет срока) -->
+      <div x-show="clientKind()==='openvpn'">
         <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Срок действия (дней)</label>
         <input x-model="userForm.valid_days" type="number" class="input" placeholder="365"/>
       </div>
-      <div>
+
+      <!-- Пароль: сертификата (OpenVPN) / EAP (IKEv2) -->
+      <div x-show="clientKind()==='openvpn' || clientKind()==='ikev2'">
         <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">
-          Пароль сертификата
+          <span x-text="clientKind()==='ikev2' ? 'Пароль для входа' : 'Пароль сертификата'"></span>
           <span style="font-weight:400;color:#94a3b8">(необязательно)</span>
         </label>
         <div style="position:relative">
-          <input x-model="userForm.password" :type="showPassword ? 'text' : 'password'" class="input" placeholder="Оставьте пустым если без пароля" style="padding-right:44px"/>
+          <input x-model="userForm.password" :type="showPassword ? 'text' : 'password'" class="input" :placeholder="clientKind()==='ikev2' ? 'Пусто — сгенерируется автоматически' : 'Оставьте пустым если без пароля'" style="padding-right:44px"/>
           <button type="button" @click="showPassword=!showPassword" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#94a3b8;padding:0">
             <svg x-show="!showPassword" width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
             <svg x-show="showPassword" width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>
           </button>
         </div>
-        <p style="color:#94a3b8;font-size:12px;margin-top:5px">При подключении OpenVPN клиент запросит этот пароль</p>
       </div>
       <div>
         <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Комментарий (необязательно)</label>
@@ -1344,7 +1354,12 @@ petrov,Петров Пётр,petrov@co.ru,ЗПК,730,secret</code>
     <div x-show="formError" x-text="formError" class="alert alert-error" style="margin-top:14px"></div>
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
       <button class="btn btn-gray" @click="showCreateUser=false;formError=''">Отмена</button>
-      <button class="btn btn-primary" @click="createUser()">Создать и скачать .ovpn</button>
+      <button class="btn btn-primary" @click="createUser()">
+        <span x-show="clientKind()==='openvpn'">Создать и скачать .ovpn</span>
+        <span x-show="isWgKind(clientKind())">Создать и скачать .conf</span>
+        <span x-show="clientKind()==='ikev2'">Создать и скачать профиль</span>
+        <span x-show="!clientKind()">Создать</span>
+      </button>
     </div>
   </div>
 </div>
@@ -2118,6 +2133,14 @@ function app() {
       catch(e) { alert('Ошибка: ' + e.message); }
     },
 
+    clientKind() {
+      // тип сервера, на котором создаётся клиент
+      if (this.availableServers.length === 1) return this.availableServers[0]?.kind || 'openvpn';
+      const s = this.availableServers.find(x => x.id === +this.userForm.server_id);
+      return s?.kind || '';
+    },
+    isWgKind(k) { return k==='wireguard'||k==='amneziawg'||k==='amneziawg_legacy'; },
+
     filterServersByOrg() {
       const orgId = +this.userForm.org_id;
       if (!orgId) { this.availableServers = []; this.userForm.server_id = ''; return; }
@@ -2328,7 +2351,7 @@ function app() {
           full_name: this.userForm.full_name || null,
           email: this.userForm.email || null,
           org_id: +this.userForm.org_id,
-          valid_days: +this.userForm.valid_days,
+          valid_days: +this.userForm.valid_days || 365,
           password: this.userForm.password || null,
           notes: this.userForm.notes || null,
         };
