@@ -579,10 +579,12 @@ def send_profile_email(
             attachments.append((ovpn.encode("utf-8"), "application", "x-openvpn-profile",
                                 f"{user.username}.ovpn"))
 
+    archive_password = None
     if data.attach_installer:
         if kind != "openvpn":
             raise HTTPException(400, "Установщик доступен только для OpenVPN-клиентов")
-        from services import win_installer
+        from services import win_installer, zipcrypto
+        import secrets as _secrets
         ok, msg = win_installer.is_available()
         if not ok:
             raise HTTPException(400, msg)
@@ -591,8 +593,13 @@ def send_profile_email(
             exe = win_installer.build_installer(user.username, ovpn)
         except Exception as e:
             raise HTTPException(500, f"Не удалось собрать установщик: {e}")
-        attachments.append((exe, "application", "octet-stream",
-                            f"ClickVPN-{user.username}-setup.exe"))
+        # .exe режут почтовые фильтры → упаковываем в зашифрованный ZIP
+        archive_password = _secrets.token_urlsafe(6)
+        zip_bytes = zipcrypto.make_encrypted_zip(
+            [(f"ClickVPN-{user.username}-setup.exe", exe)], archive_password
+        )
+        attachments.append((zip_bytes, "application", "zip",
+                            f"ClickVPN-{user.username}-setup.zip"))
 
     if not attachments and not data.include_password:
         raise HTTPException(400, "Нечего отправлять — выберите вложения или пароль")
@@ -617,6 +624,7 @@ def send_profile_email(
             kind=kind,
             attachments=attachments,
             password=password,
+            archive_password=archive_password,
             include_instructions=data.include_instructions,
         )
     except Exception as e:
