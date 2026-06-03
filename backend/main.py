@@ -89,17 +89,32 @@ def _migrate_db():
         ("vpn_users",   "wg_public_key", "TEXT"),
         ("vpn_users",   "wg_address",    "VARCHAR(64)"),
     ]
+    import sqlalchemy as sa
     with engine.connect() as conn:
         for table, column, col_type in migrations:
             try:
-                conn.execute(
-                    __import__("sqlalchemy").text(
-                        f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"
-                    )
-                )
+                conn.execute(sa.text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"))
                 conn.commit()
             except Exception:
                 pass  # колонка уже существует
+
+    # Делаем vpn_users.ca_id nullable (WireGuard/IKEv2 не используют CA).
+    # SQLite не умеет ALTER COLUMN — патчим схему через writable_schema.
+    try:
+        with engine.connect() as conn:
+            info = conn.execute(sa.text("PRAGMA table_info(vpn_users)")).fetchall()
+            ca_notnull = any(r[1] == "ca_id" and r[3] == 1 for r in info)
+            if ca_notnull:
+                conn.execute(sa.text("PRAGMA writable_schema=ON"))
+                conn.execute(sa.text(
+                    "UPDATE sqlite_master SET sql=REPLACE(sql,'ca_id INTEGER NOT NULL','ca_id INTEGER') "
+                    "WHERE type='table' AND name='vpn_users'"
+                ))
+                conn.execute(sa.text("PRAGMA writable_schema=OFF"))
+                conn.commit()
+        engine.dispose()  # форсируем переоткрытие — SQLite перечитает схему
+    except Exception:
+        pass
 
 
 def _seed_defaults():

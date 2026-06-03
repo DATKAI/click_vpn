@@ -141,10 +141,10 @@ def create_user(
     # ── IKEv2 клиент (EAP логин/пароль) ────────────────────────────────────
     if server.kind == "ikev2":
         import secrets as _secrets
-        eap_pwd = data.password or _secrets.token_urlsafe(10)
+        eap_pwd = data.password or _secrets.token_urlsafe(9)
         user = VPNUser(
             username=data.username, full_name=data.full_name, email=data.email,
-            server_id=server.id, org_id=data.org_id,
+            server_id=server.id, org_id=data.org_id, ca_id=server.ca_id,
             eap_password=eap_pwd, notes=data.notes,
         )
         db.add(user)
@@ -157,13 +157,17 @@ def create_user(
     ca = db.query(CA).filter(CA.id == server.ca_id).first()
     ca.serial += 1
 
+    # Пароль обязателен — если не задан, генерируем
+    import secrets as _secrets
+    cert_pwd = data.password or _secrets.token_urlsafe(9)
+
     cert_pem, key_pem, expires_at = pki.create_client_cert(
         ca_cert_pem=ca.cert_pem,
         ca_key_pem=ca.key_pem,
         serial=ca.serial,
         common_name=data.username,
         valid_days=data.valid_days,
-        password=data.password or None,
+        password=cert_pwd,
     )
     db.commit()
 
@@ -178,7 +182,7 @@ def create_user(
         key_pem=key_pem,
         cert_serial=ca.serial,
         cert_expires_at=expires_at,
-        cert_password=data.password or None,
+        cert_password=cert_pwd,
         notes=data.notes,
     )
     db.add(user)
