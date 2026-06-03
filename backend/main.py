@@ -22,9 +22,44 @@ os.makedirs(os.path.join(DATA_DIR, "openvpn"), exist_ok=True)
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     _migrate_db()
+    _encrypt_existing()
     _seed_defaults()
     _start_background()
     yield
+
+
+def _encrypt_existing():
+    """Шифрует ранее сохранённые в открытом виде секреты (одноразовая миграция).
+    Идемпотентно: значения с префиксом enc: пропускаются. Работает на сыром SQL,
+    чтобы не задеть прозрачное шифрование TypeDecorator."""
+    import sqlalchemy as sa
+    from services import crypto
+
+    targets = [
+        ("ca",          ["key_pem"]),
+        ("vpn_users",   ["key_pem", "cert_password", "eap_password", "wg_private_key"]),
+        ("vpn_servers", ["wg_private_key", "ikev2_key_pem", "tls_crypt_key"]),
+        ("settings",    ["smtp_password"]),
+    ]
+    try:
+        with engine.connect() as conn:
+            for table, cols in targets:
+                for col in cols:
+                    try:
+                        rows = conn.execute(sa.text(
+                            f"SELECT id, {col} FROM {table} WHERE {col} IS NOT NULL AND {col} != ''"
+                        )).fetchall()
+                    except Exception:
+                        continue  # колонки нет — пропускаем
+                    for rid, val in rows:
+                        if isinstance(val, str) and not crypto.is_encrypted(val):
+                            conn.execute(
+                                sa.text(f"UPDATE {table} SET {col} = :v WHERE id = :id"),
+                                {"v": crypto.encrypt(val), "id": rid},
+                            )
+                conn.commit()
+    except Exception:
+        pass
 
 
 def _start_background():

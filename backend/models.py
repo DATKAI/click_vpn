@@ -7,6 +7,7 @@ from sqlalchemy.orm import relationship
 import enum
 
 from database import Base
+from services.crypto import EncryptedText
 
 
 class ServerStatus(str, enum.Enum):
@@ -52,7 +53,7 @@ class Settings(Base):
     smtp_host = Column(String(256), nullable=True)
     smtp_port = Column(Integer, default=587)
     smtp_user = Column(String(256), nullable=True)
-    smtp_password = Column(String(256), nullable=True)
+    smtp_password = Column(EncryptedText, nullable=True)
     smtp_from = Column(String(256), nullable=True)
     smtp_tls = Column(Boolean, default=True)
     # Авто-бэкап
@@ -69,7 +70,7 @@ class CA(Base):
     id = Column(Integer, primary_key=True)
     common_name = Column(String(256), nullable=False)
     cert_pem = Column(Text, nullable=False)
-    key_pem = Column(Text, nullable=False)
+    key_pem = Column(EncryptedText, nullable=False)   # приватный ключ CA — шифруется
     serial = Column(Integer, default=1)
     created_at = Column(DateTime, default=datetime.utcnow)
     expires_at = Column(DateTime, nullable=False)
@@ -109,11 +110,11 @@ class VPNServer(Base):
     ca_id = Column(Integer, ForeignKey("ca.id"), nullable=True)  # WG не нужен CA
 
     # WireGuard / AmneziaWG серверные ключи
-    wg_private_key = Column(Text, nullable=True)
+    wg_private_key = Column(EncryptedText, nullable=True)
     wg_public_key = Column(Text, nullable=True)
     awg_params = Column(Text, nullable=True)        # JSON параметров обфускации AmneziaWG
     ikev2_cert_pem = Column(Text, nullable=True)    # серверный серт IKEv2
-    ikev2_key_pem = Column(Text, nullable=True)
+    ikev2_key_pem = Column(EncryptedText, nullable=True)
 
     network = Column(String(64), default="10.8.0.0")
     netmask = Column(String(64), default="255.255.255.0")
@@ -123,7 +124,7 @@ class VPNServer(Base):
     push_routes = Column(Text, default="")
 
     obfuscation = Column(Boolean, default=False)   # TCP/443 + tls-crypt (обход DPI)
-    tls_crypt_key = Column(Text, nullable=True)    # статический ключ tls-crypt
+    tls_crypt_key = Column(EncryptedText, nullable=True)    # статический ключ tls-crypt
 
     status = Column(Enum(ServerStatus), default=ServerStatus.stopped)
     config_path = Column(String(512), nullable=True)
@@ -148,17 +149,17 @@ class VPNUser(Base):
 
     # Сертификат
     cert_pem = Column(Text, nullable=True)
-    key_pem = Column(Text, nullable=True)
+    key_pem = Column(EncryptedText, nullable=True)      # приватный ключ клиента — шифруется
     cert_serial = Column(Integer, nullable=True)
     cert_status = Column(Enum(CertStatus), default=CertStatus.active)
     cert_expires_at = Column(DateTime, nullable=True)
-    cert_password = Column(String(256), nullable=True)  # пароль приватного ключа
+    cert_password = Column(EncryptedText, nullable=True)  # пароль приватного ключа — шифруется
 
     # WireGuard
-    wg_private_key = Column(Text, nullable=True)
+    wg_private_key = Column(EncryptedText, nullable=True)  # приватный ключ клиента — шифруется
     wg_public_key = Column(Text, nullable=True)
     wg_address = Column(String(64), nullable=True)
-    eap_password = Column(String(128), nullable=True)  # пароль IKEv2/EAP
+    eap_password = Column(EncryptedText, nullable=True)  # пароль IKEv2/EAP — шифруется
 
     is_active = Column(Boolean, default=True)     # доступ включён/выключен
     archived = Column(Boolean, default=False)     # в архиве (скрыт)

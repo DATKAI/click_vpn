@@ -74,10 +74,14 @@ mkdir -p "$DATA_DIR/pki" "$DATA_DIR/openvpn"
 info "Генерация конфигурации..."
 SECRET_KEY=$(openssl rand -hex 32)
 ADMIN_PASSWORD=$(openssl rand -base64 12 | tr -d '/+=')
+DB_ENCRYPTION_KEY=$(openssl rand -hex 32)
 
 cat > "$INSTALL_DIR/.env" <<EOF
 SECRET_KEY=${SECRET_KEY}
 ADMIN_PASSWORD=${ADMIN_PASSWORD}
+# Ключ шифрования секретов в БД (приватные ключи, пароли).
+# НЕ МЕНЯЙТЕ после первого запуска — иначе зашифрованные данные станут нечитаемыми!
+DB_ENCRYPTION_KEY=${DB_ENCRYPTION_KEY}
 TOKEN_EXPIRE_MINUTES=480
 DATABASE_URL=sqlite:////var/lib/click-vpn/vpn.db
 DATA_DIR=/var/lib/click-vpn
