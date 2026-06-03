@@ -524,43 +524,106 @@ def download_installer(
     )
 
 
+class SendEmailReq(BaseModel):
+    to_email: str | None = None
+    attach_profile: bool = True
+    attach_installer: bool = False
+    include_password: bool = True
+    include_instructions: bool = True
+
+
 @router.post("/{user_id}/send-email")
 def send_profile_email(
     user_id: int,
+    data: SendEmailReq = SendEmailReq(),
     db: Session = Depends(get_db),
-    _: AdminUser = Depends(get_current_user),
+    admin: AdminUser = Depends(get_current_user),
 ):
-    """Отправить .ovpn на email клиента."""
+    """Отправить клиенту письмо с выбранными вложениями (профиль/установщик),
+    паролем и инструкцией."""
     user = db.query(VPNUser).filter(VPNUser.id == user_id).first()
     if not user:
         raise HTTPException(404, "Пользователь не найден")
-    if not user.email:
+    to_email = (data.to_email or user.email or "").strip()
+    if not to_email:
         raise HTTPException(400, "У клиента не указан email")
-    if not user.cert_pem:
-        raise HTTPException(400, "Сертификат не найден")
 
     settings = db.query(Settings).filter(Settings.id == 1).first()
     if not settings or not settings.smtp_host or not settings.smtp_from:
         raise HTTPException(400, "Не настроен SMTP в настройках")
 
-    ovpn = _build_user_ovpn(db, user)
+    server = db.query(VPNServer).filter(VPNServer.id == user.server_id).first()
+    kind = server.kind if server else "openvpn"
+
+    # ── вложения ───────────────────────────────────────────────────────────
+    attachments = []
+    if data.attach_profile:
+        if _is_wg(kind):
+            conf = _build_wg_conf(db, user, server)
+            attachments.append((conf.encode("utf-8"), "text", "plain", f"{user.username}.conf"))
+        elif kind == "ikev2":
+            from services import ikev2
+            ca = db.query(CA).filter(CA.id == server.ca_id).first()
+            mc = ikev2.build_mobileconfig(
+                server_name=(settings.server_name or "Click VPN"),
+                remote_host=settings.isp1_host, remote_id=settings.isp1_host,
+                username=user.username, password=user.eap_password or "",
+                ca_cert_pem=ca.cert_pem,
+            )
+            attachments.append((mc.encode("utf-8"), "application", "x-apple-aspen-config",
+                                f"{user.username}.mobileconfig"))
+        else:
+            if not user.cert_pem:
+                raise HTTPException(400, "Сертификат не найден")
+            ovpn = _build_user_ovpn(db, user)
+            attachments.append((ovpn.encode("utf-8"), "application", "x-openvpn-profile",
+                                f"{user.username}.ovpn"))
+
+    if data.attach_installer:
+        if kind != "openvpn":
+            raise HTTPException(400, "Установщик доступен только для OpenVPN-клиентов")
+        from services import win_installer
+        ok, msg = win_installer.is_available()
+        if not ok:
+            raise HTTPException(400, msg)
+        ovpn = _build_user_ovpn(db, user)
+        try:
+            exe = win_installer.build_installer(user.username, ovpn)
+        except Exception as e:
+            raise HTTPException(500, f"Не удалось собрать установщик: {e}")
+        attachments.append((exe, "application", "octet-stream",
+                            f"ClickVPN-{user.username}-setup.exe"))
+
+    if not attachments and not data.include_password:
+        raise HTTPException(400, "Нечего отправлять — выберите вложения или пароль")
+
+    # пароль по типу клиента
+    password = None
+    if data.include_password:
+        password = user.cert_password if kind == "openvpn" else (
+            user.eap_password if kind == "ikev2" else None)
+
     try:
-        mailer.send_ovpn_email(
+        mailer.send_client_email(
             smtp_host=settings.smtp_host,
             smtp_port=settings.smtp_port or 587,
             smtp_user=settings.smtp_user,
             smtp_password=settings.smtp_password,
             smtp_from=settings.smtp_from,
             smtp_tls=settings.smtp_tls if settings.smtp_tls is not None else True,
-            to_email=user.email,
+            to_email=to_email,
             client_name=user.full_name or user.username,
-            ovpn_content=ovpn,
             server_name=settings.server_name or "VPN",
+            kind=kind,
+            attachments=attachments,
+            password=password,
+            include_instructions=data.include_instructions,
         )
     except Exception as e:
         raise HTTPException(500, f"Ошибка отправки: {e}")
 
-    return {"status": "sent", "to": user.email}
+    audit.log(db, admin.username, "user.email", user.username, f"to={to_email}")
+    return {"status": "sent", "to": to_email}
 
 
 @router.post("/{user_id}/enable", response_model=UserOut)

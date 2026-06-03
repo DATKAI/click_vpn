@@ -1071,8 +1071,8 @@
                       <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
                       <span x-text="profileLabel(u)"></span>
                     </button>
-                    <button x-show="!u.archived && u.email"
-                       @click="sendUserEmail(u.id, u.email)"
+                    <button x-show="!u.archived"
+                       @click="openEmailModal(u)"
                        class="btn btn-sm" style="background:#eff6ff;color:#2563eb;border:1.5px solid #bfdbfe" title="Отправить на email">
                       <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
                     </button>
@@ -2012,6 +2012,61 @@ petrov,Петров Пётр,petrov@co.ru,ЗПК,730,secret</code>
 </div>
 
 <!-- Modal: Edit User -->
+<!-- Модалка: отправка email -->
+<div x-show="emailModal.open" x-cloak class="modal-backdrop">
+  <div class="modal fade-in" style="max-width:460px">
+    <div class="modal-head">
+      <div>
+        <h3 style="font-size:18px;font-weight:700;margin:0 0 4px">Отправить на email</h3>
+        <p style="color:#94a3b8;font-size:13px;margin:0" x-text="emailModal.user?.username"></p>
+      </div>
+      <button class="modal-x" @click="emailModal.open=false" title="Закрыть">
+        <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Email получателя</label>
+        <input x-model="emailModal.to" type="email" class="input" placeholder="user@company.ru"/>
+      </div>
+
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:8px">Что отправить</label>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;color:#334155">
+            <input type="checkbox" x-model="emailModal.attach_profile" style="width:16px;height:16px;cursor:pointer"/>
+            <span>Файл профиля <span style="color:#94a3b8;font-size:12px">(.ovpn / .conf / .mobileconfig)</span></span>
+          </label>
+          <label x-show="emailModal.isOpenVPN" style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;color:#334155">
+            <input type="checkbox" x-model="emailModal.attach_installer" style="width:16px;height:16px;cursor:pointer"/>
+            <span>Установщик Windows <span style="color:#94a3b8;font-size:12px">(.exe, ставит OpenVPN автоматически)</span></span>
+          </label>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;color:#334155">
+            <input type="checkbox" x-model="emailModal.include_password" style="width:16px;height:16px;cursor:pointer"/>
+            <span>Пароль для подключения <span style="color:#94a3b8;font-size:12px">(в тексте письма)</span></span>
+          </label>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;color:#334155">
+            <input type="checkbox" x-model="emailModal.include_instructions" style="width:16px;height:16px;cursor:pointer"/>
+            <span>Инструкция по подключению <span style="color:#94a3b8;font-size:12px">(трей, как сохранить пароль)</span></span>
+          </label>
+        </div>
+      </div>
+
+      <div x-show="emailModal.attach_installer" class="alert alert-warning" style="font-size:12px;margin:0">
+        <span>Сборка установщика занимает 10–30 секунд — подождите после отправки.</span>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:4px">
+        <button class="btn btn-gray" style="flex:1;justify-content:center" @click="emailModal.open=false" :disabled="emailModal.sending">Отмена</button>
+        <button class="btn btn-primary" style="flex:1;justify-content:center" @click="sendEmailModal()" :disabled="emailModal.sending">
+          <svg x-show="emailModal.sending" class="spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-dasharray="31" stroke-dashoffset="10"/></svg>
+          <span x-text="emailModal.sending ? 'Отправка...' : 'Отправить'"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div x-show="showEditUser" x-cloak class="modal-backdrop">
   <div class="modal fade-in" style="max-width:600px">
     <div class="modal-head">
@@ -2227,6 +2282,7 @@ function app() {
     showEditServer: false,
     showEditUser: false,
     showEditOrg: false,
+    emailModal: { open:false, user:null, to:'', attach_profile:true, attach_installer:false, include_password:true, include_instructions:true, isOpenVPN:true, sending:false },
     showServerOrgs: false,
     serverOrgsForm: { id:null, name:'', org_ids:[] },
     serverOrgsError: '',
@@ -2592,12 +2648,38 @@ function app() {
       } finally { this.testEmailRunning = false; }
     },
 
-    async sendUserEmail(id, email) {
-      if (!confirm('Отправить .ovpn на ' + email + '?')) return;
+    openEmailModal(u) {
+      const isOpenVPN = this.userKind(u) === 'openvpn';
+      this.emailModal = {
+        open: true, user: u, sending: false,
+        to: u.email || '',
+        attach_profile: true,
+        attach_installer: isOpenVPN,      // по умолчанию шлём установщик для OpenVPN
+        include_password: true,
+        include_instructions: true,
+        isOpenVPN,
+      };
+    },
+
+    async sendEmailModal() {
+      const m = this.emailModal;
+      if (!m.to.trim()) { alert('Укажите email'); return; }
+      if (!m.attach_profile && !m.attach_installer && !m.include_password) {
+        alert('Выберите хотя бы одно вложение или пароль'); return;
+      }
+      m.sending = true;
       try {
-        await this.api('POST', '/users/' + id + '/send-email');
-        alert('✅ Профиль отправлен на ' + email);
+        const r = await this.api('POST', '/users/' + m.user.id + '/send-email', {
+          to_email: m.to.trim(),
+          attach_profile: m.attach_profile,
+          attach_installer: m.attach_installer,
+          include_password: m.include_password,
+          include_instructions: m.include_instructions,
+        });
+        this.emailModal.open = false;
+        alert('✅ Письмо отправлено на ' + (r.to || m.to));
       } catch(e) { alert('❌ ' + e.message); }
+      finally { m.sending = false; }
     },
 
     async saveSettings() {
