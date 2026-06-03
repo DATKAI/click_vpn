@@ -49,6 +49,7 @@ class Settings(Base):
     isp4_port = Column(Integer, default=1194)
     isp4_label = Column(String(64), default="ISP4")
     server_name = Column(String(128), default="VPN Server")
+    public_url = Column(String(256), nullable=True)   # публичный адрес для ссылок скачивания
     # SMTP
     smtp_host = Column(String(256), nullable=True)
     smtp_port = Column(Integer, default=587)
@@ -221,6 +222,21 @@ class AuditLog(Base):
     action = Column(String(64), nullable=False)   # login, user.create, user.delete...
     target = Column(String(256), nullable=True)
     details = Column(String(512), nullable=True)
+
+
+class DownloadToken(Base):
+    """Одноразовая (с лимитом) ссылка для скачивания установщика клиента.
+    Позволяет отдать .exe по публичному URL, не открывая всю панель."""
+    __tablename__ = "download_tokens"
+
+    id = Column(Integer, primary_key=True)
+    token = Column(String(64), unique=True, index=True, nullable=False)
+    user_id = Column(Integer, ForeignKey("vpn_users.id"), nullable=False)
+    kind = Column(String(24), default="installer")
+    download_count = Column(Integer, default=0)
+    max_downloads = Column(Integer, default=5)
+    expires_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 class ConnectionAttempt(Base):

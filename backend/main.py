@@ -11,7 +11,7 @@ from fastapi.responses import HTMLResponse
 from database import engine, SessionLocal, Base
 from models import AdminUser, Settings
 from auth import hash_password
-from routers import auth, settings, servers, users, status, organizations, logs, system, audit, backup, stats
+from routers import auth, settings, servers, users, status, organizations, logs, system, audit, backup, stats, download
 
 DATA_DIR = os.getenv("DATA_DIR", "./data")
 os.makedirs(os.path.join(DATA_DIR, "pki"), exist_ok=True)
@@ -109,6 +109,7 @@ def _migrate_db():
         ("settings",  "backup_enabled", "BOOLEAN DEFAULT 0"),
         ("settings",  "backup_interval_hours", "INTEGER DEFAULT 24"),
         ("settings",  "backup_keep",    "INTEGER DEFAULT 7"),
+        ("settings",  "public_url",     "VARCHAR(256)"),
         ("vpn_users", "notes",          "TEXT"),
         ("vpn_users", "last_connected_at", "DATETIME"),
         ("vpn_servers", "obfuscation",   "BOOLEAN DEFAULT 0"),
@@ -199,6 +200,7 @@ app.include_router(system.router)
 app.include_router(audit.router)
 app.include_router(backup.router)
 app.include_router(stats.router)
+app.include_router(download.router)
 
 # Статика и шаблоны
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")

@@ -3,7 +3,7 @@ import io
 import csv
 import zipfile
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile, File, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -524,6 +524,41 @@ def download_installer(
     )
 
 
+def _base_url(settings, request: Request) -> str:
+    """Публичный базовый URL для ссылок: настройка public_url или адрес запроса."""
+    if settings and settings.public_url:
+        return settings.public_url.rstrip("/")
+    return str(request.base_url).rstrip("/")
+
+
+@router.post("/{user_id}/installer-link")
+def create_installer_link(
+    user_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    admin: AdminUser = Depends(get_current_user),
+):
+    """Сгенерировать одноразовую ссылку на скачивание установщика (для копирования)."""
+    user = db.query(VPNUser).filter(VPNUser.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "Пользователь не найден")
+    server = db.query(VPNServer).filter(VPNServer.id == user.server_id).first()
+    if not server or server.kind != "openvpn":
+        raise HTTPException(400, "Установщик доступен только для OpenVPN-клиентов")
+
+    from services import win_installer
+    ok, msg = win_installer.is_available()
+    if not ok:
+        raise HTTPException(400, msg)
+
+    from routers.download import create_token
+    settings = db.query(Settings).filter(Settings.id == 1).first()
+    tok = create_token(db, user.id)
+    url = f"{_base_url(settings, request)}/d/{tok}"
+    audit.log(db, admin.username, "user.installer_link", user.username)
+    return {"url": url}
+
+
 class SendEmailReq(BaseModel):
     to_email: str | None = None
     attach_profile: bool = True
@@ -535,6 +570,7 @@ class SendEmailReq(BaseModel):
 @router.post("/{user_id}/send-email")
 def send_profile_email(
     user_id: int,
+    request: Request,
     data: SendEmailReq = SendEmailReq(),
     db: Session = Depends(get_db),
     admin: AdminUser = Depends(get_current_user),
@@ -579,30 +615,21 @@ def send_profile_email(
             attachments.append((ovpn.encode("utf-8"), "application", "x-openvpn-profile",
                                 f"{user.username}.ovpn"))
 
-    archive_password = None
+    # Установщик .exe режут почтовые фильтры → отдаём ссылкой на скачивание
+    install_url = None
     if data.attach_installer:
         if kind != "openvpn":
             raise HTTPException(400, "Установщик доступен только для OpenVPN-клиентов")
-        from services import win_installer, zipcrypto
-        import secrets as _secrets
+        from services import win_installer
         ok, msg = win_installer.is_available()
         if not ok:
             raise HTTPException(400, msg)
-        ovpn = _build_user_ovpn(db, user)
-        try:
-            exe = win_installer.build_installer(user.username, ovpn)
-        except Exception as e:
-            raise HTTPException(500, f"Не удалось собрать установщик: {e}")
-        # .exe режут почтовые фильтры → упаковываем в зашифрованный ZIP
-        archive_password = _secrets.token_urlsafe(6)
-        zip_bytes = zipcrypto.make_encrypted_zip(
-            [(f"ClickVPN-{user.username}-setup.exe", exe)], archive_password
-        )
-        attachments.append((zip_bytes, "application", "zip",
-                            f"ClickVPN-{user.username}-setup.zip"))
+        from routers.download import create_token
+        tok = create_token(db, user.id)
+        install_url = f"{_base_url(settings, request)}/d/{tok}"
 
-    if not attachments and not data.include_password:
-        raise HTTPException(400, "Нечего отправлять — выберите вложения или пароль")
+    if not attachments and not data.include_password and not install_url:
+        raise HTTPException(400, "Нечего отправлять — выберите вложения, ссылку или пароль")
 
     # пароль по типу клиента
     password = None
@@ -624,7 +651,7 @@ def send_profile_email(
             kind=kind,
             attachments=attachments,
             password=password,
-            archive_password=archive_password,
+            install_url=install_url,
             include_instructions=data.include_instructions,
         )
     except Exception as e:

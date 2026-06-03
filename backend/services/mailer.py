@@ -23,7 +23,7 @@ def _send(msg: EmailMessage, smtp_host, smtp_port, smtp_user, smtp_password, smt
 
 
 def _instructions_html(kind: str, has_installer: bool, password: str | None,
-                       archive_password: str | None = None) -> str:
+                       install_url: str | None = None) -> str:
     """HTML-инструкция под тип клиента и вложения."""
     pwd_block = ""
     if password:
@@ -34,30 +34,33 @@ def _instructions_html(kind: str, has_installer: bool, password: str | None,
           <div style="font-size:12px;color:#a16207;margin-top:6px">Вводится при подключении OpenVPN. Никому его не сообщайте.</div>
         </div>"""
 
-    arc_block = ""
-    if archive_password:
-        arc_block = f"""
-        <div style="margin:16px 0;padding:14px 16px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px">
-          <div style="font-size:13px;color:#1e40af;margin-bottom:4px">📦 Пароль от архива (.zip)</div>
-          <div style="font-family:monospace;font-size:18px;font-weight:700;color:#1e293b;letter-spacing:1px">{_html.escape(archive_password)}</div>
-          <div style="font-size:12px;color:#3b82f6;margin-top:6px">Нужен только чтобы распаковать вложенный архив с установщиком.</div>
+    dl_block = ""
+    if install_url:
+        dl_block = f"""
+        <div style="margin:16px 0;text-align:center">
+          <a href="{_html.escape(install_url)}" style="display:inline-block;background:#4f46e5;color:#fff;
+             text-decoration:none;font-weight:700;font-size:15px;padding:13px 28px;border-radius:50px">
+            ⬇ Скачать установщик
+          </a>
+          <div style="font-size:12px;color:#94a3b8;margin-top:8px">Ссылка действует ограниченное время.</div>
         </div>"""
 
-    if kind == "openvpn" and has_installer:
-        unzip_step = (
-            f"<li><b>Распакуйте архив</b> <code>.zip</code> из вложения: правый клик → «Извлечь всё». "
-            f"Введите <b>пароль от архива</b> (см. ниже).</li>" if archive_password else ""
+    has_link = bool(install_url)
+    if kind == "openvpn" and (has_installer or has_link):
+        dl_step = (
+            f"<li><b>Скачайте установщик</b> по кнопке ниже и запустите его.</li>" if has_link
+            else f"<li><b>Запустите установщик</b> <code>ClickVPN-…-setup.exe</code> из вложения.</li>"
         )
         steps = f"""
+        {dl_block}
         <ol style="font-size:14px;color:#334155;line-height:1.8;padding-left:20px">
-          {unzip_step}
-          <li><b>Запустите установщик</b> <code>ClickVPN-…-setup.exe</code>. На вопрос системы о правах нажмите «Да».</li>
+          {dl_step}
+          <li>На вопрос системы о правах нажмите «Да».</li>
           <li>Дождитесь сообщения «Click VPN установлен!» и нажмите «ОК».</li>
           <li>На рабочем столе появится ярлык <b>«Click VPN»</b> — запустите его. Внизу экрана, в <b>области уведомлений</b> (справа от часов, иногда под стрелкой ▲), появится значок OpenVPN — серый экран с замком.</li>
           <li><b>Нажмите на значок правой кнопкой мыши</b> → <b>«Подключиться»</b> (Connect).{(" Введите пароль из этого письма и поставьте галочку «Запомнить» — тогда вводить пароль каждый раз не придётся." if password else "")}</li>
           <li>Когда значок станет <b>зелёным</b> — VPN подключён. Чтобы отключиться: правый клик по значку → «Отключиться».</li>
         </ol>
-        {arc_block}
         {pwd_block}
         <div style="margin-top:14px;padding:12px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;font-size:13px;color:#1e40af">
           💡 <b>Чтобы не вводить пароль каждый раз:</b> при подключении отметьте галочку <b>«Запомнить»</b> в окне ввода пароля.<br>
@@ -88,26 +91,26 @@ def send_client_email(
     server_name: str = "VPN", kind: str = "openvpn",
     attachments: list | None = None,      # [(bytes, maintype, subtype, filename)]
     password: str | None = None,
-    archive_password: str | None = None,
+    install_url: str | None = None,
     include_instructions: bool = True,
 ) -> None:
-    """Письмо клиенту с вложениями (.ovpn/.exe), паролем и инструкцией."""
+    """Письмо клиенту с вложениями (.ovpn), ссылкой на установщик, паролем и инструкцией."""
     msg = EmailMessage()
     msg["Subject"] = f"Доступ к {server_name} — настройка VPN"
     msg["From"] = smtp_from
     msg["To"] = to_email
 
     # plain-text fallback
-    plain = f"Здравствуйте, {client_name}!\n\nВо вложении файлы для подключения к VPN «{server_name}»."
-    if archive_password:
-        plain += f"\n\nПароль от архива (.zip): {archive_password}"
+    plain = f"Здравствуйте, {client_name}!\n\nМатериалы для подключения к VPN «{server_name}»."
+    if install_url:
+        plain += f"\n\nСкачать установщик: {install_url}"
     if password:
         plain += f"\n\nПароль для подключения к VPN: {password}"
     plain += "\n\nИнструкция по настройке — в HTML-версии письма."
     msg.set_content(plain)
 
     has_installer = any(a[3].endswith((".exe", ".zip")) for a in (attachments or []))
-    instr = _instructions_html(kind, has_installer, password, archive_password) \
+    instr = _instructions_html(kind, has_installer, password, install_url) \
         if include_instructions else ""
     html_body = f"""
     <div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:600px;margin:0 auto;color:#1e293b">

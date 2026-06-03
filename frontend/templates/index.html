@@ -1383,6 +1383,13 @@
         <h3 style="font-size:14px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.05em;margin:0 0 16px">Общее</h3>
         <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Название сервиса</label>
         <input x-model="settings.server_name" class="input" placeholder="VPN Server"/>
+
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin:16px 0 6px">Публичный адрес панели</label>
+        <input x-model="settings.public_url" class="input" placeholder="https://vpn.company.ru"/>
+        <p style="font-size:12px;color:#94a3b8;margin-top:6px">
+          Используется для ссылок на скачивание установщика в письмах. Укажите адрес, по которому
+          панель (точнее, путь <code>/d/</code>) доступна сотрудникам из интернета. Если пусто — берётся адрес текущего запроса.
+        </p>
       </div>
       </div>
 
@@ -2039,7 +2046,7 @@ petrov,Петров Пётр,petrov@co.ru,ЗПК,730,secret</code>
           </label>
           <label x-show="emailModal.isOpenVPN" style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;color:#334155">
             <input type="checkbox" x-model="emailModal.attach_installer" style="width:16px;height:16px;cursor:pointer"/>
-            <span>Установщик Windows <span style="color:#94a3b8;font-size:12px">(.exe в zip-архиве с паролем — чтобы прошёл через почту)</span></span>
+            <span>Ссылка на установщик Windows <span style="color:#94a3b8;font-size:12px">(кнопка «Скачать» в письме — .exe файлы почта режет)</span></span>
           </label>
           <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;color:#334155">
             <input type="checkbox" x-model="emailModal.include_password" style="width:16px;height:16px;cursor:pointer"/>
@@ -2053,7 +2060,16 @@ petrov,Петров Пётр,petrov@co.ru,ЗПК,730,secret</code>
       </div>
 
       <div x-show="emailModal.attach_installer" class="alert alert-warning" style="font-size:12px;margin:0">
-        <span>Сборка установщика занимает 10–30 секунд — подождите после отправки.</span>
+        <span>В письмо вставится кнопка «Скачать установщик» (ссылка действует 72 ч, до 5 скачиваний). Сервер должен быть доступен по адресу из настроек.</span>
+      </div>
+
+      <!-- Скопировать ссылку — для передачи через мессенджер, минуя почту -->
+      <div x-show="emailModal.isOpenVPN" style="border-top:1px solid #f1f5f9;padding-top:12px">
+        <button @click="copyInstallerLink()" class="btn btn-gray btn-sm" style="width:100%;justify-content:center" :disabled="emailModal.linking">
+          <svg x-show="emailModal.linking" class="spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-dasharray="31" stroke-dashoffset="10"/></svg>
+          <span x-text="emailModal.linking ? 'Генерация...' : '🔗 Скопировать ссылку на установщик'"></span>
+        </button>
+        <p style="font-size:11px;color:#94a3b8;margin:6px 0 0;text-align:center">Чтобы отправить через мессенджер, минуя почту</p>
       </div>
 
       <div style="display:flex;gap:10px;margin-top:4px">
@@ -2282,7 +2298,7 @@ function app() {
     showEditServer: false,
     showEditUser: false,
     showEditOrg: false,
-    emailModal: { open:false, user:null, to:'', attach_profile:true, attach_installer:false, include_password:true, include_instructions:true, isOpenVPN:true, sending:false },
+    emailModal: { open:false, user:null, to:'', attach_profile:true, attach_installer:false, include_password:true, include_instructions:true, isOpenVPN:true, sending:false, linking:false },
     showServerOrgs: false,
     serverOrgsForm: { id:null, name:'', org_ids:[] },
     serverOrgsError: '',
@@ -2651,7 +2667,7 @@ function app() {
     openEmailModal(u) {
       const isOpenVPN = this.userKind(u) === 'openvpn';
       this.emailModal = {
-        open: true, user: u, sending: false,
+        open: true, user: u, sending: false, linking: false,
         to: u.email || '',
         attach_profile: true,
         attach_installer: isOpenVPN,      // по умолчанию шлём установщик для OpenVPN
@@ -2659,6 +2675,17 @@ function app() {
         include_instructions: true,
         isOpenVPN,
       };
+    },
+
+    async copyInstallerLink() {
+      const m = this.emailModal;
+      m.linking = true;
+      try {
+        const r = await this.api('POST', '/users/' + m.user.id + '/installer-link');
+        await navigator.clipboard.writeText(r.url).catch(() => {});
+        alert('🔗 Ссылка скопирована в буфер обмена:\n\n' + r.url + '\n\nДействует 72 часа, до 5 скачиваний.');
+      } catch(e) { alert('❌ ' + e.message); }
+      finally { m.linking = false; }
     },
 
     async sendEmailModal() {
