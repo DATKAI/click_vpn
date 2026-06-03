@@ -1,6 +1,7 @@
 """Фоновое отслеживание: история подключений (ConnectionLog) + временной ряд трафика (TrafficSample)."""
 import os
 import time
+import subprocess
 import threading
 from datetime import datetime, timedelta
 
@@ -35,13 +36,136 @@ def _add_bucket(server_id, rx_delta, tx_delta, online):
     bs["online"] = max(bs["online"], online)
 
 
+WG_KINDS = ("wireguard", "amneziawg", "amneziawg_legacy")
+
+
+def _parse_wg_dump(server_id: int, kind: str) -> list[dict]:
+    """Парсит `wg/awg show wgN dump` → список онлайн-пиров с rx/tx байтами.
+    Пир «онлайн» если last_handshake < 3 минуты назад."""
+    import time
+    wg = "awg" if kind.startswith("amnez") else "wg"
+    iface = f"wg{server_id}"
+    try:
+        out = subprocess.check_output(
+            [wg, "show", iface, "dump"],
+            text=True, stderr=subprocess.DEVNULL, timeout=3
+        )
+    except Exception:
+        return []
+    now_ts = time.time()
+    result = []
+    for line in out.strip().splitlines()[1:]:  # пропускаем строку интерфейса
+        parts = line.split("\t")
+        if len(parts) < 7:
+            continue
+        pub_key          = parts[0]
+        endpoint         = parts[2]
+        latest_handshake = int(parts[4]) if parts[4].isdigit() else 0
+        rx               = int(parts[5]) if parts[5].isdigit() else 0
+        tx               = int(parts[6]) if parts[6].isdigit() else 0
+        is_online = latest_handshake > 0 and (now_ts - latest_handshake) <= 180
+        result.append({
+            "pub_key":    pub_key,
+            "endpoint":   endpoint if endpoint != "(none)" else "",
+            "rx":         rx,
+            "tx":         tx,
+            "is_online":  is_online,
+        })
+    return result
+
+
 def _poll_once(SessionLocal, VPNServer, VPNUser, ConnectionLog):
     db = SessionLocal()
     try:
         servers = db.query(VPNServer).all()
         seen = set()
         global_online = 0
+
+        # строим карту pub_key -> user (нужна для WG)
+        pub_to_user: dict = {}
+        for u in db.query(VPNUser).filter(VPNUser.wg_public_key.isnot(None)).all():
+            pub_to_user[u.wg_public_key] = u
+
         for s in servers:
+            # ── WireGuard / AmneziaWG ──────────────────────────────────────
+            if s.kind in WG_KINDS:
+                peers = _parse_wg_dump(s.id, s.kind)
+                server_online    = sum(1 for p in peers if p["is_online"])
+                server_rx_delta  = 0
+                server_tx_delta  = 0
+
+                for p in peers:
+                    user = pub_to_user.get(p["pub_key"])
+                    cn   = user.username if user else p["pub_key"][:12]
+                    addr = p["endpoint"]
+                    key  = (s.id, cn, addr)
+
+                    if p["is_online"]:
+                        seen.add(key)
+
+                    last = _last_bytes.get(key)
+                    if last:
+                        drx = max(0, p["rx"] - last[0])
+                        dtx = max(0, p["tx"] - last[1])
+                    else:
+                        drx, dtx = 0, 0
+                    _last_bytes[key] = (p["rx"], p["tx"])
+                    server_rx_delta += drx
+                    server_tx_delta += dtx
+
+                    if p["is_online"] and key not in _open_sessions:
+                        now = datetime.utcnow()
+                        row = ConnectionLog(
+                            user_id=user.id if user else None,
+                            common_name=cn,
+                            server_id=s.id,
+                            real_address=addr,
+                            virtual_address=user.wg_address if user else None,
+                            connected_at=now,
+                            bytes_received=p["rx"], bytes_sent=p["tx"],
+                        )
+                        db.add(row)
+                        if user:
+                            user.last_connected_at = now
+                        db.commit()
+                        _open_sessions[key] = row.id
+                    elif key in _open_sessions:
+                        row = db.query(ConnectionLog).filter(ConnectionLog.id == _open_sessions[key]).first()
+                        if row:
+                            row.bytes_received = p["rx"]
+                            row.bytes_sent = p["tx"]
+                            db.commit()
+
+                # закрываем отключившиеся WG-пиры
+                for key in list(_open_sessions.keys()):
+                    if key[0] == s.id and key not in seen:
+                        rid = _open_sessions.pop(key)
+                        _last_bytes.pop(key, None)
+                        row = db.query(ConnectionLog).filter(ConnectionLog.id == rid).first()
+                        if row and row.disconnected_at is None:
+                            row.disconnected_at = datetime.utcnow()
+                            db.commit()
+
+                global_online += server_online
+                _add_bucket(s.id, server_rx_delta, server_tx_delta, server_online)
+                continue
+
+            # ── IKEv2 — только онлайн-счётчик (трафик swanctl не даёт легко) ──
+            if s.kind == "ikev2":
+                try:
+                    import subprocess as _sp
+                    out = _sp.check_output(
+                        ["swanctl", "--list-sas"],
+                        text=True, stderr=_sp.DEVNULL, timeout=5
+                    )
+                    ikev2_online = out.count("ESTABLISHED")
+                except Exception:
+                    ikev2_online = 0
+                global_online += ikev2_online
+                _add_bucket(s.id, 0, 0, ikev2_online)
+                continue
+
+            # ── OpenVPN ────────────────────────────────────────────────────
             status_log = os.path.join(DATA_DIR, "openvpn", f"status_{s.id}.log")
             clients = _parse_status(status_log)
             server_online = len(clients)

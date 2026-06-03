@@ -1,3 +1,6 @@
+import subprocess
+import re
+import time
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func
@@ -15,6 +18,142 @@ RANGES = {
     "30d": (timedelta(days=30),  timedelta(days=1),   "%d.%m"),
 }
 
+PROTO_LABELS = {
+    "openvpn":         "OpenVPN",
+    "wireguard":       "WireGuard",
+    "amneziawg":       "AmneziaWG 2.0",
+    "amneziawg_legacy":"AmneziaWG legacy",
+    "ikev2":           "IKEv2",
+}
+
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+def _status(server_id: int) -> list[dict]:
+    import os
+    from services.ovpn_manager import parse_status
+    DATA_DIR = os.getenv("DATA_DIR", "./data")
+    return parse_status(os.path.join(DATA_DIR, "openvpn", f"status_{server_id}.log"))
+
+
+def _wg_online(db: Session) -> list[dict]:
+    """Онлайн-клиенты WireGuard/AmneziaWG через `wg show <iface> dump`."""
+    WG_KINDS = ("wireguard", "amneziawg", "amneziawg_legacy")
+    now_ts = time.time()
+    result = []
+    servers = db.query(VPNServer).filter(VPNServer.kind.in_(WG_KINDS)).all()
+    if not servers:
+        return []
+    pub_to_user: dict = {}
+    for u in db.query(VPNUser).filter(VPNUser.wg_public_key.isnot(None)).all():
+        pub_to_user[u.wg_public_key] = u
+
+    for s in servers:
+        wg = "awg" if s.kind.startswith("amnez") else "wg"
+        iface = f"wg{s.id}"
+        try:
+            out = subprocess.check_output(
+                [wg, "show", iface, "dump"],
+                text=True, stderr=subprocess.DEVNULL, timeout=3
+            )
+        except Exception:
+            continue
+        lines = out.strip().splitlines()
+        for line in lines[1:]:         # первая строка — интерфейс
+            parts = line.split("\t")
+            if len(parts) < 7:
+                continue
+            pub_key            = parts[0]
+            endpoint           = parts[2]
+            latest_handshake   = int(parts[4]) if parts[4].isdigit() else 0
+            rx                 = int(parts[5]) if parts[5].isdigit() else 0
+            tx                 = int(parts[6]) if parts[6].isdigit() else 0
+            # считаем онлайн: хендшейк < 3 минут назад
+            if latest_handshake == 0 or (now_ts - latest_handshake) > 180:
+                continue
+            user = pub_to_user.get(pub_key)
+            result.append({
+                "username":    user.username if user else pub_key[:12] + "…",
+                "full_name":   user.full_name if user else None,
+                "server_id":   s.id,
+                "server_name": s.name,
+                "protocol":    s.kind,
+                "real_address": endpoint if endpoint != "(none)" else "—",
+                "vpn_address": user.wg_address if user else "—",
+                "bytes_rx":    rx,
+                "bytes_tx":    tx,
+                "connected_since":    None,
+                "last_handshake_ago": int(now_ts - latest_handshake),
+            })
+    return result
+
+
+def _ikev2_online(db: Session) -> list[dict]:
+    """Онлайн-клиенты IKEv2 через `swanctl --list-sas`."""
+    servers = db.query(VPNServer).filter(VPNServer.kind == "ikev2").all()
+    if not servers:
+        return []
+    srv_map  = {s.id: s for s in servers}
+    user_map = {}
+    for u in db.query(VPNUser).filter(VPNUser.server_id.in_([s.id for s in servers])).all():
+        user_map[u.username] = u
+
+    try:
+        out = subprocess.check_output(
+            ["swanctl", "--list-sas"],
+            text=True, stderr=subprocess.DEVNULL, timeout=5
+        )
+    except Exception:
+        return []
+
+    result = []
+    cur_conn = cur_remote = cur_ip = None
+    established_ago = None
+
+    for raw in out.splitlines():
+        line = raw.strip()
+        # "clickvpn-1: #N, ESTABLISHED, IKEv2, ..."
+        m = re.match(r"^(clickvpn-(\d+)):", line)
+        if m:
+            cur_conn = m.group(1)
+            cur_remote = cur_ip = None
+            established_ago = None
+            if "ESTABLISHED" not in line:
+                cur_conn = None
+            continue
+        if not cur_conn:
+            continue
+        # "remote 'user' @ 1.2.3.4[port]"
+        m2 = re.match(r"remote\s+'([^']+)'\s+@\s+([\d.]+)\[", line)
+        if m2:
+            cur_remote = m2.group(1)
+            cur_ip = m2.group(2)
+            continue
+        # "established 12s ago, ..."
+        m3 = re.match(r"established\s+(\d+)s ago", line)
+        if m3:
+            established_ago = int(m3.group(1))
+            m_id = re.match(r"clickvpn-(\d+)", cur_conn)
+            srv_id = int(m_id.group(1)) if m_id else None
+            srv = srv_map.get(srv_id)
+            user = user_map.get(cur_remote)
+            result.append({
+                "username":    cur_remote or "unknown",
+                "full_name":   user.full_name if user else None,
+                "server_id":   srv_id,
+                "server_name": srv.name if srv else "IKEv2",
+                "protocol":    "ikev2",
+                "real_address": cur_ip or "—",
+                "vpn_address": "—",
+                "bytes_rx":    0,
+                "bytes_tx":    0,
+                "connected_since":    None,
+                "last_handshake_ago": established_ago,
+            })
+    return result
+
+
+# ── endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/summary")
 def summary(db: Session = Depends(get_db), _: AdminUser = Depends(get_current_user)):
@@ -31,9 +170,25 @@ def summary(db: Session = Depends(get_db), _: AdminUser = Depends(get_current_us
         func.coalesce(func.sum(TrafficSample.tx), 0),
     ).filter(TrafficSample.server_id.is_(None), TrafficSample.timestamp >= day_ago).first()
 
-    online_now = sum(
-        len(_status(s.id)) for s in db.query(VPNServer).all()
-    )
+    # онлайн по всем протоколам
+    online_now = 0
+    for s in db.query(VPNServer).all():
+        if s.kind in ("wireguard", "amneziawg", "amneziawg_legacy"):
+            pass  # считается через wg_online ниже
+        elif s.kind == "ikev2":
+            pass
+        else:
+            online_now += len(_status(s.id))
+    # добавляем WG и IKEv2
+    try:
+        online_now += len(_wg_online(db))
+    except Exception:
+        pass
+    try:
+        online_now += len(_ikev2_online(db))
+    except Exception:
+        pass
+
     sessions_today = db.query(ConnectionLog).filter(ConnectionLog.connected_at >= day_ago).count()
     active_clients = db.query(VPNUser).filter(
         VPNUser.is_active == True, VPNUser.archived == False
@@ -50,16 +205,53 @@ def summary(db: Session = Depends(get_db), _: AdminUser = Depends(get_current_us
     }
 
 
-def _status(server_id: int):
-    import os
-    from services.ovpn_manager import parse_status
-    DATA_DIR = os.getenv("DATA_DIR", "./data")
-    return parse_status(os.path.join(DATA_DIR, "openvpn", f"status_{server_id}.log"))
+@router.get("/online")
+def online_now_endpoint(db: Session = Depends(get_db), _: AdminUser = Depends(get_current_user)):
+    """Все клиенты онлайн прямо сейчас (все протоколы)."""
+    result = []
+
+    # OpenVPN
+    for s in db.query(VPNServer).filter(VPNServer.kind == "openvpn").all():
+        clients = _status(s.id)
+        for c in clients:
+            user = db.query(VPNUser).filter(
+                VPNUser.server_id == s.id,
+                VPNUser.username == c["common_name"],
+            ).first()
+            result.append({
+                "username":    c["common_name"],
+                "full_name":   user.full_name if user else None,
+                "server_id":   s.id,
+                "server_name": s.name,
+                "protocol":    "openvpn",
+                "real_address": c.get("real_address", "—"),
+                "vpn_address": c.get("virtual_address", "—"),
+                "bytes_rx":    c.get("bytes_received", 0),
+                "bytes_tx":    c.get("bytes_sent", 0),
+                "connected_since": c.get("connected_since"),
+                "last_handshake_ago": None,
+            })
+
+    # WireGuard / AmneziaWG
+    try:
+        result += _wg_online(db)
+    except Exception:
+        pass
+
+    # IKEv2
+    try:
+        result += _ikev2_online(db)
+    except Exception:
+        pass
+
+    result.sort(key=lambda x: x["username"])
+    return result
 
 
 @router.get("/timeseries")
 def timeseries(
     range: str = Query("24h"),
+    server_id: int = Query(None),
     db: Session = Depends(get_db),
     _: AdminUser = Depends(get_current_user),
 ):
@@ -67,16 +259,15 @@ def timeseries(
     now = datetime.utcnow()
     start = now - span
 
-    rows = (
-        db.query(TrafficSample)
-        .filter(TrafficSample.server_id.is_(None), TrafficSample.timestamp >= start)
-        .order_by(TrafficSample.timestamp.asc())
-        .all()
-    )
+    q = db.query(TrafficSample).filter(TrafficSample.timestamp >= start)
+    if server_id:
+        q = q.filter(TrafficSample.server_id == server_id)
+    else:
+        q = q.filter(TrafficSample.server_id.is_(None))
+    rows = q.order_by(TrafficSample.timestamp.asc()).all()
 
-    # раскладываем по корзинам
-    buckets = {}
     n = int(span / bucket)
+    buckets = {}
     for i in range(n + 1):
         t = start + bucket * i
         k = int(t.timestamp() // bucket.total_seconds())
@@ -114,9 +305,39 @@ def by_server(
             func.coalesce(func.sum(TrafficSample.rx), 0),
             func.coalesce(func.sum(TrafficSample.tx), 0),
         ).filter(TrafficSample.server_id == s.id, TrafficSample.timestamp >= start).first()
-        result.append({"name": s.name, "rx": int(agg[0]), "tx": int(agg[1]), "total": int(agg[0] + agg[1])})
+        result.append({
+            "id": s.id,
+            "name": s.name,
+            "protocol": s.kind or "openvpn",
+            "rx": int(agg[0]),
+            "tx": int(agg[1]),
+            "total": int(agg[0] + agg[1]),
+        })
     result.sort(key=lambda x: x["total"], reverse=True)
     return result
+
+
+@router.get("/by-protocol")
+def by_protocol(
+    range: str = Query("7d"),
+    db: Session = Depends(get_db),
+    _: AdminUser = Depends(get_current_user),
+):
+    """Трафик разбитый по протоколам (kind сервера)."""
+    span = RANGES.get(range, RANGES["7d"])[0]
+    start = datetime.utcnow() - span
+    totals: dict = {}
+    for s in db.query(VPNServer).all():
+        kind = s.kind or "openvpn"
+        agg = db.query(
+            func.coalesce(func.sum(TrafficSample.rx), 0),
+            func.coalesce(func.sum(TrafficSample.tx), 0),
+        ).filter(TrafficSample.server_id == s.id, TrafficSample.timestamp >= start).first()
+        totals[kind] = totals.get(kind, 0) + int(agg[0] + agg[1])
+    return sorted(
+        [{"protocol": k, "label": PROTO_LABELS.get(k, k), "total": v} for k, v in totals.items()],
+        key=lambda x: -x["total"],
+    )
 
 
 @router.get("/top-clients")
@@ -128,18 +349,19 @@ def top_clients(
 ):
     span = RANGES.get(range, RANGES["7d"])[0]
     start = datetime.utcnow() - span
-    # суммируем трафик по сессиям за период (по common_name)
     rows = (
         db.query(
             ConnectionLog.common_name,
             func.coalesce(func.sum(ConnectionLog.bytes_received), 0).label("rx"),
             func.coalesce(func.sum(ConnectionLog.bytes_sent), 0).label("tx"),
+            func.count(ConnectionLog.id).label("sessions"),
         )
         .filter(ConnectionLog.connected_at >= start)
         .group_by(ConnectionLog.common_name)
         .all()
     )
-    data = [{"name": r[0], "rx": int(r[1]), "tx": int(r[2]), "total": int(r[1] + r[2])} for r in rows]
+    data = [{"name": r[0], "rx": int(r[1]), "tx": int(r[2]),
+             "total": int(r[1] + r[2]), "sessions": int(r[3])} for r in rows]
     data.sort(key=lambda x: x["total"], reverse=True)
     return data[:limit]
 
@@ -152,13 +374,10 @@ def by_org(
 ):
     span = RANGES.get(range, RANGES["7d"])[0]
     start = datetime.utcnow() - span
-    # маппинг common_name -> org через VPNUser
-    user_org = {}
-    for u in db.query(VPNUser).all():
-        user_org[u.username] = u.org_id
+    user_org = {u.username: u.org_id for u in db.query(VPNUser).all()}
     org_names = {o.id: o.name for o in db.query(Organization).all()}
 
-    totals = {}
+    totals: dict = {}
     rows = (
         db.query(
             ConnectionLog.common_name,
@@ -169,11 +388,50 @@ def by_org(
         .all()
     )
     for cn, total in rows:
-        oid = user_org.get(cn)
+        oid  = user_org.get(cn)
         name = org_names.get(oid, "Без организации")
         totals[name] = totals.get(name, 0) + int(total)
 
     return sorted(
         [{"name": k, "total": v} for k, v in totals.items()],
-        key=lambda x: x["total"], reverse=True,
+        key=lambda x: -x["total"],
     )
+
+
+@router.get("/sessions")
+def sessions(
+    server_id: int = Query(None),
+    limit: int   = Query(50, ge=1, le=200),
+    offset: int  = Query(0, ge=0),
+    db: Session  = Depends(get_db),
+    _: AdminUser = Depends(get_current_user),
+):
+    """История сессий из ConnectionLog (с пагинацией)."""
+    q = db.query(ConnectionLog)
+    if server_id:
+        q = q.filter(ConnectionLog.server_id == server_id)
+    total = q.count()
+    rows  = q.order_by(ConnectionLog.connected_at.desc()).offset(offset).limit(limit).all()
+
+    srv_names = {s.id: (s.name, s.kind or "openvpn") for s in db.query(VPNServer).all()}
+    items = []
+    for r in rows:
+        sname, skind = srv_names.get(r.server_id, (f"#{r.server_id}", "openvpn"))
+        dur = None
+        if r.disconnected_at and r.connected_at:
+            dur = int((r.disconnected_at - r.connected_at).total_seconds())
+        items.append({
+            "id":             r.id,
+            "username":       r.common_name,
+            "server_id":      r.server_id,
+            "server_name":    sname,
+            "protocol":       skind,
+            "real_address":   r.real_address or "—",
+            "vpn_address":    r.virtual_address or "—",
+            "connected_at":   r.connected_at.isoformat() if r.connected_at else None,
+            "disconnected_at":r.disconnected_at.isoformat() if r.disconnected_at else None,
+            "duration_sec":   dur,
+            "bytes_rx":       r.bytes_received or 0,
+            "bytes_tx":       r.bytes_sent or 0,
+        })
+    return {"items": items, "total": total}

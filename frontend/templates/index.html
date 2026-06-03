@@ -255,6 +255,10 @@
           <h3 style="font-size:14px;font-weight:700;margin:0 0 12px">Трафик по организациям</h3>
           <div style="height:200px"><canvas id="dash-orgs"></canvas></div>
         </div>
+        <div x-show="isPinned('protocols')" class="card">
+          <h3 style="font-size:14px;font-weight:700;margin:0 0 12px">По протоколам</h3>
+          <div style="height:200px"><canvas id="dash-protocols"></canvas></div>
+        </div>
         <div x-show="isPinned('topclients')" class="card">
           <h3 style="font-size:14px;font-weight:700;margin:0 0 12px">Топ клиентов</h3>
           <div style="display:flex;flex-direction:column;gap:8px">
@@ -321,99 +325,258 @@
 
     <!-- Stats -->
     <div x-show="page==='stats'" class="fade-in" style="padding:32px">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:24px">
+
+      <!-- Заголовок -->
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px">
         <div>
-          <h2 style="font-size:22px;font-weight:700;color:#0f172a;margin:0">Статистика трафика</h2>
-          <p style="color:#94a3b8;font-size:13px;margin-top:4px">Аналитика по всей системе · 📌 — закрепить на дашборде</p>
+          <h2 style="font-size:22px;font-weight:700;color:#0f172a;margin:0">Статистика</h2>
+          <p style="color:#94a3b8;font-size:13px;margin-top:4px">Аналитика по всей системе · все протоколы</p>
         </div>
-        <div style="display:flex;background:#f1f5f9;border-radius:50px;padding:3px">
-          <template x-for="r in ['24h','7d','30d']" :key="r">
-            <button @click="statsRange=r; loadStats()" class="btn-sm" style="border:none;border-radius:50px;cursor:pointer;font-weight:600"
-                    :style="statsRange===r ? 'background:#fff;color:#4f46e5;box-shadow:0 1px 3px rgba(0,0,0,.1)' : 'background:transparent;color:#94a3b8'"
-                    x-text="r==='24h'?'24 часа':(r==='7d'?'7 дней':'30 дней')"></button>
-          </template>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <div x-show="statsTab==='overview'" style="display:flex;background:#f1f5f9;border-radius:50px;padding:3px">
+            <template x-for="r in ['24h','7d','30d']" :key="r">
+              <button @click="statsRange=r; loadStats()" class="btn-sm" style="border:none;border-radius:50px;cursor:pointer;font-weight:600"
+                      :style="statsRange===r ? 'background:#fff;color:#4f46e5;box-shadow:0 1px 3px rgba(0,0,0,.1)' : 'background:transparent;color:#94a3b8'"
+                      x-text="r==='24h'?'24ч':(r==='7d'?'7д':'30д')"></button>
+            </template>
+          </div>
+          <div x-show="statsTab==='online'" style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:12px;color:#94a3b8">обновление через <b x-text="onlineCountdown"></b>с</span>
+            <button @click="loadOnlineClients(true)" class="btn btn-gray btn-sm">↺ сейчас</button>
+          </div>
+          <div x-show="statsTab==='sessions'" style="display:flex;align-items:center;gap:8px">
+            <select x-model="sessionsServerFilter" @change="sessionsPage=0; loadSessions()" class="input" style="width:auto;padding:6px 10px;font-size:13px">
+              <option value="">Все серверы</option>
+              <template x-for="sv in servers" :key="sv.id">
+                <option :value="sv.id" x-text="sv.name"></option>
+              </template>
+            </select>
+          </div>
         </div>
       </div>
 
+      <!-- Табы -->
+      <div style="display:flex;gap:4px;background:#eef0f4;border-radius:14px;padding:5px;margin-bottom:20px">
+        <button class="stab" :class="{active:statsTab==='overview'}" @click="statsTab='overview'; $nextTick(()=>renderStatsCharts())">
+          <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+          Обзор
+        </button>
+        <button class="stab" :class="{active:statsTab==='online'}" @click="statsTab='online'; loadOnlineClients()">
+          <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" stroke-width="2"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.188 10.934C18.766 6.825 15.127 4 12 4s-6.766 2.825-8.188 6.934M20.188 13.066C18.766 17.175 15.127 20 12 20s-6.766-2.825-8.188-6.934"/></svg>
+          Онлайн
+          <span x-show="onlineClients.length>0" x-text="onlineClients.length" style="background:#10b981;color:#fff;font-size:10px;padding:1px 6px;border-radius:50px;margin-left:2px"></span>
+        </button>
+        <button class="stab" :class="{active:statsTab==='sessions'}" @click="statsTab='sessions'; sessionsPage=0; loadSessions()">
+          <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          Сессии
+        </button>
+      </div>
+
+      <!-- ═══ ТАБ: ОБЗОР ═══ -->
+      <div x-show="statsTab==='overview'">
       <!-- Счётчики -->
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:20px">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px">
         <div class="stat-card">
-          <div style="font-size:24px;font-weight:800;color:#4f46e5" x-text="fmtBytes(statsSummary.total_bytes)"></div>
+          <div style="font-size:22px;font-weight:800;color:#4f46e5" x-text="fmtBytes(statsSummary.total_bytes)"></div>
           <div style="color:#94a3b8;font-size:12px;margin-top:4px">Всего трафика</div>
         </div>
         <div class="stat-card">
-          <div style="font-size:24px;font-weight:800;color:#10b981" x-text="fmtBytes(statsSummary.today_bytes)"></div>
+          <div style="font-size:22px;font-weight:800;color:#10b981" x-text="fmtBytes(statsSummary.today_bytes)"></div>
           <div style="color:#94a3b8;font-size:12px;margin-top:4px">За 24 часа</div>
         </div>
         <div class="stat-card">
-          <div style="font-size:24px;font-weight:800;color:#f59e0b" x-text="statsSummary.online_now ?? 0"></div>
+          <div style="font-size:22px;font-weight:800;color:#f59e0b" x-text="statsSummary.online_now ?? 0"></div>
           <div style="color:#94a3b8;font-size:12px;margin-top:4px">Онлайн сейчас</div>
         </div>
         <div class="stat-card">
-          <div style="font-size:24px;font-weight:800;color:#6366f1" x-text="statsSummary.sessions_today ?? 0"></div>
+          <div style="font-size:22px;font-weight:800;color:#6366f1" x-text="statsSummary.sessions_today ?? 0"></div>
           <div style="color:#94a3b8;font-size:12px;margin-top:4px">Сессий за сутки</div>
         </div>
         <div class="stat-card">
-          <div style="font-size:24px;font-weight:800;color:#0ea5e9" x-text="statsSummary.active_clients ?? 0"></div>
+          <div style="font-size:22px;font-weight:800;color:#0ea5e9" x-text="statsSummary.active_clients ?? 0"></div>
           <div style="color:#94a3b8;font-size:12px;margin-top:4px">Активных клиентов</div>
         </div>
       </div>
 
-      <!-- График: трафик по времени -->
+      <!-- Трафик по времени -->
       <div class="card" style="margin-bottom:16px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
           <h3 style="font-size:15px;font-weight:700;margin:0">Трафик по времени</h3>
           <button @click="togglePin('traffic')" class="pin-btn" :class="{pinned: isPinned('traffic')}" title="Закрепить на дашборде">📌</button>
         </div>
-        <div style="height:260px"><canvas id="chart-traffic"></canvas></div>
+        <div style="height:240px"><canvas id="chart-traffic"></canvas></div>
       </div>
 
+      <!-- Онлайн + По протоколам -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
-        <!-- Онлайн по времени -->
         <div class="card">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
             <h3 style="font-size:15px;font-weight:700;margin:0">Онлайн по времени</h3>
             <button @click="togglePin('online')" class="pin-btn" :class="{pinned: isPinned('online')}">📌</button>
           </div>
-          <div style="height:220px"><canvas id="chart-online"></canvas></div>
+          <div style="height:200px"><canvas id="chart-online"></canvas></div>
         </div>
-        <!-- Трафик по серверам -->
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <h3 style="font-size:15px;font-weight:700;margin:0">По протоколам</h3>
+            <button @click="togglePin('protocols')" class="pin-btn" :class="{pinned: isPinned('protocols')}">📌</button>
+          </div>
+          <div x-show="statsByProtocol.every(p=>p.total===0)" style="height:200px;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:13px">Нет данных</div>
+          <div x-show="statsByProtocol.some(p=>p.total>0)" style="height:200px"><canvas id="chart-protocols"></canvas></div>
+        </div>
+      </div>
+
+      <!-- По серверам + По организациям -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
         <div class="card">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
             <h3 style="font-size:15px;font-weight:700;margin:0">По серверам</h3>
             <button @click="togglePin('servers')" class="pin-btn" :class="{pinned: isPinned('servers')}">📌</button>
           </div>
-          <div style="height:220px"><canvas id="chart-servers"></canvas></div>
+          <div x-show="byServer.length===0" style="height:200px;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:13px">Нет данных</div>
+          <div x-show="byServer.length>0" style="height:200px"><canvas id="chart-servers"></canvas></div>
         </div>
-      </div>
-
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-        <!-- Топ клиентов -->
-        <div class="card">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-            <h3 style="font-size:15px;font-weight:700;margin:0">Топ клиентов</h3>
-            <button @click="togglePin('topclients')" class="pin-btn" :class="{pinned: isPinned('topclients')}">📌</button>
-          </div>
-          <div style="display:flex;flex-direction:column;gap:8px">
-            <template x-if="topClients.length===0"><p style="color:#94a3b8;font-size:13px;margin:0">Нет данных</p></template>
-            <template x-for="(c,i) in topClients" :key="c.name">
-              <div style="display:flex;align-items:center;gap:10px">
-                <span style="width:20px;color:#94a3b8;font-size:12px;font-weight:700" x-text="(i+1)"></span>
-                <span style="flex:1;font-size:13px;font-weight:600" x-text="c.name"></span>
-                <span style="font-size:12px;color:#475569" x-text="fmtBytes(c.total)"></span>
-              </div>
-            </template>
-          </div>
-        </div>
-        <!-- По организациям -->
         <div class="card">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
             <h3 style="font-size:15px;font-weight:700;margin:0">По организациям</h3>
             <button @click="togglePin('orgs')" class="pin-btn" :class="{pinned: isPinned('orgs')}">📌</button>
           </div>
-          <div style="height:220px"><canvas id="chart-orgs"></canvas></div>
+          <div x-show="byOrg.length===0" style="height:200px;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:13px">Нет данных</div>
+          <div x-show="byOrg.length>0" style="height:200px"><canvas id="chart-orgs"></canvas></div>
         </div>
       </div>
+
+      <!-- Топ клиентов -->
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+          <h3 style="font-size:15px;font-weight:700;margin:0">Топ клиентов по трафику</h3>
+          <button @click="togglePin('topclients')" class="pin-btn" :class="{pinned: isPinned('topclients')}">📌</button>
+        </div>
+        <template x-if="topClients.length===0">
+          <p style="color:#94a3b8;font-size:13px;margin:0">Нет данных за период</p>
+        </template>
+        <table x-show="topClients.length>0" class="table">
+          <thead><tr>
+            <th>#</th><th>Клиент</th><th>Сессий</th>
+            <th style="text-align:right">↓ Принято</th>
+            <th style="text-align:right">↑ Отдано</th>
+            <th style="text-align:right">Всего</th>
+          </tr></thead>
+          <tbody>
+            <template x-for="(c,i) in topClients" :key="c.name">
+              <tr>
+                <td style="color:#94a3b8;font-weight:700;width:30px" x-text="i+1"></td>
+                <td style="font-weight:600" x-text="c.name"></td>
+                <td style="color:#64748b" x-text="c.sessions || 0"></td>
+                <td style="text-align:right;color:#6366f1" x-text="fmtBytes(c.rx)"></td>
+                <td style="text-align:right;color:#10b981" x-text="fmtBytes(c.tx)"></td>
+                <td style="text-align:right;font-weight:600" x-text="fmtBytes(c.total)"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+      </div><!-- /overview tab -->
+
+      <!-- ═══ ТАБ: ОНЛАЙН ═══ -->
+      <div x-show="statsTab==='online'">
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+            <div>
+              <h3 style="font-size:15px;font-weight:700;margin:0">Подключения прямо сейчас</h3>
+              <p style="color:#94a3b8;font-size:12px;margin-top:3px">Все протоколы: OpenVPN, WireGuard, AmneziaWG, IKEv2</p>
+            </div>
+            <span x-show="onlineClients.length>0" style="background:#dcfce7;color:#15803d;font-weight:700;font-size:14px;padding:4px 12px;border-radius:50px" x-text="onlineClients.length + ' онлайн'"></span>
+          </div>
+          <template x-if="onlineClients.length===0">
+            <div style="text-align:center;padding:40px 0;color:#94a3b8">
+              <svg width="40" height="40" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="margin-bottom:10px;opacity:.4"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M18.364 5.636a9 9 0 010 12.728M15.536 8.464a5 5 0 010 7.072M6.343 6.343a9 9 0 000 12.728M9.172 9.172a5 5 0 000 7.071"/></svg>
+              <p style="font-size:14px;margin:0">Нет активных подключений</p>
+            </div>
+          </template>
+          <div x-show="onlineClients.length>0" style="overflow-x:auto">
+            <table class="table" style="min-width:700px">
+              <thead><tr>
+                <th>Клиент</th><th>Сервер</th><th>Протокол</th>
+                <th>Реальный IP</th><th>VPN IP</th>
+                <th style="text-align:right">↓ Принято</th>
+                <th style="text-align:right">↑ Отдано</th>
+                <th>Подключён</th>
+              </tr></thead>
+              <tbody>
+                <template x-for="c in onlineClients" :key="c.username+'@'+c.server_id">
+                  <tr>
+                    <td>
+                      <div style="font-weight:600;font-size:13px" x-text="c.username"></div>
+                      <div x-show="c.full_name" style="font-size:11px;color:#94a3b8" x-text="c.full_name"></div>
+                    </td>
+                    <td style="font-size:13px" x-text="c.server_name"></td>
+                    <td><span class="badge" :style="protoBadgeStyle(c.protocol)" x-text="protoLabel(c.protocol)"></span></td>
+                    <td style="font-family:monospace;font-size:12px" x-text="c.real_address"></td>
+                    <td style="font-family:monospace;font-size:12px" x-text="c.vpn_address||'—'"></td>
+                    <td style="text-align:right;color:#6366f1;font-size:13px" x-text="fmtBytes(c.bytes_rx)"></td>
+                    <td style="text-align:right;color:#10b981;font-size:13px" x-text="fmtBytes(c.bytes_tx)"></td>
+                    <td style="font-size:12px;color:#64748b">
+                      <span x-show="c.connected_since" x-text="formatDateTime(c.connected_since)"></span>
+                      <span x-show="!c.connected_since && c.last_handshake_ago!=null">хш <b x-text="fmtDuration(c.last_handshake_ago)"></b> назад</span>
+                      <span x-show="!c.connected_since && c.last_handshake_ago==null">—</span>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ ТАБ: СЕССИИ ═══ -->
+      <div x-show="statsTab==='sessions'">
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+            <div>
+              <h3 style="font-size:15px;font-weight:700;margin:0">История сессий</h3>
+              <p style="color:#94a3b8;font-size:12px;margin-top:3px" x-text="'Всего записей: ' + (statsSessions.total||0)"></p>
+            </div>
+          </div>
+          <template x-if="statsSessions.items.length===0">
+            <p style="color:#94a3b8;font-size:13px;margin:0">Нет записей</p>
+          </template>
+          <div x-show="statsSessions.items.length>0" style="overflow-x:auto">
+            <table class="table" style="min-width:780px">
+              <thead><tr>
+                <th>Клиент</th><th>Сервер</th><th>Протокол</th>
+                <th>IP клиента</th><th>VPN IP</th>
+                <th>Длительность</th>
+                <th style="text-align:right">Трафик</th>
+                <th>Подключился</th>
+              </tr></thead>
+              <tbody>
+                <template x-for="s in statsSessions.items" :key="s.id">
+                  <tr>
+                    <td style="font-weight:600;font-size:13px" x-text="s.username"></td>
+                    <td style="font-size:13px" x-text="s.server_name"></td>
+                    <td><span class="badge" :style="protoBadgeStyle(s.protocol)" x-text="protoLabel(s.protocol)"></span></td>
+                    <td style="font-family:monospace;font-size:12px" x-text="s.real_address"></td>
+                    <td style="font-family:monospace;font-size:12px" x-text="s.vpn_address"></td>
+                    <td style="font-size:13px;color:#64748b">
+                      <span x-show="s.duration_sec!=null" x-text="fmtDuration(s.duration_sec)"></span>
+                      <span x-show="s.duration_sec==null" style="color:#10b981;font-weight:600">онлайн</span>
+                    </td>
+                    <td style="text-align:right;font-size:13px" x-text="fmtBytes((s.bytes_rx||0)+(s.bytes_tx||0))"></td>
+                    <td style="font-size:12px;color:#64748b" x-text="formatDateTime(s.connected_at)"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+          <div x-show="(statsSessions.total||0) > 50" style="display:flex;align-items:center;justify-content:space-between;margin-top:16px">
+            <button class="btn btn-gray btn-sm" @click="sessionsPage=Math.max(0,sessionsPage-1); loadSessions()" :disabled="sessionsPage===0">← Назад</button>
+            <span style="font-size:13px;color:#64748b">Стр. <span x-text="sessionsPage+1"></span> из <span x-text="Math.ceil((statsSessions.total||1)/50)"></span></span>
+            <button class="btn btn-gray btn-sm" @click="sessionsPage++; loadSessions()" :disabled="(sessionsPage+1)*50 >= (statsSessions.total||0)">Вперёд →</button>
+          </div>
+        </div>
+      </div>
+
     </div>
 
     <!-- Servers -->
@@ -1681,11 +1844,19 @@ function app() {
     page: 'dashboard',
     loading: false,
     statsRange: '24h',
+    statsTab: 'overview',
     statsSummary: {},
     statsTimeseries: { labels:[], rx:[], tx:[], online:[] },
     byServer: [],
     topClients: [],
     byOrg: [],
+    statsByProtocol: [],
+    onlineClients: [],
+    statsSessions: { items: [], total: 0 },
+    sessionsPage: 0,
+    sessionsServerFilter: '',
+    onlineCountdown: 10,
+    _onlineTimer: null,
     pinnedCharts: JSON.parse(localStorage.getItem('cvpn_pinned') || '[]'),
     loginError: '',
     formError: '',
@@ -1857,7 +2028,8 @@ function app() {
       if (p === 'logs') { this.loadLogs(); this.startLogsRefresh(); }
       else { this.stopLogsRefresh(); }
       if (p === 'audit') this.loadAudit();
-      if (p === 'stats') this.loadStats();
+      if (p === 'stats') { this.statsTab = 'overview'; this.loadStats(); }
+      else { this._stopOnlineRefresh(); }
       if (p === 'dashboard' && this.pinnedCharts.length) this.loadStats(true);
     },
 
@@ -2531,16 +2703,43 @@ function app() {
     // ── Статистика ──
     async loadStats(forDashboard = false) {
       const r = '?range=' + this.statsRange;
-      // Каждый запрос независимо — падение одного не обнуляет остальные
       try { this.statsSummary = await this.api('GET', '/stats/summary') || {}; } catch(e) { console.warn('summary', e); }
       try { this.statsTimeseries = await this.api('GET', '/stats/timeseries' + r) || { labels:[], rx:[], tx:[], online:[] }; } catch(e) { console.warn('timeseries', e); }
       try { this.byServer = await this.api('GET', '/stats/by-server' + r) || []; } catch(e) { console.warn('by-server', e); }
       try { this.topClients = await this.api('GET', '/stats/top-clients' + r) || []; } catch(e) { console.warn('top', e); }
       try { this.byOrg = await this.api('GET', '/stats/by-org' + r) || []; } catch(e) { console.warn('by-org', e); }
+      try { this.statsByProtocol = await this.api('GET', '/stats/by-protocol' + r) || []; } catch(e) { console.warn('by-protocol', e); }
       this.$nextTick(() => {
         if (forDashboard || this.page === 'dashboard') this.renderDashCharts();
         if (this.page === 'stats') this.renderStatsCharts();
       });
+    },
+
+    async loadOnlineClients(manual = false) {
+      try { this.onlineClients = await this.api('GET', '/stats/online') || []; } catch(e) { console.warn('online', e); }
+      if (manual) { this.onlineCountdown = 10; return; }
+      this._stopOnlineRefresh();
+      this.onlineCountdown = 10;
+      this._onlineTimer = setInterval(() => {
+        if (this.page !== 'stats' || this.statsTab !== 'online') { this._stopOnlineRefresh(); return; }
+        this.onlineCountdown--;
+        if (this.onlineCountdown <= 0) {
+          this.onlineCountdown = 10;
+          this.api('GET', '/stats/online').then(d => { this.onlineClients = d || []; }).catch(() => {});
+        }
+      }, 1000);
+    },
+
+    _stopOnlineRefresh() {
+      if (this._onlineTimer) { clearInterval(this._onlineTimer); this._onlineTimer = null; }
+    },
+
+    async loadSessions() {
+      const sid = this.sessionsServerFilter ? '&server_id=' + this.sessionsServerFilter : '';
+      const off = '&offset=' + (this.sessionsPage * 50);
+      try {
+        this.statsSessions = await this.api('GET', '/stats/sessions?limit=50' + off + sid) || { items:[], total:0 };
+      } catch(e) { console.warn('sessions', e); }
     },
 
     _palette: ['#6366f1','#10b981','#f59e0b','#ef4444','#0ea5e9','#8b5cf6','#ec4899','#14b8a6'],
@@ -2586,8 +2785,10 @@ function app() {
         { label:'Отдано', data: ts.tx, borderColor:'#10b981', backgroundColor:'rgba(16,185,129,.1)', fill:true, tension:.3, pointRadius:0, borderWidth:2 },
       ]);
       this._onlineChart('chart-online', ts);
-      this._barChart('chart-servers', this.byServer.map(s=>s.name), this.byServer.map(s=>s.total));
-      this._barChart('chart-orgs', this.byOrg.map(o=>o.name), this.byOrg.map(o=>o.total));
+      if (this.statsByProtocol.some(p => p.total > 0))
+        this._barChart('chart-protocols', this.statsByProtocol.map(p=>p.label), this.statsByProtocol.map(p=>p.total));
+      if (this.byServer.length) this._barChart('chart-servers', this.byServer.map(s=>s.name), this.byServer.map(s=>s.total));
+      if (this.byOrg.length) this._barChart('chart-orgs', this.byOrg.map(o=>o.name), this.byOrg.map(o=>o.total));
     },
 
     _onlineChart(id, ts) {
@@ -2613,6 +2814,8 @@ function app() {
       if (this.isPinned('online')) this._onlineChart('dash-online', ts);
       if (this.isPinned('servers')) this._barChart('dash-servers', this.byServer.map(s=>s.name), this.byServer.map(s=>s.total));
       if (this.isPinned('orgs')) this._barChart('dash-orgs', this.byOrg.map(o=>o.name), this.byOrg.map(o=>o.total));
+      if (this.isPinned('protocols') && this.statsByProtocol.some(p=>p.total>0))
+        this._barChart('dash-protocols', this.statsByProtocol.map(p=>p.label), this.statsByProtocol.map(p=>p.total));
     },
 
     isPinned(id) { return this.pinnedCharts.includes(id); },
@@ -2641,6 +2844,25 @@ function app() {
       if (n < 1048576) return (n/1024).toFixed(0) + 'KB';
       if (n < 1073741824) return (n/1048576).toFixed(1) + 'MB';
       return (n/1073741824).toFixed(2) + 'GB';
+    },
+
+    fmtDuration(sec) {
+      sec = sec || 0;
+      if (sec < 60) return sec + 'с';
+      if (sec < 3600) return Math.floor(sec/60) + 'м ' + (sec%60) + 'с';
+      const h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60);
+      return h + 'ч ' + (m > 0 ? m + 'м' : '');
+    },
+
+    protoLabel(p) {
+      return { openvpn:'OpenVPN', wireguard:'WireGuard', amneziawg:'AmneziaWG', amneziawg_legacy:'AWG legacy', ikev2:'IKEv2' }[p] || p;
+    },
+
+    protoBadgeStyle(p) {
+      const m = { openvpn:'background:#ede9fe;color:#6d28d9', wireguard:'background:#d1fae5;color:#065f46',
+        amneziawg:'background:#fef3c7;color:#92400e', amneziawg_legacy:'background:#ffedd5;color:#9a3412',
+        ikev2:'background:#dbeafe;color:#1e40af' };
+      return (m[p] || 'background:#f1f5f9;color:#475569') + ';padding:2px 8px;border-radius:50px;font-size:11px;font-weight:600';
     },
 
     // ── Бэкап ──
