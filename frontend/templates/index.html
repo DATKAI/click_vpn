@@ -1158,7 +1158,8 @@
           <input x-model="serverForm.netmask" class="input" placeholder="255.255.255.0"/>
         </div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <!-- Порт/протокол (для IKEv2 порт фиксирован) -->
+      <div x-show="serverForm.kind!=='ikev2'" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div>
           <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Порт</label>
           <input x-model="serverForm.port" type="number" class="input" :placeholder="serverForm.kind==='wireguard'?'51820':'1194'"/>
@@ -1167,6 +1168,9 @@
           <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Протокол</label>
           <select x-model="serverForm.protocol" class="input"><option value="udp">UDP</option><option value="tcp">TCP</option></select>
         </div>
+      </div>
+      <div x-show="serverForm.kind==='ikev2'" class="alert alert-warning" style="font-size:12px">
+        IKEv2 использует фиксированные порты <b>UDP 500</b> и <b>UDP 4500</b> — пробросьте оба в роутере. Менять порт нельзя (требование протокола и нативных клиентов).
       </div>
       <div>
         <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">DNS серверы</label>
