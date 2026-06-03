@@ -567,7 +567,10 @@
                   </div>
                 </td>
                 <td style="font-size:13px;color:#475569" x-text="orgName(u.org_id)"></td>
-                <td style="font-size:13px" x-text="serverName(u.server_id)"></td>
+                <td style="font-size:13px">
+                  <div x-text="serverName(u.server_id)"></div>
+                  <span :style="kindColor(userKind(u))" style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:50px" x-text="kindLabel(userKind(u))"></span>
+                </td>
                 <td>
                   <span :class="u.is_active ? 'badge badge-green' : 'badge badge-gray'">
                     <span class="badge-dot"></span>
@@ -581,9 +584,9 @@
                     <!-- Скачать (только включённые, не архив) -->
                     <button x-show="!u.archived"
                        @click="downloadOvpn(u.id, u.username)"
-                       class="btn btn-primary btn-sm" title="Скачать .ovpn">
+                       class="btn btn-primary btn-sm" title="Скачать профиль">
                       <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-                      .ovpn
+                      <span x-text="profileLabel(u)"></span>
                     </button>
                     <button x-show="!u.archived && u.email"
                        @click="sendUserEmail(u.id, u.email)"
@@ -1105,9 +1108,14 @@
 </div>
 
 <!-- Modal: Create Server -->
-<div x-show="showCreateServer" x-cloak class="modal-backdrop" @click.self="showCreateServer=false">
-  <div class="modal fade-in">
-    <h3 style="font-size:18px;font-weight:700;margin:0 0 20px">Новый сервер</h3>
+<div x-show="showCreateServer" x-cloak class="modal-backdrop">
+  <div class="modal fade-in" style="max-width:600px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 20px">
+      <h3 style="font-size:18px;font-weight:700;margin:0">Новый сервер</h3>
+      <button @click="showCreateServer=false;formError=''" style="background:none;border:none;cursor:pointer;color:#94a3b8;padding:4px" title="Закрыть">
+        <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
     <div style="display:flex;flex-direction:column;gap:14px">
       <!-- Тип сервера -->
       <div>
@@ -1273,9 +1281,14 @@ petrov,Петров Пётр,petrov@co.ru,ЗПК,730,secret</code>
 </div>
 
 <!-- Modal: Create User -->
-<div x-show="showCreateUser" x-cloak class="modal-backdrop" @click.self="showCreateUser=false">
-  <div class="modal fade-in">
-    <h3 style="font-size:18px;font-weight:700;margin:0 0 20px">Новый клиент</h3>
+<div x-show="showCreateUser" x-cloak class="modal-backdrop">
+  <div class="modal fade-in" style="max-width:600px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 20px">
+      <h3 style="font-size:18px;font-weight:700;margin:0">Новый клиент</h3>
+      <button @click="showCreateUser=false;formError=''" style="background:none;border:none;cursor:pointer;color:#94a3b8;padding:4px" title="Закрыть">
+        <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
     <div style="display:flex;flex-direction:column;gap:14px">
       <div>
         <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">ФИО</label>
@@ -1306,7 +1319,7 @@ petrov,Петров Пётр,petrov@co.ru,ЗПК,730,secret</code>
         <select x-model="userForm.server_id" class="input">
           <option value="">— выберите сервер —</option>
           <template x-for="s in availableServers" :key="s.id">
-            <option :value="s.id" x-text="s.name"></option>
+            <option :value="s.id" x-text="s.name + ' · ' + kindLabel(s.kind)"></option>
           </template>
         </select>
       </div>
@@ -1315,6 +1328,7 @@ petrov,Петров Пётр,petrov@co.ru,ЗПК,730,secret</code>
       <div x-show="userForm.org_id && availableServers.length === 1" style="padding:10px 14px;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:10px;display:flex;align-items:center;gap:8px">
         <svg width="16" height="16" fill="none" stroke="#16a34a" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M12 5l7 7-7 7"/></svg>
         <span style="font-size:13px;color:#166534">Сервер: <strong x-text="availableServers[0]?.name"></strong></span>
+        <span :style="kindColor(availableServers[0]?.kind)" style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:50px" x-text="kindLabel(availableServers[0]?.kind)"></span>
       </div>
 
       <!-- Организация без серверов -->
@@ -1508,10 +1522,17 @@ petrov,Петров Пётр,petrov@co.ru,ЗПК,730,secret</code>
 </div>
 
 <!-- Modal: Edit User -->
-<div x-show="showEditUser" x-cloak class="modal-backdrop" @click.self="showEditUser=false">
-  <div class="modal fade-in">
-    <h3 style="font-size:18px;font-weight:700;margin:0 0 4px">Редактировать клиента</h3>
-    <p style="color:#94a3b8;font-size:13px;margin:0 0 20px" x-text="editUserForm.username"></p>
+<div x-show="showEditUser" x-cloak class="modal-backdrop">
+  <div class="modal fade-in" style="max-width:600px">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin:0 0 20px">
+      <div>
+        <h3 style="font-size:18px;font-weight:700;margin:0 0 4px">Редактировать клиента</h3>
+        <p style="color:#94a3b8;font-size:13px;margin:0" x-text="editUserForm.username"></p>
+      </div>
+      <button @click="showEditUser=false;formError=''" style="background:none;border:none;cursor:pointer;color:#94a3b8;padding:4px" title="Закрыть">
+        <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
     <div style="display:flex;flex-direction:column;gap:14px">
       <div>
         <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">ФИО</label>
@@ -2144,6 +2165,20 @@ function app() {
       return s?.kind || '';
     },
     isWgKind(k) { return k==='wireguard'||k==='amneziawg'||k==='amneziawg_legacy'; },
+    kindLabel(k) { return ({openvpn:'OpenVPN',wireguard:'WireGuard',amneziawg:'AmneziaWG 2',amneziawg_legacy:'AmneziaWG legacy',ikev2:'IKEv2'})[k] || 'OpenVPN'; },
+    kindColor(k) {
+      if (k==='ikev2') return 'background:#fce7f3;color:#be185d';
+      if (k && k.startsWith('amnezia')) return 'background:#fef9c3;color:#a16207';
+      if (k==='wireguard') return 'background:#dcfce7;color:#15803d';
+      return 'background:#dbeafe;color:#1d4ed8';
+    },
+    userKind(u) { return this.servers.find(s => s.id === u.server_id)?.kind || 'openvpn'; },
+    profileLabel(u) {
+      const k = this.userKind(u);
+      if (k === 'ikev2') return 'профиль';
+      if (k !== 'openvpn') return '.conf';
+      return '.ovpn';
+    },
 
     filterServersByOrg() {
       const orgId = +this.userForm.org_id;
