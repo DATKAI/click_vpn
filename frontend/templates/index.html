@@ -593,6 +593,53 @@
           </span>
         </div>
 
+        <!-- Чёрный список fail2ban -->
+        <div class="card" style="margin-bottom:16px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <h3 style="font-size:15px;font-weight:700;margin:0">Чёрный список (fail2ban)</h3>
+              <span x-show="bans.installed && bans.jail_active" class="badge badge-green badge-dot">активен</span>
+              <span x-show="bans.installed && !bans.jail_active" class="badge badge-yellow">jail не настроен</span>
+              <span x-show="!bans.installed" class="badge badge-gray">не установлен</span>
+            </div>
+            <button @click="loadBans()" class="btn btn-gray btn-sm">↺ Обновить</button>
+          </div>
+
+          <!-- Не установлен -->
+          <div x-show="!bans.installed" class="alert alert-warning" style="font-size:13px">
+            <span>fail2ban не установлен. Запустите на сервере: <code>bash /opt/click-vpn/install-fail2ban.sh</code></span>
+          </div>
+
+          <!-- Установлен -->
+          <div x-show="bans.installed">
+            <!-- Ручной бан -->
+            <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+              <input x-model="banInput" type="text" class="input" placeholder="IP-адрес для бана, напр. 1.2.3.4" style="max-width:280px;font-family:monospace"/>
+              <button @click="banManual()" class="btn btn-danger btn-sm" :disabled="!banInput.trim()">Забанить вручную</button>
+            </div>
+
+            <!-- Сводка -->
+            <div style="display:flex;gap:18px;margin-bottom:14px;flex-wrap:wrap;font-size:13px;color:#64748b">
+              <span>В бане сейчас: <b style="color:#dc2626" x-text="bans.currently_banned||0"></b></span>
+              <span>Всего банов: <b x-text="bans.total_banned||0"></b></span>
+              <span>Текущих провалов: <b x-text="bans.currently_failed||0"></b></span>
+            </div>
+
+            <!-- Список забаненных -->
+            <template x-if="(bans.banned_ips||[]).length===0">
+              <p style="color:#94a3b8;font-size:13px;margin:0">Забаненных IP нет</p>
+            </template>
+            <div x-show="(bans.banned_ips||[]).length>0" style="display:flex;flex-direction:column;gap:6px">
+              <template x-for="ip in bans.banned_ips" :key="ip">
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px">
+                  <span style="font-family:monospace;font-size:13px;font-weight:600;color:#991b1b" x-text="ip"></span>
+                  <button @click="unbanIp(ip)" class="btn btn-gray btn-sm">Разбанить</button>
+                </div>
+              </template>
+            </div>
+          </div>
+        </div>
+
         <div class="card">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
             <div>
@@ -619,6 +666,7 @@
                 <th style="text-align:right">Попыток</th>
                 <th>Впервые</th>
                 <th>Последняя</th>
+                <th style="text-align:right">Действие</th>
               </tr></thead>
               <tbody>
                 <template x-for="a in statsAttempts.items" :key="a.id">
@@ -631,6 +679,10 @@
                     </td>
                     <td style="font-size:12px;color:#64748b" x-text="formatDateTime(a.first_seen)"></td>
                     <td style="font-size:12px;color:#64748b" x-text="formatDateTime(a.last_seen)"></td>
+                    <td style="text-align:right">
+                      <button x-show="!(bans.banned_ips||[]).includes(a.ip)" @click="banIp(a.ip)" class="btn btn-danger btn-sm">Забанить</button>
+                      <span x-show="(bans.banned_ips||[]).includes(a.ip)" class="badge badge-red">в бане</span>
+                    </td>
                   </tr>
                 </template>
               </tbody>
@@ -1916,6 +1968,8 @@ function app() {
     onlineClients: [],
     statsSessions: { items: [], total: 0 },
     statsAttempts: { items: [], unique_ips: 0, total_attempts: 0 },
+    bans: { installed: false, jail_active: false, banned_ips: [] },
+    banInput: '',
     sessionsPage: 0,
     sessionsServerFilter: '',
     onlineCountdown: 10,
@@ -2810,6 +2864,7 @@ function app() {
       try {
         this.statsAttempts = await this.api('GET', '/stats/attempts?limit=200') || { items:[], unique_ips:0, total_attempts:0 };
       } catch(e) { console.warn('attempts', e); }
+      this.loadBans();
     },
 
     async clearAttempts() {
@@ -2817,6 +2872,37 @@ function app() {
       try {
         await this.api('DELETE', '/stats/attempts');
         this.loadAttempts();
+      } catch(e) { alert(e.message); }
+    },
+
+    async loadBans() {
+      try {
+        this.bans = await this.api('GET', '/stats/bans') || { installed:false, jail_active:false, banned_ips:[] };
+      } catch(e) { console.warn('bans', e); }
+    },
+
+    async banIp(ip) {
+      if (!confirm('Забанить IP ' + ip + '?')) return;
+      try {
+        await this.api('POST', '/stats/ban', { ip });
+        await this.loadBans();
+      } catch(e) { alert(e.message); }
+    },
+
+    async banManual() {
+      const ip = this.banInput.trim();
+      if (!ip) return;
+      try {
+        await this.api('POST', '/stats/ban', { ip });
+        this.banInput = '';
+        await this.loadBans();
+      } catch(e) { alert(e.message); }
+    },
+
+    async unbanIp(ip) {
+      try {
+        await this.api('POST', '/stats/unban', { ip });
+        await this.loadBans();
       } catch(e) { alert(e.message); }
     },
 

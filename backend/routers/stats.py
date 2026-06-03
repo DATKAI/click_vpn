@@ -2,7 +2,8 @@ import subprocess
 import re
 import time
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -10,8 +11,13 @@ from database import get_db
 from models import (AdminUser, TrafficSample, ConnectionLog, VPNServer, VPNUser,
                     Organization, ConnectionAttempt)
 from auth import get_current_user
+from services import audit
 
 router = APIRouter(prefix="/api/stats", tags=["stats"])
+
+
+class IPBody(BaseModel):
+    ip: str
 
 RANGES = {
     "24h": (timedelta(hours=24), timedelta(hours=1),  "%H:00"),
@@ -477,3 +483,48 @@ def clear_attempts(db: Session = Depends(get_db), _: AdminUser = Depends(get_cur
     db.query(ConnectionAttempt).delete()
     db.commit()
     return {"status": "cleared"}
+
+
+# ── fail2ban: чёрный список ───────────────────────────────────────────────────
+
+@router.get("/bans")
+def list_bans(_: AdminUser = Depends(get_current_user)):
+    """Статус fail2ban + список забаненных IP."""
+    from services import fail2ban
+    return fail2ban.status()
+
+
+@router.post("/ban")
+def ban_ip(
+    data: IPBody,
+    db: Session = Depends(get_db),
+    admin: AdminUser = Depends(get_current_user),
+):
+    """Вручную забанить IP через fail2ban."""
+    from services import fail2ban
+    ip = (data.ip or "").strip()
+    if not ip:
+        raise HTTPException(400, "IP не указан")
+    ok, msg = fail2ban.ban(ip)
+    if not ok:
+        raise HTTPException(400, msg)
+    audit.log(db, admin.username, "security.ban", ip)
+    return {"status": "ok", "message": msg}
+
+
+@router.post("/unban")
+def unban_ip(
+    data: IPBody,
+    db: Session = Depends(get_db),
+    admin: AdminUser = Depends(get_current_user),
+):
+    """Снять бан с IP."""
+    from services import fail2ban
+    ip = (data.ip or "").strip()
+    if not ip:
+        raise HTTPException(400, "IP не указан")
+    ok, msg = fail2ban.unban(ip)
+    if not ok:
+        raise HTTPException(400, msg)
+    audit.log(db, admin.username, "security.unban", ip)
+    return {"status": "ok", "message": msg}
