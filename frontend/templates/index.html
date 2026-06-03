@@ -375,6 +375,14 @@
           <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
           Сессии
         </button>
+        <button class="stab" :class="{active:statsTab==='analytics'}" @click="statsTab='analytics'; loadAnalytics()">
+          <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"/></svg>
+          Аналитика
+        </button>
+        <button class="stab" :class="{active:statsTab==='system'}" @click="statsTab='system'; loadSysHealth()">
+          <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/></svg>
+          Система
+        </button>
       </div>
 
       <!-- ═══ ТАБ: ОБЗОР ═══ -->
@@ -578,6 +586,180 @@
             <button class="btn btn-gray btn-sm" @click="sessionsPage=Math.max(0,sessionsPage-1); loadSessions()" :disabled="sessionsPage===0">← Назад</button>
             <span style="font-size:13px;color:#64748b">Стр. <span x-text="sessionsPage+1"></span> из <span x-text="Math.ceil((statsSessions.total||1)/50)"></span></span>
             <button class="btn btn-gray btn-sm" @click="sessionsPage++; loadSessions()" :disabled="(sessionsPage+1)*50 >= (statsSessions.total||0)">Вперёд →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ ТАБ: АНАЛИТИКА ═══ -->
+      <div x-show="statsTab==='analytics'">
+        <!-- Длительность сессий -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px">
+          <div class="stat-card">
+            <div style="font-size:22px;font-weight:800;color:#4f46e5" x-text="fmtDur(sessionStats.avg_sec)"></div>
+            <div style="color:#94a3b8;font-size:12px;margin-top:4px">Средняя длительность</div>
+          </div>
+          <div class="stat-card">
+            <div style="font-size:22px;font-weight:800;color:#10b981" x-text="fmtDur(sessionStats.median_sec)"></div>
+            <div style="color:#94a3b8;font-size:12px;margin-top:4px">Медиана</div>
+          </div>
+          <div class="stat-card">
+            <div style="font-size:22px;font-weight:800;color:#f59e0b" x-text="fmtDur(sessionStats.max_sec)"></div>
+            <div style="color:#94a3b8;font-size:12px;margin-top:4px">Максимум</div>
+          </div>
+          <div class="stat-card">
+            <div style="font-size:22px;font-weight:800;color:#0ea5e9" x-text="sessionStats.total_sessions || 0"></div>
+            <div style="color:#94a3b8;font-size:12px;margin-top:4px">Сессий за период</div>
+          </div>
+        </div>
+
+        <!-- Распределение длительности -->
+        <div class="card" style="margin-bottom:18px">
+          <h3 style="font-size:15px;font-weight:700;margin:0 0 16px">Распределение длительности сессий</h3>
+          <template x-if="(sessionStats.distribution||[]).length===0 || sessionStats.total_sessions===0">
+            <p style="color:#94a3b8;font-size:13px;margin:0">Нет завершённых сессий за период</p>
+          </template>
+          <div x-show="sessionStats.total_sessions>0" style="display:flex;flex-direction:column;gap:10px">
+            <template x-for="b in sessionStats.distribution" :key="b.label">
+              <div style="display:flex;align-items:center;gap:12px">
+                <span style="width:90px;font-size:13px;color:#64748b;flex-shrink:0" x-text="b.label"></span>
+                <div style="flex:1;background:#f1f5f9;border-radius:50px;height:22px;overflow:hidden">
+                  <div style="height:100%;background:linear-gradient(90deg,#6366f1,#4f46e5);border-radius:50px;transition:width .4s"
+                       :style="'width:'+ (sessionStats.total_sessions ? Math.round(100*b.count/sessionStats.total_sessions) : 0) +'%'"></div>
+                </div>
+                <span style="width:46px;text-align:right;font-size:13px;font-weight:600;color:#334155" x-text="b.count"></span>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- Тепловая карта активности -->
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+            <h3 style="font-size:15px;font-weight:700;margin:0">Пиковые часы (начало сессий)</h3>
+            <span x-show="heatmap.busiest_hour!==null && heatmap.total>0" style="font-size:12px;color:#64748b">
+              Самый загруженный час: <b x-text="(heatmap.busiest_hour||0)+':00'"></b>
+            </span>
+          </div>
+          <template x-if="!heatmap.total">
+            <p style="color:#94a3b8;font-size:13px;margin:0">Недостаточно данных</p>
+          </template>
+          <div x-show="heatmap.total>0" style="overflow-x:auto">
+            <table style="border-collapse:separate;border-spacing:2px;font-size:11px">
+              <thead><tr>
+                <th style="width:32px"></th>
+                <template x-for="h in 24" :key="h">
+                  <th style="width:22px;color:#94a3b8;font-weight:600;font-size:9px;text-align:center" x-text="(h-1)"></th>
+                </template>
+              </tr></thead>
+              <tbody>
+                <template x-for="(row,di) in (heatmap.grid||[])" :key="di">
+                  <tr>
+                    <td style="color:#64748b;font-weight:600;padding-right:6px;white-space:nowrap" x-text="['Пн','Вт','Ср','Чт','Пт','Сб','Вс'][di]"></td>
+                    <template x-for="(v,hi) in row" :key="hi">
+                      <td :title="['Пн','Вт','Ср','Чт','Пт','Сб','Вс'][di]+' '+hi+':00 — '+v+' сессий'"
+                          :style="'width:22px;height:22px;border-radius:4px;background:'+heatColor(v)"></td>
+                    </template>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:12px;font-size:11px;color:#94a3b8">
+              <span>меньше</span>
+              <div style="width:16px;height:12px;border-radius:3px;background:#eef2ff"></div>
+              <div style="width:16px;height:12px;border-radius:3px;background:#c7d2fe"></div>
+              <div style="width:16px;height:12px;border-radius:3px;background:#818cf8"></div>
+              <div style="width:16px;height:12px;border-radius:3px;background:#4f46e5"></div>
+              <div style="width:16px;height:12px;border-radius:3px;background:#3730a3"></div>
+              <span>больше</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ ТАБ: СИСТЕМА ═══ -->
+      <div x-show="statsTab==='system'">
+        <!-- Метрики сервера -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:18px">
+          <!-- CPU -->
+          <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">
+              <span style="font-size:13px;font-weight:600;color:#475569">CPU</span>
+              <span style="font-size:20px;font-weight:800;color:#4f46e5" x-text="(sysHealth.cpu_percent ?? '—')+(sysHealth.cpu_percent!=null?'%':'')"></span>
+            </div>
+            <div style="background:#f1f5f9;border-radius:50px;height:8px;overflow:hidden">
+              <div style="height:100%;border-radius:50px;transition:width .4s" :style="'width:'+(sysHealth.cpu_percent||0)+'%;background:'+barColor(sysHealth.cpu_percent)"></div>
+            </div>
+            <div style="font-size:11px;color:#94a3b8;margin-top:6px">
+              <span x-text="sysHealth.cpu_count||1"></span> ядер · load <span x-text="(sysHealth.loadavg||[0])[0]?.toFixed(2)"></span>
+            </div>
+          </div>
+          <!-- RAM -->
+          <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">
+              <span style="font-size:13px;font-weight:600;color:#475569">Память</span>
+              <span style="font-size:20px;font-weight:800;color:#10b981" x-text="(sysHealth.mem?.percent ?? 0)+'%'"></span>
+            </div>
+            <div style="background:#f1f5f9;border-radius:50px;height:8px;overflow:hidden">
+              <div style="height:100%;border-radius:50px;transition:width .4s" :style="'width:'+(sysHealth.mem?.percent||0)+'%;background:'+barColor(sysHealth.mem?.percent)"></div>
+            </div>
+            <div style="font-size:11px;color:#94a3b8;margin-top:6px">
+              <span x-text="fmtBytes(sysHealth.mem?.used||0)"></span> из <span x-text="fmtBytes(sysHealth.mem?.total||0)"></span>
+            </div>
+          </div>
+          <!-- Disk -->
+          <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">
+              <span style="font-size:13px;font-weight:600;color:#475569">Диск</span>
+              <span style="font-size:20px;font-weight:800;color:#f59e0b" x-text="(sysHealth.disk?.percent ?? 0)+'%'"></span>
+            </div>
+            <div style="background:#f1f5f9;border-radius:50px;height:8px;overflow:hidden">
+              <div style="height:100%;border-radius:50px;transition:width .4s" :style="'width:'+(sysHealth.disk?.percent||0)+'%;background:'+barColor(sysHealth.disk?.percent)"></div>
+            </div>
+            <div style="font-size:11px;color:#94a3b8;margin-top:6px">
+              <span x-text="fmtBytes(sysHealth.disk?.free||0)"></span> свободно из <span x-text="fmtBytes(sysHealth.disk?.total||0)"></span>
+            </div>
+          </div>
+          <!-- Uptime / БД -->
+          <div class="card">
+            <div style="font-size:13px;font-weight:600;color:#475569;margin-bottom:8px">Сервер</div>
+            <div style="font-size:13px;color:#334155;line-height:1.7">
+              <div>Аптайм: <b x-text="fmtUptime(sysHealth.uptime_sec)"></b></div>
+              <div>База данных: <b x-text="fmtBytes(sysHealth.db_size||0)"></b></div>
+              <div>Данные: <b x-text="fmtBytes(sysHealth.data_dir_size||0)"></b></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Статус серверов -->
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+            <h3 style="font-size:15px;font-weight:700;margin:0">Статус VPN-серверов</h3>
+            <button @click="loadSysHealth()" class="btn btn-gray btn-sm">↺ Обновить</button>
+          </div>
+          <template x-if="(sysHealth.servers||[]).length===0">
+            <p style="color:#94a3b8;font-size:13px;margin:0">Серверов нет</p>
+          </template>
+          <div x-show="(sysHealth.servers||[]).length>0" style="overflow-x:auto">
+            <table class="table">
+              <thead><tr>
+                <th>Сервер</th><th>Протокол</th><th>Порт</th><th>Статус</th><th style="text-align:right">Онлайн</th>
+              </tr></thead>
+              <tbody>
+                <template x-for="s in sysHealth.servers" :key="s.id">
+                  <tr>
+                    <td style="font-weight:600" x-text="s.name"></td>
+                    <td style="font-size:13px;color:#64748b" x-text="s.protocol"></td>
+                    <td style="font-family:monospace;font-size:13px" x-text="s.port"></td>
+                    <td>
+                      <span class="badge badge-dot" :class="s.running?'badge-green':'badge-gray'" x-text="s.running?'работает':'остановлен'"></span>
+                    </td>
+                    <td style="text-align:right">
+                      <span class="badge" :class="s.online>0?'badge-green':'badge-gray'" x-text="s.online"></span>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -1992,6 +2174,9 @@ function app() {
     bans: { installed: false, jail_active: false, banned_ips: [] },
     banInput: '',
     securityAlert: 0,
+    sessionStats: { distribution: [], total_sessions: 0, avg_sec: 0, median_sec: 0, max_sec: 0 },
+    heatmap: { grid: [], total: 0, busiest_hour: null },
+    sysHealth: { servers: [], mem: {}, disk: {} },
     sessionsPage: 0,
     sessionsServerFilter: '',
     onlineCountdown: 10,
@@ -2881,6 +3066,47 @@ function app() {
       try {
         this.statsSessions = await this.api('GET', '/stats/sessions?limit=50' + off + sid) || { items:[], total:0 };
       } catch(e) { console.warn('sessions', e); }
+    },
+
+    async loadAnalytics() {
+      const r = '?range=' + this.statsRange;
+      try { this.sessionStats = await this.api('GET', '/stats/session-stats' + r) || this.sessionStats; } catch(e) { console.warn('session-stats', e); }
+      try { this.heatmap = await this.api('GET', '/stats/heatmap?range=30d') || this.heatmap; } catch(e) { console.warn('heatmap', e); }
+    },
+
+    async loadSysHealth() {
+      try { this.sysHealth = await this.api('GET', '/stats/system-health') || this.sysHealth; } catch(e) { console.warn('system-health', e); }
+    },
+
+    // Длительность: 4530с → "1ч 15м"
+    fmtDur(sec) {
+      sec = Math.round(sec || 0);
+      if (sec < 60) return sec + 'с';
+      const m = Math.floor(sec / 60), h = Math.floor(m / 60), d = Math.floor(h / 24);
+      if (d > 0) return d + 'д ' + (h % 24) + 'ч';
+      if (h > 0) return h + 'ч ' + (m % 60) + 'м';
+      return m + 'м';
+    },
+    fmtUptime(sec) {
+      if (sec == null) return '—';
+      const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600), m = Math.floor((sec % 3600) / 60);
+      if (d > 0) return d + 'д ' + h + 'ч';
+      if (h > 0) return h + 'ч ' + m + 'м';
+      return m + 'м';
+    },
+    // Цвет ячейки теплокарты по интенсивности относительно пика
+    heatColor(v) {
+      if (!v) return '#f8fafc';
+      const peak = Math.max(1, ...(this.heatmap.hour_totals || [1]));
+      const t = Math.min(1, v / (peak * 0.6));   // 0.6 чтобы не всё бледное
+      const stops = ['#eef2ff','#c7d2fe','#818cf8','#4f46e5','#3730a3'];
+      return stops[Math.min(stops.length - 1, Math.floor(t * stops.length))];
+    },
+    barColor(pct) {
+      pct = pct || 0;
+      if (pct >= 90) return '#ef4444';
+      if (pct >= 75) return '#f59e0b';
+      return '#10b981';
     },
 
     async loadSecurity() {

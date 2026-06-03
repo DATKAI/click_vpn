@@ -528,3 +528,169 @@ def unban_ip(
         raise HTTPException(400, msg)
     audit.log(db, admin.username, "security.unban", ip)
     return {"status": "ok", "message": msg}
+
+
+# ── Здоровье системы + статус серверов ────────────────────────────────────────
+
+def _online_counts(db: Session) -> dict:
+    """{server_id: число клиентов онлайн} по всем протоколам."""
+    counts = {}
+    for s in db.query(VPNServer).filter(VPNServer.kind == "openvpn").all():
+        counts[s.id] = len(_status(s.id))
+    try:
+        for c in _wg_online(db):
+            counts[c["server_id"]] = counts.get(c["server_id"], 0) + 1
+    except Exception:
+        pass
+    try:
+        for c in _ikev2_online(db):
+            counts[c["server_id"]] = counts.get(c["server_id"], 0) + 1
+    except Exception:
+        pass
+    return counts
+
+
+def _server_running(s) -> bool:
+    """Запущен ли VPN-сервис данного сервера."""
+    import os as _os
+    from services import ovpn_manager
+    try:
+        if s.kind in ("wireguard", "amneziawg", "amneziawg_legacy"):
+            from services import wireguard
+            return wireguard.is_running(s.id)
+        if s.kind == "ikev2":
+            from services import ikev2
+            return ikev2.is_running()
+        return ovpn_manager.is_running(s.id, _os.getenv("DATA_DIR", "./data"))
+    except Exception:
+        return False
+
+
+@router.get("/system-health")
+def system_health(db: Session = Depends(get_db), _: AdminUser = Depends(get_current_user)):
+    """Метрики сервера (CPU/RAM/диск/uptime) + статус каждого VPN-сервера."""
+    import os as _os
+    from services import syshealth
+    from database import DATABASE_URL
+
+    db_path = None
+    if DATABASE_URL.startswith("sqlite"):
+        db_path = DATABASE_URL.split("///", 1)[-1]
+    data_dir = _os.getenv("DATA_DIR", "./data")
+
+    health = syshealth.collect(db_path=db_path, data_dir=data_dir)
+
+    online = _online_counts(db)
+    servers = []
+    for s in db.query(VPNServer).all():
+        servers.append({
+            "id":       s.id,
+            "name":     s.name,
+            "kind":     s.kind or "openvpn",
+            "protocol": PROTO_LABELS.get(s.kind or "openvpn", s.kind),
+            "port":     s.port,
+            "running":  _server_running(s),
+            "online":   online.get(s.id, 0),
+        })
+    servers.sort(key=lambda x: (not x["running"], x["name"]))
+    health["servers"] = servers
+    return health
+
+
+# ── Аналитика: длительность сессий + пиковые часы ─────────────────────────────
+
+@router.get("/session-stats")
+def session_stats(
+    range_: str = Query("7d", alias="range"),
+    db: Session = Depends(get_db),
+    _: AdminUser = Depends(get_current_user),
+):
+    """Статистика длительности завершённых сессий за период."""
+    span = RANGES.get(range_, RANGES["7d"])[0]
+    start = datetime.utcnow() - span
+
+    rows = (
+        db.query(ConnectionLog.connected_at, ConnectionLog.disconnected_at)
+        .filter(
+            ConnectionLog.connected_at >= start,
+            ConnectionLog.disconnected_at.isnot(None),
+            ConnectionLog.common_name != "UNDEF",
+        )
+        .all()
+    )
+    durs = []
+    for con, dis in rows:
+        if con and dis:
+            d = (dis - con).total_seconds()
+            if d >= 0:
+                durs.append(d)
+
+    # распределение по корзинам длительности
+    bins = [
+        ("< 5 мин",   0,        300),
+        ("5–30 мин",  300,      1800),
+        ("30 мин–2 ч",1800,     7200),
+        ("2–8 ч",     7200,     28800),
+        ("> 8 ч",     28800,    float("inf")),
+    ]
+    dist = []
+    for label, lo, hi in bins:
+        dist.append({"label": label, "count": sum(1 for d in durs if lo <= d < hi)})
+
+    durs_sorted = sorted(durs)
+    n = len(durs_sorted)
+    median = durs_sorted[n // 2] if n else 0
+    avg = (sum(durs_sorted) / n) if n else 0
+
+    # активные (не закрытые) сессии для контекста
+    active = (
+        db.query(func.count(ConnectionLog.id))
+        .filter(ConnectionLog.disconnected_at.is_(None),
+                ConnectionLog.common_name != "UNDEF")
+        .scalar() or 0
+    )
+
+    return {
+        "total_sessions": n,
+        "active_sessions": int(active),
+        "avg_sec":    int(avg),
+        "median_sec": int(median),
+        "max_sec":    int(durs_sorted[-1]) if n else 0,
+        "distribution": dist,
+    }
+
+
+@router.get("/heatmap")
+def heatmap(
+    range_: str = Query("30d", alias="range"),
+    db: Session = Depends(get_db),
+    _: AdminUser = Depends(get_current_user),
+):
+    """Тепловая карта активности: день недели (0=Пн) × час (0–23).
+    Значение = число начатых сессий. Для планирования окон обслуживания."""
+    span = RANGES.get(range_, RANGES["30d"])[0]
+    start = datetime.utcnow() - span
+
+    rows = (
+        db.query(ConnectionLog.connected_at)
+        .filter(ConnectionLog.connected_at >= start,
+                ConnectionLog.common_name != "UNDEF")
+        .all()
+    )
+    grid = [[0] * 24 for _ in range(7)]   # [день][час]
+    peak_hour_totals = [0] * 24
+    for (con,) in rows:
+        if not con:
+            continue
+        wd = con.weekday()    # 0=Пн … 6=Вс
+        hr = con.hour
+        grid[wd][hr] += 1
+        peak_hour_totals[hr] += 1
+
+    busiest_hour = max(range(24), key=lambda h: peak_hour_totals[h]) if rows else None
+    return {
+        "grid": grid,
+        "total": len(rows),
+        "busiest_hour": busiest_hour,
+        "hour_totals": peak_hour_totals,
+    }
