@@ -18,10 +18,12 @@ echo ""
 
 info "Установка пакетов..."
 apt-get update -qq
+# charon-systemd — современный демон (strongSwan 6.x) с VICI/swanctl
 apt-get install -y -qq \
-  strongswan strongswan-swanctl \
+  strongswan-swanctl charon-systemd \
   libcharon-extra-plugins libstrongswan-extra-plugins \
-  iptables
+  libcharon-extauth-plugins \
+  iptables || apt-get install -y -qq strongswan strongswan-swanctl libcharon-extra-plugins iptables
 
 # базовая директория swanctl
 mkdir -p /etc/swanctl/conf.d /etc/swanctl/x509 /etc/swanctl/x509ca /etc/swanctl/private
@@ -30,8 +32,17 @@ mkdir -p /etc/swanctl/conf.d /etc/swanctl/x509 /etc/swanctl/x509ca /etc/swanctl/
 echo "net.ipv4.ip_forward=1" > /etc/sysctl.d/99-clickvpn-ikev2.conf
 sysctl -p /etc/sysctl.d/99-clickvpn-ikev2.conf -q || true
 
-systemctl enable strongswan >/dev/null 2>&1 || true
-systemctl restart strongswan || true
+# современный сервис называется strongswan (charon-systemd); запускаем что есть
+for svc in strongswan strongswan-starter; do
+  if systemctl list-unit-files | grep -q "^${svc}.service"; then
+    systemctl enable "$svc" >/dev/null 2>&1 || true
+    systemctl restart "$svc" >/dev/null 2>&1 || true
+    info "Сервис: $svc"
+    break
+  fi
+done
+sleep 2
+swanctl --version >/dev/null 2>&1 && info "swanctl работает" || warn "swanctl не отвечает"
 
 echo ""
 echo "╔══════════════════════════════════════════╗"

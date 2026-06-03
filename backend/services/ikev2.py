@@ -114,10 +114,26 @@ def reload_all():
     subprocess.run(["swanctl", "--load-all"], capture_output=True)
 
 
+def _service_name() -> str:
+    out = subprocess.run(["systemctl", "list-unit-files"], capture_output=True, text=True).stdout
+    for svc in ("strongswan.service", "strongswan-starter.service"):
+        if svc in out:
+            return svc.replace(".service", "")
+    return "strongswan"
+
+
 def start():
-    subprocess.run(["systemctl", "enable", "strongswan"], capture_output=True)
-    subprocess.run(["systemctl", "restart", "strongswan"], capture_output=True)
+    svc = _service_name()
+    subprocess.run(["systemctl", "enable", svc], capture_output=True)
+    subprocess.run(["systemctl", "restart", svc], capture_output=True)
+    import time
+    time.sleep(2)  # ждём VICI-сокет
     reload_all()
+
+
+def is_running() -> bool:
+    r = subprocess.run(["systemctl", "is-active", "--quiet", _service_name()], capture_output=True)
+    return r.returncode == 0
 
 
 def stop_conn(server_id: int):
@@ -125,11 +141,6 @@ def stop_conn(server_id: int):
     if os.path.exists(conf_path):
         os.remove(conf_path)
     reload_all()
-
-
-def is_running() -> bool:
-    r = subprocess.run(["systemctl", "is-active", "--quiet", "strongswan"], capture_output=True)
-    return r.returncode == 0
 
 
 def build_mobileconfig(server_name: str, remote_host: str, remote_id: str,
