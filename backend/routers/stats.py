@@ -259,12 +259,12 @@ def online_now_endpoint(db: Session = Depends(get_db), _: AdminUser = Depends(ge
 
 @router.get("/timeseries")
 def timeseries(
-    range: str = Query("24h"),
+    range_: str = Query("24h", alias="range"),
     server_id: int = Query(None),
     db: Session = Depends(get_db),
     _: AdminUser = Depends(get_current_user),
 ):
-    span, bucket, label_fmt = RANGES.get(range, RANGES["24h"])
+    span, bucket, label_fmt = RANGES.get(range_, RANGES["24h"])
     now = datetime.utcnow()
     start = now - span
 
