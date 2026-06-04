@@ -77,6 +77,53 @@ def build_ovpn_profile(
     return "\n".join(lines) + "\n"
 
 
+def _build_push_lines(dns_servers: str, push_routes: str):
+    """Возвращает (dns_lines, route_lines) для server-конфига OpenVPN."""
+    import ipaddress
+    dns_list = [d.strip() for d in (dns_servers or "").split(",") if d.strip()]
+    dns_lines = "\n".join(f'push "dhcp-option DNS {d}"' for d in dns_list)
+    route_lines = ""
+    if push_routes:
+        for route in push_routes.strip().splitlines():
+            route = route.strip()
+            if not route:
+                continue
+            try:
+                net = ipaddress.ip_network(route, strict=False)
+                route_lines += f'push "route {net.network_address} {net.netmask}"\n'
+            except ValueError:
+                pass
+    return dns_lines, route_lines
+
+
+def rewrite_pushes(config_path: str, dns_servers: str, push_routes: str) -> bool:
+    """Обновляет push route/DNS в существующем server-конфиге без перевыпуска
+    сертификатов. Возвращает True при успехе."""
+    if not config_path or not __import__("os").path.exists(config_path):
+        return False
+    try:
+        with open(config_path) as f:
+            lines = f.readlines()
+    except OSError:
+        return False
+    # выкидываем старые push route / push dhcp-option DNS
+    kept = [ln for ln in lines
+            if not (ln.lstrip().startswith('push "route ')
+                    or ln.lstrip().startswith('push "dhcp-option DNS '))]
+    dns_lines, route_lines = _build_push_lines(dns_servers, push_routes)
+    body = "".join(kept).rstrip("\n") + "\n"
+    if dns_lines:
+        body += dns_lines + "\n"
+    if route_lines:
+        body += route_lines
+    try:
+        with open(config_path, "w") as f:
+            f.write(body)
+        return True
+    except OSError:
+        return False
+
+
 def build_server_config(
     server_id: int,
     ca_cert_pem: str,
@@ -94,20 +141,7 @@ def build_server_config(
     tls_auth_key: str | None = None,
     tls_crypt_key: str | None = None,
 ) -> str:
-    dns_list = [d.strip() for d in dns_servers.split(",") if d.strip()]
-    dns_lines = "\n".join(f'push "dhcp-option DNS {d}"' for d in dns_list)
-
-    route_lines = ""
-    if push_routes:
-        for route in push_routes.strip().splitlines():
-            route = route.strip()
-            if route:
-                try:
-                    import ipaddress
-                    net = ipaddress.ip_network(route, strict=False)
-                    route_lines += f'push "route {net.network_address} {net.netmask}"\n'
-                except ValueError:
-                    pass
+    dns_lines, route_lines = _build_push_lines(dns_servers, push_routes)
 
     status_path = f"{data_dir}/openvpn/status_{server_id}.log"
 

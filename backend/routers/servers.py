@@ -266,12 +266,15 @@ def update_server(
     if not server:
         raise HTTPException(404, "Сервер не найден")
 
+    routes_changed = False
     if data.name is not None:
         server.name = data.name
-    if data.dns_servers is not None:
+    if data.dns_servers is not None and data.dns_servers != server.dns_servers:
         server.dns_servers = data.dns_servers
-    if data.push_routes is not None:
+        routes_changed = True
+    if data.push_routes is not None and data.push_routes != server.push_routes:
         server.push_routes = data.push_routes
+        routes_changed = True
     if data.org_ids is not None:
         server.organizations = db.query(Organization).filter(
             Organization.id.in_(data.org_ids)
@@ -279,6 +282,45 @@ def update_server(
 
     db.commit()
     db.refresh(server)
+
+    # Применяем изменённые маршруты/DNS к рабочему конфигу сервера
+    applied = False
+    if routes_changed:
+        if _is_wg(server.kind):
+            from services import wireguard
+            try:
+                peers = [
+                    {"public_key": u.wg_public_key, "address": u.wg_address}
+                    for u in db.query(VPNUser).filter(
+                        VPNUser.server_id == server.id, VPNUser.is_active == True,
+                        VPNUser.archived == False, VPNUser.wg_public_key.isnot(None),
+                    ).all()
+                ]
+                wireguard.write_and_sync(server, peers)
+                applied = True
+            except Exception:
+                pass
+        elif server.kind == "ikev2":
+            from routers.users import ikev2_resync
+            from services import ikev2
+            try:
+                ikev2_resync(db, server)
+                applied = True
+            except Exception:
+                pass
+        else:
+            # OpenVPN: патчим конфиг и перезапускаем сервер, если он работает
+            from services.profile_builder import rewrite_pushes
+            if rewrite_pushes(server.config_path, server.dns_servers, server.push_routes):
+                if ovpn_manager.is_running(server.id, DATA_DIR):
+                    from services.crl import rebuild_crl
+                    rebuild_crl(db, server.ca_id)
+                    ovpn_manager.start_server(
+                        server.id, server.config_path, DATA_DIR,
+                        network=server.network, netmask=server.netmask
+                    )
+                applied = True
+
     return _server_out(server, db)
 
 
