@@ -86,6 +86,18 @@ def _start_background():
     except Exception:
         pass
 
+    # периодическая очистка просроченных share-ссылок
+    import threading, time as _time
+    def _share_cleanup_loop():
+        from services import share
+        while True:
+            try:
+                share.cleanup_expired()
+            except Exception:
+                pass
+            _time.sleep(3600)
+    threading.Thread(target=_share_cleanup_loop, daemon=True).start()
+
 
 def _migrate_db():
     """Добавляет новые колонки в существующую БД если их нет (safe migrations)."""

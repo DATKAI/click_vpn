@@ -562,6 +562,95 @@ def create_installer_link(
     return {"url": url}
 
 
+class ShareReq(BaseModel):
+    kind: str = "profile"          # 'profile' | 'installer'
+    ttl_hours: int = 72
+    max_downloads: int = 5
+
+
+def _build_client_file(db: Session, user: VPNUser, server, kind: str):
+    """Готовит (content_bytes, filename, content_type) для расшаривания."""
+    settings = db.query(Settings).filter(Settings.id == 1).first()
+    skind = server.kind if server else "openvpn"
+
+    if kind == "installer":
+        if skind != "openvpn":
+            raise HTTPException(400, "Установщик доступен только для OpenVPN-клиентов")
+        from services import win_installer
+        ok, msg = win_installer.is_available()
+        if not ok:
+            raise HTTPException(400, msg)
+        ovpn = _build_user_ovpn(db, user)
+        exe = win_installer.build_installer(user.username, ovpn)
+        return exe, f"ClickVPN-{user.username}-setup.exe", "application/octet-stream"
+
+    # профиль по типу сервера
+    if _is_wg(skind):
+        conf = _build_wg_conf(db, user, server)
+        return conf.encode("utf-8"), f"{user.username}.conf", "text/plain"
+    if skind == "ikev2":
+        from services import ikev2
+        ca = db.query(CA).filter(CA.id == server.ca_id).first()
+        mc = ikev2.build_mobileconfig(
+            server_name=(settings.server_name or "Click VPN"),
+            remote_host=settings.isp1_host, remote_id=settings.isp1_host,
+            username=user.username, password=user.eap_password or "",
+            ca_cert_pem=ca.cert_pem,
+        )
+        return mc.encode("utf-8"), f"{user.username}.mobileconfig", "application/x-apple-aspen-config"
+    if not user.cert_pem:
+        raise HTTPException(400, "Сертификат не найден")
+    ovpn = _build_user_ovpn(db, user)
+    return ovpn.encode("utf-8"), f"{user.username}.ovpn", "application/x-openvpn-profile"
+
+
+@router.post("/{user_id}/share")
+def create_share_link(
+    user_id: int,
+    data: ShareReq,
+    request: Request,
+    db: Session = Depends(get_db),
+    admin: AdminUser = Depends(get_current_user),
+):
+    """Создать временную ссылку на скачивание (через изолированный микросервис)."""
+    user = db.query(VPNUser).filter(VPNUser.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "Пользователь не найден")
+    server = db.query(VPNServer).filter(VPNServer.id == user.server_id).first()
+
+    content, filename, ctype = _build_client_file(db, user, server, data.kind)
+
+    from services import share
+    ttl = max(1, min(int(data.ttl_hours), 24 * 30))
+    maxd = max(1, min(int(data.max_downloads), 100))
+    token = share.create_share(content, filename, ctype, ttl_hours=ttl,
+                               max_downloads=maxd, label=f"{user.username} · {filename}")
+
+    settings = db.query(Settings).filter(Settings.id == 1).first()
+    base = settings.public_url.rstrip("/") if (settings and settings.public_url) \
+        else str(request.base_url).rstrip("/")
+    url = f"{base}/s/{token}"
+    audit.log(db, admin.username, "user.share", user.username, f"{data.kind} ttl={ttl}h")
+    return {"url": url, "filename": filename, "expires_hours": ttl, "max_downloads": maxd}
+
+
+@router.get("/shares/all")
+def list_all_shares(_: AdminUser = Depends(get_current_user)):
+    """Список активных ссылок."""
+    from services import share
+    return share.list_shares()
+
+
+@router.delete("/shares/{token}")
+def delete_share(token: str, db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_user)):
+    """Отозвать ссылку."""
+    from services import share
+    ok = share.revoke_share(token)
+    if ok:
+        audit.log(db, admin.username, "user.share_revoke", token[:12])
+    return {"status": "ok" if ok else "not_found"}
+
+
 class SendEmailReq(BaseModel):
     to_email: str | None = None
     attach_profile: bool = True

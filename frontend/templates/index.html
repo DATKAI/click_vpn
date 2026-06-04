@@ -2053,6 +2053,70 @@ petrov,Петров Пётр,petrov@co.ru,ЗПК,730,secret</code>
 <!-- Фон-оверлей для закрытия контекстного меню -->
 <div x-show="menuUser" x-cloak @click="menuUser=null" style="position:fixed;inset:0;z-index:59;background:transparent"></div>
 
+<!-- Модалка: создание ссылки для скачивания -->
+<div x-show="shareModal.open" x-cloak class="modal-backdrop">
+  <div class="modal fade-in" style="max-width:480px">
+    <div class="modal-head">
+      <div>
+        <h3 style="font-size:18px;font-weight:700;margin:0 0 4px">Ссылка для скачивания</h3>
+        <p style="color:#94a3b8;font-size:13px;margin:0" x-text="shareModal.user?.username"></p>
+      </div>
+      <button class="modal-x" @click="shareModal.open=false" title="Закрыть">
+        <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+
+    <!-- Шаг 1: параметры -->
+    <div x-show="!shareModal.url" style="display:flex;flex-direction:column;gap:14px">
+      <div class="alert alert-warning" style="font-size:12px;margin:0">
+        <span>Ссылку отдаёт изолированный сервис. Требуется его установка (<code>install-share-service.sh</code>) и проброс <code>/s/</code> наружу.</span>
+      </div>
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Что отдавать</label>
+        <select x-model="shareModal.kind" class="input">
+          <option value="profile">Файл профиля (.ovpn / .conf / .mobileconfig)</option>
+          <option value="installer" x-show="shareModal.isOpenVPN">Установщик Windows (.exe)</option>
+        </select>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Срок действия</label>
+          <select x-model.number="shareModal.ttl_hours" class="input">
+            <option :value="1">1 час</option>
+            <option :value="24">24 часа</option>
+            <option :value="72">3 суток</option>
+            <option :value="168">7 суток</option>
+            <option :value="720">30 суток</option>
+          </select>
+        </div>
+        <div>
+          <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Лимит скачиваний</label>
+          <input x-model.number="shareModal.max_downloads" type="number" min="1" max="100" class="input"/>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:4px">
+        <button class="btn btn-gray" style="flex:1;justify-content:center" @click="shareModal.open=false">Отмена</button>
+        <button class="btn btn-primary" style="flex:1;justify-content:center" @click="createShareLink()" :disabled="shareModal.creating">
+          <svg x-show="shareModal.creating" class="spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-dasharray="31" stroke-dashoffset="10"/></svg>
+          <span x-text="shareModal.creating ? 'Создание...' : 'Создать ссылку'"></span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Шаг 2: готовая ссылка -->
+    <div x-show="shareModal.url" style="display:flex;flex-direction:column;gap:14px">
+      <div class="alert alert-success" style="font-size:13px;margin:0">
+        <span>Ссылка создана. Действует <span x-text="shareModal.ttl_hours"></span> ч, до <span x-text="shareModal.max_downloads"></span> скачиваний.</span>
+      </div>
+      <div style="display:flex;gap:8px">
+        <input :value="shareModal.url" readonly class="input" style="font-family:monospace;font-size:12px" @focus="$event.target.select()"/>
+        <button @click="copyShareUrl()" class="btn btn-primary btn-sm" style="white-space:nowrap">Копировать</button>
+      </div>
+      <button class="btn btn-gray" style="justify-content:center" @click="shareModal.open=false">Готово</button>
+    </div>
+  </div>
+</div>
+
 <!-- Контекстное меню действий клиента (один экземпляр на странице) -->
 <div id="rowMenu" x-show="menuUser" x-cloak class="row-context-menu"
      :style="`top:${menuPos.top}px;left:${menuPos.left}px`">
@@ -2063,6 +2127,10 @@ petrov,Петров Пётр,petrov@co.ru,ЗПК,730,secret</code>
   <button x-show="menuUser && !menuUser.archived && userKind(menuUser)==='openvpn'" @click="downloadInstaller(menuUser.id,menuUser.username);menuUser=null" class="row-menu-item">
     <svg width="15" height="15" fill="currentColor" viewBox="0 0 24 24"><path d="M3 5.1L10 4v7.5H3V5.1zM3 12.5h7V20l-7-1.1V12.5zM11 3.9L21 2.5v9H11V3.9zM11 12.5h10V21.5L11 20.1V12.5z"/></svg>
     Установщик Windows (.exe)
+  </button>
+  <button x-show="menuUser && !menuUser.archived" @click="openShareModal(menuUser)" class="row-menu-item">
+    <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+    Создать ссылку для скачивания
   </button>
   <button x-show="menuUser" @click="openEditUser(menuUser);menuUser=null" class="row-menu-item">
     <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
@@ -2359,6 +2427,7 @@ function app() {
     emailModal: { open:false, user:null, to:'', attach_profile:true, attach_installer:false, include_password:true, include_instructions:true, isOpenVPN:true, sending:false, linking:false },
     menuUser: null,
     menuPos: { top: 0, left: 0 },
+    shareModal: { open:false, user:null, kind:'profile', ttl_hours:72, max_downloads:5, creating:false, url:'', isOpenVPN:true },
     showServerOrgs: false,
     serverOrgsForm: { id:null, name:'', org_ids:[] },
     serverOrgsError: '',
@@ -2733,6 +2802,34 @@ function app() {
       if (top + menuH > window.innerHeight) top = Math.max(8, r.top - menuH - 4);
       this.menuPos = { top, left: Math.max(8, r.right - menuW) };
       this.menuUser = u;
+    },
+
+    openShareModal(u) {
+      this.menuUser = null;
+      const isOpenVPN = this.userKind(u) === 'openvpn';
+      this.shareModal = {
+        open: true, user: u, kind: 'profile', ttl_hours: 72, max_downloads: 5,
+        creating: false, url: '', isOpenVPN,
+      };
+    },
+
+    async createShareLink() {
+      const m = this.shareModal;
+      m.creating = true;
+      try {
+        const r = await this.api('POST', '/users/' + m.user.id + '/share', {
+          kind: m.kind, ttl_hours: m.ttl_hours, max_downloads: m.max_downloads,
+        });
+        m.url = r.url;
+        m.ttl_hours = r.expires_hours;
+        m.max_downloads = r.max_downloads;
+      } catch(e) { alert('❌ ' + e.message); }
+      finally { m.creating = false; }
+    },
+
+    async copyShareUrl() {
+      try { await navigator.clipboard.writeText(this.shareModal.url); alert('🔗 Ссылка скопирована'); }
+      catch(e) { alert('Скопируйте вручную: ' + this.shareModal.url); }
     },
 
     openEmailModal(u) {
