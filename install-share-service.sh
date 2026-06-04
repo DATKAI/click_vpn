@@ -123,7 +123,9 @@ else
   info "Установка и настройка nginx..."
   if ! command -v nginx >/dev/null 2>&1; then
     apt-get update -qq
-    apt-get install -y -qq nginx
+    # postinstall пытается запустить nginx с дефолтным конфигом и может упасть
+    # (занятый порт и т.п.) — это не страшно, мы сейчас применим свой конфиг
+    apt-get install -y -qq nginx || warn "nginx установлен, но дефолтный автозапуск не удался — продолжаем"
   fi
 
   # Debian-структура sites-available/enabled
