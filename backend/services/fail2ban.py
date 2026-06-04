@@ -3,10 +3,75 @@
 Jail называется `click-vpn-openvpn` (создаётся install-fail2ban.sh).
 Все вызовы безопасно деградируют, если fail2ban не установлен.
 """
+import os
+import re
 import shutil
 import subprocess
 
 JAIL = "click-vpn-openvpn"
+JAIL_FILE = "/etc/fail2ban/jail.d/click-vpn.conf"
+
+DEFAULTS = {"maxretry": 5, "findtime": 600, "bantime": 3600, "ignoreip": ""}
+
+
+def get_config() -> dict:
+    """Читает параметры jail из конфиг-файла."""
+    cfg = dict(DEFAULTS)
+    cfg["jail_file"] = JAIL_FILE
+    if not os.path.exists(JAIL_FILE):
+        return cfg
+    try:
+        with open(JAIL_FILE) as f:
+            text = f.read()
+    except OSError:
+        return cfg
+    for key in ("maxretry", "findtime", "bantime"):
+        m = re.search(rf"^\s*{key}\s*=\s*(-?\d+)", text, re.MULTILINE)
+        if m:
+            cfg[key] = int(m.group(1))
+    m = re.search(r"^\s*ignoreip\s*=\s*(.+)$", text, re.MULTILINE)
+    if m:
+        # убираем дефолтные локальные адреса из показа
+        ips = m.group(1).strip().split()
+        ips = [ip for ip in ips if ip not in ("127.0.0.1/8", "::1")]
+        cfg["ignoreip"] = " ".join(ips)
+    return cfg
+
+
+def set_config(maxretry: int, findtime: int, bantime: int, ignoreip: str) -> tuple[bool, str]:
+    """Перезаписывает jail-файл и перезагружает fail2ban."""
+    if not is_installed():
+        return False, "fail2ban не установлен"
+    # валидация
+    maxretry = max(1, min(int(maxretry), 1000))
+    findtime = max(10, min(int(findtime), 86400 * 7))
+    bantime = int(bantime)  # -1 = навсегда
+    # белый список: локальные + пользовательские (чистим спецсимволы)
+    user_ips = " ".join(re.findall(r"[0-9a-fA-F:\.\/]+", ignoreip or ""))
+    ignore = ("127.0.0.1/8 ::1 " + user_ips).strip()
+
+    conf = f"""[click-vpn-openvpn]
+enabled  = true
+backend  = systemd
+filter   = click-vpn-openvpn
+maxretry = {maxretry}
+findtime = {findtime}
+bantime  = {bantime}
+ignoreip = {ignore}
+action   = iptables-allports[name=click-vpn]
+"""
+    try:
+        os.makedirs(os.path.dirname(JAIL_FILE), exist_ok=True)
+        with open(JAIL_FILE, "w") as f:
+            f.write(conf)
+    except OSError as e:
+        return False, f"не удалось записать конфиг: {e}"
+
+    r = subprocess.run(["fail2ban-client", "reload", JAIL], capture_output=True, text=True)
+    if r.returncode != 0:
+        # полный перезапук как фолбэк
+        subprocess.run(["fail2ban-client", "reload"], capture_output=True)
+    return True, "Настройки применены"
 
 
 def is_installed() -> bool:

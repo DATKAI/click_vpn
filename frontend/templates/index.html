@@ -852,6 +852,48 @@
         </div>
       </div>
 
+      <!-- Настройки защиты fail2ban -->
+      <div class="card" style="margin-bottom:16px" x-show="bans.installed">
+        <h3 style="font-size:15px;font-weight:700;margin:0 0 4px">Настройки защиты (fail2ban)</h3>
+        <p style="color:#94a3b8;font-size:12px;margin:0 0 16px">Когда банить IP за неудачные попытки подключения</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px">
+          <div>
+            <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Порог попыток</label>
+            <input x-model.number="f2bConfig.maxretry" type="number" min="1" class="input" placeholder="5"/>
+            <p style="font-size:11px;color:#94a3b8;margin-top:4px">Сколько неудач до бана</p>
+          </div>
+          <div>
+            <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Окно, сек</label>
+            <input x-model.number="f2bConfig.findtime" type="number" min="10" class="input" placeholder="600"/>
+            <p style="font-size:11px;color:#94a3b8;margin-top:4px">За какое время считать (600 = 10 мин)</p>
+          </div>
+          <div>
+            <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Длительность бана</label>
+            <select x-model.number="f2bConfig.bantime" class="input">
+              <option :value="3600">1 час</option>
+              <option :value="21600">6 часов</option>
+              <option :value="86400">1 сутки</option>
+              <option :value="604800">7 суток</option>
+              <option :value="2592000">30 суток</option>
+              <option :value="-1">Навсегда</option>
+            </select>
+            <p style="font-size:11px;color:#94a3b8;margin-top:4px">Насколько блокировать IP</p>
+          </div>
+        </div>
+        <div style="margin-top:14px">
+          <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Белый список (не банить)</label>
+          <input x-model="f2bConfig.ignoreip" class="input" placeholder="напр. 203.0.113.5 198.51.100.0/24" style="font-family:monospace"/>
+          <p style="font-size:11px;color:#94a3b8;margin-top:4px">Свои IP-адреса через пробел, чтобы случайно не заблокировать себя. Локальные (127.0.0.1) уже исключены.</p>
+        </div>
+        <div style="margin-top:16px;display:flex;gap:10px;align-items:center">
+          <button @click="saveF2bConfig()" class="btn btn-primary btn-sm" :disabled="f2bSaving">
+            <svg x-show="f2bSaving" class="spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-dasharray="31" stroke-dashoffset="10"/></svg>
+            <span x-text="f2bSaving ? 'Применение...' : 'Применить'"></span>
+          </button>
+          <span x-show="f2bSaved" x-transition style="color:#16a34a;font-size:13px;font-weight:600">✓ Сохранено</span>
+        </div>
+      </div>
+
       <!-- Попытки подключения -->
       <div class="card">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
@@ -2259,6 +2301,9 @@ function app() {
     bans: { installed: false, jail_active: false, banned_ips: [] },
     banInput: '',
     securityAlert: 0,
+    f2bConfig: { maxretry: 5, findtime: 600, bantime: 3600, ignoreip: '' },
+    f2bSaving: false,
+    f2bSaved: false,
     sessionStats: { distribution: [], total_sessions: 0, avg_sec: 0, median_sec: 0, max_sec: 0 },
     heatmap: { grid: [], total: 0, busiest_hour: null },
     sysHealth: { servers: [], mem: {}, disk: {} },
@@ -3269,8 +3314,25 @@ function app() {
     },
 
     async loadSecurity() {
-      await Promise.all([this.loadAttempts(), this.loadBans()]);
+      await Promise.all([this.loadAttempts(), this.loadBans(), this.loadF2bConfig()]);
       this.securityAlert = this.statsAttempts.unique_ips || 0;
+    },
+
+    async loadF2bConfig() {
+      try {
+        const c = await this.api('GET', '/stats/fail2ban-config');
+        if (c) this.f2bConfig = { maxretry: c.maxretry, findtime: c.findtime, bantime: c.bantime, ignoreip: c.ignoreip || '' };
+      } catch(e) { console.warn('f2b-config', e); }
+    },
+
+    async saveF2bConfig() {
+      this.f2bSaving = true; this.f2bSaved = false;
+      try {
+        await this.api('POST', '/stats/fail2ban-config', this.f2bConfig);
+        this.f2bSaved = true;
+        setTimeout(() => { this.f2bSaved = false; }, 2500);
+      } catch(e) { alert('❌ ' + e.message); }
+      finally { this.f2bSaving = false; }
     },
 
     async loadAttempts() {

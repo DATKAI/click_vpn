@@ -19,6 +19,13 @@ router = APIRouter(prefix="/api/stats", tags=["stats"])
 class IPBody(BaseModel):
     ip: str
 
+
+class Fail2banConfig(BaseModel):
+    maxretry: int = 5
+    findtime: int = 600
+    bantime: int = 3600
+    ignoreip: str = ""
+
 RANGES = {
     "24h": (timedelta(hours=24), timedelta(hours=1),  "%H:00"),
     "7d":  (timedelta(days=7),   timedelta(days=1),   "%d.%m"),
@@ -492,6 +499,29 @@ def list_bans(_: AdminUser = Depends(get_current_user)):
     """Статус fail2ban + список забаненных IP."""
     from services import fail2ban
     return fail2ban.status()
+
+
+@router.get("/fail2ban-config")
+def get_fail2ban_config(_: AdminUser = Depends(get_current_user)):
+    """Текущие параметры jail fail2ban."""
+    from services import fail2ban
+    return {"installed": fail2ban.is_installed(), **fail2ban.get_config()}
+
+
+@router.post("/fail2ban-config")
+def set_fail2ban_config(
+    data: Fail2banConfig,
+    db: Session = Depends(get_db),
+    admin: AdminUser = Depends(get_current_user),
+):
+    """Сохранить параметры jail fail2ban и перезагрузить."""
+    from services import fail2ban
+    ok, msg = fail2ban.set_config(data.maxretry, data.findtime, data.bantime, data.ignoreip)
+    if not ok:
+        raise HTTPException(400, msg)
+    audit.log(db, admin.username, "security.fail2ban_config",
+              details=f"maxretry={data.maxretry} bantime={data.bantime}")
+    return {"status": "ok", "message": msg}
 
 
 @router.post("/ban")
