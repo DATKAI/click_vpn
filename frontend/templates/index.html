@@ -953,10 +953,17 @@
           <h2 style="font-size:22px;font-weight:700;color:#0f172a;margin:0">Серверы</h2>
           <p style="color:#94a3b8;font-size:13px;margin-top:4px">Управление OpenVPN серверами</p>
         </div>
-        <button class="btn btn-primary" @click="showCreateServer=true">
-          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
-          Новый сервер
-        </button>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-gray" @click="restartAllServers()" :disabled="serverBusy==='all'" x-show="servers.some(s=>s.status==='running')">
+            <svg x-show="serverBusy==='all'" class="spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-dasharray="31" stroke-dashoffset="10"/></svg>
+            <svg x-show="serverBusy!=='all'" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            Перезапустить все
+          </button>
+          <button class="btn btn-primary" @click="showCreateServer=true">
+            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+            Новый сервер
+          </button>
+        </div>
       </div>
 
       <template x-if="servers.length===0">
@@ -986,6 +993,11 @@
             </span>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
               <button x-show="s.status!=='running'" @click="startServer(s.id)" class="btn btn-success btn-sm">Запустить</button>
+              <button x-show="s.status==='running'" @click="restartServer(s.id)" class="btn btn-sm" style="background:#eff6ff;color:#2563eb;border:1.5px solid #bfdbfe" :disabled="serverBusy===s.id">
+                <svg x-show="serverBusy===s.id" class="spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-dasharray="31" stroke-dashoffset="10"/></svg>
+                <svg x-show="serverBusy!==s.id" width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                Перезапустить
+              </button>
               <button x-show="s.status==='running'" @click="stopServer(s.id)" class="btn btn-gray btn-sm">Стоп</button>
               <button @click="openServerOrgs(s)" class="btn btn-sm" style="background:#ede9fe;color:#6d28d9;border:none">
                 <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
@@ -2162,7 +2174,7 @@ petrov,Петров Пётр,petrov@co.ru,ЗПК,730,secret</code>
 
       <div class="alert alert-warning">
         <svg style="flex-shrink:0" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-        <span>Для применения изменений DNS и маршрутов — перезапустите сервер</span>
+        <span>Изменения DNS и маршрутов применяются сразу при сохранении (сервер перезапустится). Клиентам нужно переподключиться, чтобы получить новые маршруты.</span>
       </div>
     </div>
     <div x-show="formError" x-text="formError" class="alert alert-error" style="margin-top:14px"></div>
@@ -2637,6 +2649,7 @@ function app() {
     summary: {},
     statusList: [],
     servers: [],
+    serverBusy: null,
     users: [],
     filteredUsers: [],
     caList: [],
@@ -3312,6 +3325,30 @@ function app() {
     async stopServer(id) {
       try { await this.api('POST', '/servers/'+id+'/stop'); await this.loadServers(); }
       catch(e) { alert('Ошибка: ' + e.message); }
+    },
+
+    async restartServer(id) {
+      this.serverBusy = id;
+      try {
+        await this.api('POST', '/servers/'+id+'/restart');
+        await this.loadServers();
+      } catch(e) { alert('Ошибка: ' + e.message); }
+      finally { this.serverBusy = null; }
+    },
+
+    async restartAllServers() {
+      const running = this.servers.filter(s => s.status === 'running');
+      if (!running.length) return;
+      if (!confirm(`Перезапустить все запущенные серверы (${running.length})?`)) return;
+      this.serverBusy = 'all';
+      let errors = 0;
+      for (const s of running) {
+        try { await this.api('POST', '/servers/'+s.id+'/restart'); }
+        catch(e) { errors++; }
+      }
+      await this.loadServers();
+      this.serverBusy = null;
+      alert(errors ? `Готово, но ${errors} с ошибкой` : '✅ Все серверы перезапущены');
     },
 
     clientKind() {

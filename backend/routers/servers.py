@@ -385,6 +385,54 @@ def stop_server(server_id: int, db: Session = Depends(get_db), _: AdminUser = De
     return {"status": "stopped"}
 
 
+@router.post("/servers/{server_id}/restart")
+def restart_server(server_id: int, db: Session = Depends(get_db), _: AdminUser = Depends(get_current_user)):
+    """Перезапуск сервера с применением текущего конфига."""
+    server = db.query(VPNServer).filter(VPNServer.id == server_id).first()
+    if not server:
+        raise HTTPException(404, "Сервер не найден")
+
+    if _is_wg(server.kind):
+        from services import wireguard
+        peers = [
+            {"public_key": u.wg_public_key, "address": u.wg_address}
+            for u in db.query(VPNUser).filter(
+                VPNUser.server_id == server.id, VPNUser.is_active == True,
+                VPNUser.archived == False, VPNUser.wg_public_key.isnot(None),
+            ).all()
+        ]
+        try:
+            wireguard.write_and_sync(server, peers)
+            wireguard.stop(server_id)
+            ok, msg = wireguard.start(server_id, server.kind)
+            if not ok:
+                raise HTTPException(500, f"Не удалось перезапустить: {msg}")
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(500, str(e))
+    elif server.kind == "ikev2":
+        from routers.users import ikev2_resync
+        from services import ikev2
+        ikev2.start()
+        ikev2_resync(db, server)
+    else:
+        if not server.config_path or not os.path.exists(server.config_path):
+            raise HTTPException(400, "Конфиг не найден")
+        from services.crl import rebuild_crl
+        rebuild_crl(db, server.ca_id)
+        ok = ovpn_manager.start_server(
+            server_id, server.config_path, DATA_DIR,
+            network=server.network, netmask=server.netmask
+        )
+        if not ok:
+            raise HTTPException(500, "Не удалось перезапустить OpenVPN. journalctl -u click-vpn-server-" + str(server_id))
+
+    server.status = ServerStatus.running
+    db.commit()
+    return {"status": "restarted"}
+
+
 @router.delete("/servers/{server_id}", status_code=204)
 def delete_server(server_id: int, db: Session = Depends(get_db), _: AdminUser = Depends(get_current_user)):
     server = db.query(VPNServer).filter(VPNServer.id == server_id).first()
