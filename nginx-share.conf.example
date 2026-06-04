@@ -16,10 +16,16 @@ limit_req_zone $binary_remote_addr zone=clickvpn_share:10m rate=20r/m;
 server {
     listen 443 ssl;
     listen [::]:443 ssl;
-    server_name vpn.company.ru;            # ← ВАШ домен
+    server_name _;                         # любой Host — подходит для доступа по WAN IP
 
-    ssl_certificate     /etc/letsencrypt/live/vpn.company.ru/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/vpn.company.ru/privkey.pem;
+    # ── Вариант 1: домен + Let's Encrypt ─────────────────────────────────────
+    # ssl_certificate     /etc/letsencrypt/live/vpn.company.ru/fullchain.pem;
+    # ssl_certificate_key /etc/letsencrypt/live/vpn.company.ru/privkey.pem;
+
+    # ── Вариант 2: доступ по WAN IP, self-signed (создаёт install-share-service.sh) ──
+    ssl_certificate     /etc/click-vpn/share-cert.pem;
+    ssl_certificate_key /etc/click-vpn/share-key.pem;
+
     ssl_protocols TLSv1.2 TLSv1.3;
 
     # ── Единственный открытый путь: раздача ссылок ───────────────────────────
@@ -37,9 +43,10 @@ server {
     }
 }
 
+# HTTP → HTTPS (по IP или домену)
 server {
     listen 80;
     listen [::]:80;
-    server_name vpn.company.ru;
+    server_name _;
     return 301 https://$host$request_uri;
 }

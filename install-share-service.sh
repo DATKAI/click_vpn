@@ -86,14 +86,45 @@ if curl -fs "http://127.0.0.1:${PORT}/healthz" >/dev/null 2>&1; then
   info "Health-check OK"
 fi
 
+# ── Self-signed TLS-сертификат на WAN IP (для доступа без домена) ─────────────
+CERT_DIR="/etc/click-vpn"
+CERT="${CERT_DIR}/share-cert.pem"
+KEY="${CERT_DIR}/share-key.pem"
+mkdir -p "$CERT_DIR"
+
+# WAN IP: из переменной WAN_IP или автоопределение
+if [ -z "$WAN_IP" ]; then
+  WAN_IP="$(curl -fs --max-time 5 https://api.ipify.org 2>/dev/null || curl -fs --max-time 5 https://ifconfig.me 2>/dev/null || true)"
+fi
+
+if [ -n "$WAN_IP" ]; then
+  if [ -f "$CERT" ]; then
+    info "TLS-сертификат уже есть: $CERT"
+  else
+    info "Генерация self-signed сертификата на IP ${WAN_IP}..."
+    openssl req -x509 -nodes -newkey rsa:2048 -days 3650 \
+      -keyout "$KEY" -out "$CERT" \
+      -subj "/CN=${WAN_IP}" -addext "subjectAltName=IP:${WAN_IP}" 2>/dev/null \
+      && chmod 600 "$KEY" \
+      && info "Сертификат создан: $CERT (SAN: IP:${WAN_IP})" \
+      || warn "Не удалось сгенерировать сертификат"
+  fi
+else
+  warn "Не удалось определить WAN IP. Задайте вручную: WAN_IP=1.2.3.4 bash $0"
+fi
+
 echo ""
 echo "════════════════════════════════════════════"
 info "Готово! Микросервис раздачи изолирован:"
 echo "  • пользователь:  ${SHARE_USER} (nologin, без доступа к БД/ключам)"
 echo "  • доступ только к: ${SHARE_DIR}"
 echo "  • слушает:        127.0.0.1:${PORT}"
+[ -f "$CERT" ] && echo "  • TLS-сертификат: ${CERT} / ${KEY}"
 echo ""
 warn "Осталось пробросить наружу через nginx (только путь /s/):"
-echo "  см. nginx-share.conf.example"
-echo "  и укажите «Публичный адрес» в настройках панели."
+echo "  cp ${INSTALL_DIR}/nginx-share.conf.example /etc/nginx/sites-available/clickvpn-share"
+echo "  ln -s /etc/nginx/sites-available/clickvpn-share /etc/nginx/sites-enabled/"
+echo "  nginx -t && systemctl reload nginx"
+echo ""
+[ -n "$WAN_IP" ] && info "В настройках панели «Публичный адрес»: https://${WAN_IP}"
 echo "════════════════════════════════════════════"
