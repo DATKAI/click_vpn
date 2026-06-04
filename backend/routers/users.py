@@ -564,8 +564,23 @@ def create_installer_link(
 
 class ShareReq(BaseModel):
     kind: str = "profile"          # 'profile' | 'installer'
-    ttl_hours: int = 72
-    max_downloads: int = 5
+    ttl_hours: int | None = None
+    max_downloads: int | None = None
+
+
+def _public_bases(settings, request: Request) -> list[str]:
+    """Список публичных базовых адресов для ссылок (основной + по провайдерам)."""
+    bases = []
+    if settings and settings.public_url:
+        bases.append(settings.public_url.strip())
+    if settings and settings.public_urls:
+        for line in settings.public_urls.splitlines():
+            u = line.strip()
+            if u and u not in bases:
+                bases.append(u)
+    if not bases:
+        bases.append(str(request.base_url).rstrip("/"))
+    return [b.rstrip("/") for b in bases]
 
 
 def _build_client_file(db: Session, user: VPNUser, server, kind: str):
@@ -620,18 +635,21 @@ def create_share_link(
 
     content, filename, ctype = _build_client_file(db, user, server, data.kind)
 
+    settings = db.query(Settings).filter(Settings.id == 1).first()
+    def_ttl = (settings.share_ttl_hours if settings and settings.share_ttl_hours else 72)
+    def_max = (settings.share_max_downloads if settings and settings.share_max_downloads else 5)
+    ttl = max(1, min(int(data.ttl_hours if data.ttl_hours else def_ttl), 24 * 30))
+    maxd = max(1, min(int(data.max_downloads if data.max_downloads else def_max), 100))
+
     from services import share
-    ttl = max(1, min(int(data.ttl_hours), 24 * 30))
-    maxd = max(1, min(int(data.max_downloads), 100))
     token = share.create_share(content, filename, ctype, ttl_hours=ttl,
                                max_downloads=maxd, label=f"{user.username} · {filename}")
 
-    settings = db.query(Settings).filter(Settings.id == 1).first()
-    base = settings.public_url.rstrip("/") if (settings and settings.public_url) \
-        else str(request.base_url).rstrip("/")
-    url = f"{base}/s/{token}"
+    bases = _public_bases(settings, request)
+    urls = [f"{b}/s/{token}" for b in bases]
     audit.log(db, admin.username, "user.share", user.username, f"{data.kind} ttl={ttl}h")
-    return {"url": url, "filename": filename, "expires_hours": ttl, "max_downloads": maxd}
+    return {"urls": urls, "url": urls[0], "filename": filename,
+            "expires_hours": ttl, "max_downloads": maxd}
 
 
 @router.get("/shares/all")

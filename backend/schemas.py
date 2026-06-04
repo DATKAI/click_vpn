@@ -43,6 +43,9 @@ class SettingsUpdate(BaseModel):
     isp4_label: Optional[str] = "ISP4"
     server_name: Optional[str] = None
     public_url: Optional[str] = None
+    public_urls: Optional[str] = None
+    share_ttl_hours: Optional[int] = 72
+    share_max_downloads: Optional[int] = 5
     # SMTP
     smtp_host: Optional[str] = None
     smtp_port: Optional[int] = 587

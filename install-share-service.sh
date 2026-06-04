@@ -160,7 +160,7 @@ server {
     ssl_certificate_key ${KEY};
     ssl_protocols TLSv1.2 TLSv1.3;
 
-    location ~ ^/s/[A-Za-z0-9_-]+\$ {
+    location ~ ^/s/[A-Za-z0-9_-]+(/dl)?\$ {
         limit_req zone=clickvpn_share burst=10 nodelay;
         proxy_pass http://127.0.0.1:${PORT};
         proxy_set_header Host \$host;

@@ -1409,12 +1409,35 @@
         <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Название сервиса</label>
         <input x-model="settings.server_name" class="input" placeholder="VPN Server"/>
 
-        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin:16px 0 6px">Публичный адрес панели</label>
-        <input x-model="settings.public_url" class="input" placeholder="https://vpn.company.ru"/>
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin:16px 0 6px">Публичный адрес для ссылок</label>
+        <input x-model="settings.public_url" class="input" placeholder="https://203.0.113.10:9443"/>
         <p style="font-size:12px;color:#94a3b8;margin-top:6px">
-          Используется для ссылок на скачивание установщика в письмах. Укажите адрес, по которому
-          панель (точнее, путь <code>/d/</code>) доступна сотрудникам из интернета. Если пусто — берётся адрес текущего запроса.
+          Адрес, по которому сервис раздачи ссылок (<code>/s/</code>) доступен сотрудникам снаружи.
+          Обычно <code>https://&lt;WAN_IP&gt;:&lt;порт_nginx&gt;</code> (порт показал install-share-service.sh).
+          Если пусто — берётся адрес текущего запроса (для локалки).
         </p>
+
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin:16px 0 6px">Доп. адреса (по провайдерам)</label>
+        <textarea x-model="settings.public_urls" class="input" placeholder="https://<IP_провайдера_2>:9443&#10;https://<IP_провайдера_3>:9443" style="min-height:70px;font-family:monospace;font-size:13px"></textarea>
+        <p style="font-size:12px;color:#94a3b8;margin-top:6px">
+          Если у вас несколько провайдеров (WAN) — по одному адресу на строку. При создании ссылки
+          будет показан вариант для каждого канала (токен один и тот же).
+        </p>
+      </div>
+
+      <div class="card" style="margin-bottom:16px">
+        <h3 style="font-size:14px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.05em;margin:0 0 16px">Ссылки для скачивания — по умолчанию</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+          <div>
+            <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Срок действия, часов</label>
+            <input x-model.number="settings.share_ttl_hours" type="number" min="1" class="input" placeholder="72"/>
+          </div>
+          <div>
+            <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Лимит скачиваний</label>
+            <input x-model.number="settings.share_max_downloads" type="number" min="1" class="input" placeholder="5"/>
+          </div>
+        </div>
+        <p style="font-size:12px;color:#94a3b8;margin-top:10px">Значения по умолчанию для новых ссылок (можно изменить при создании).</p>
       </div>
       </div>
 
@@ -2108,10 +2131,15 @@ petrov,Петров Пётр,petrov@co.ru,ЗПК,730,secret</code>
       <div class="alert alert-success" style="font-size:13px;margin:0">
         <span>Ссылка создана. Действует <span x-text="shareModal.ttl_hours"></span> ч, до <span x-text="shareModal.max_downloads"></span> скачиваний.</span>
       </div>
-      <div style="display:flex;gap:8px">
-        <input :value="shareModal.url" readonly class="input" style="font-family:monospace;font-size:12px" @focus="$event.target.select()"/>
-        <button @click="copyShareUrl()" class="btn btn-primary btn-sm" style="white-space:nowrap">Копировать</button>
-      </div>
+      <template x-for="(u,i) in shareModal.urls" :key="i">
+        <div>
+          <div x-show="shareModal.urls.length>1" style="font-size:11px;color:#94a3b8;margin-bottom:3px" x-text="'Канал ' + (i+1)"></div>
+          <div style="display:flex;gap:8px">
+            <input :value="u" readonly class="input" style="font-family:monospace;font-size:12px" @focus="$event.target.select()"/>
+            <button @click="copyText(u)" class="btn btn-primary btn-sm" style="white-space:nowrap">Копировать</button>
+          </div>
+        </div>
+      </template>
       <button class="btn btn-gray" style="justify-content:center" @click="shareModal.open=false">Готово</button>
     </div>
   </div>
@@ -2427,7 +2455,7 @@ function app() {
     emailModal: { open:false, user:null, to:'', attach_profile:true, attach_installer:false, include_password:true, include_instructions:true, isOpenVPN:true, sending:false, linking:false },
     menuUser: null,
     menuPos: { top: 0, left: 0 },
-    shareModal: { open:false, user:null, kind:'profile', ttl_hours:72, max_downloads:5, creating:false, url:'', isOpenVPN:true },
+    shareModal: { open:false, user:null, kind:'profile', ttl_hours:72, max_downloads:5, creating:false, url:'', urls:[], isOpenVPN:true },
     showServerOrgs: false,
     serverOrgsForm: { id:null, name:'', org_ids:[] },
     serverOrgsError: '',
@@ -2808,8 +2836,10 @@ function app() {
       this.menuUser = null;
       const isOpenVPN = this.userKind(u) === 'openvpn';
       this.shareModal = {
-        open: true, user: u, kind: 'profile', ttl_hours: 72, max_downloads: 5,
-        creating: false, url: '', isOpenVPN,
+        open: true, user: u, kind: 'profile',
+        ttl_hours: this.settings.share_ttl_hours || 72,
+        max_downloads: this.settings.share_max_downloads || 5,
+        creating: false, url: '', urls: [], isOpenVPN,
       };
     },
 
@@ -2820,6 +2850,7 @@ function app() {
         const r = await this.api('POST', '/users/' + m.user.id + '/share', {
           kind: m.kind, ttl_hours: m.ttl_hours, max_downloads: m.max_downloads,
         });
+        m.urls = r.urls || [r.url];
         m.url = r.url;
         m.ttl_hours = r.expires_hours;
         m.max_downloads = r.max_downloads;
@@ -2827,9 +2858,9 @@ function app() {
       finally { m.creating = false; }
     },
 
-    async copyShareUrl() {
-      try { await navigator.clipboard.writeText(this.shareModal.url); alert('🔗 Ссылка скопирована'); }
-      catch(e) { alert('Скопируйте вручную: ' + this.shareModal.url); }
+    async copyText(t) {
+      try { await navigator.clipboard.writeText(t); alert('🔗 Скопировано'); }
+      catch(e) { alert('Скопируйте вручную: ' + t); }
     },
 
     openEmailModal(u) {
