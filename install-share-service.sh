@@ -128,23 +128,55 @@ else
     apt-get install -y -qq nginx || warn "nginx установлен, но дефолтный автозапуск не удался — продолжаем"
   fi
 
+  # Выбор HTTPS-порта: 443, если свободен; иначе 8443 (443 часто занят
+  # обфусцированным OpenVPN). Можно переопределить: NGINX_PORT=...
+  HTTPS_PORT="${NGINX_PORT:-}"
+  if [ -z "$HTTPS_PORT" ]; then
+    if ss -tlnH "sport = :443" 2>/dev/null | grep -q .; then
+      HTTPS_PORT=8443
+      warn "Порт 443 занят (вероятно OpenVPN/обфускация) → nginx будет на 8443"
+    else
+      HTTPS_PORT=443
+    fi
+  fi
+
   # Debian-структура sites-available/enabled
   mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
   if ! grep -q "sites-enabled" /etc/nginx/nginx.conf; then
-    # на некоторых сборках include отсутствует — добавим в http-блок
     sed -i '/http {/a \    include /etc/nginx/sites-enabled/*;' /etc/nginx/nginx.conf
   fi
-
-  # убираем дефолтный сайт (конфликт по 80)
   rm -f /etc/nginx/sites-enabled/default
 
-  cp "${INSTALL_DIR}/nginx-share.conf.example" /etc/nginx/sites-available/clickvpn-share
+  # Генерируем конфиг с выбранным портом и путями к сертификату
+  cat > /etc/nginx/sites-available/clickvpn-share <<EOF
+limit_req_zone \$binary_remote_addr zone=clickvpn_share:10m rate=20r/m;
+
+server {
+    listen ${HTTPS_PORT} ssl;
+    listen [::]:${HTTPS_PORT} ssl;
+    server_name _;
+
+    ssl_certificate     ${CERT};
+    ssl_certificate_key ${KEY};
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    location ~ ^/s/[A-Za-z0-9_-]+\$ {
+        limit_req zone=clickvpn_share burst=10 nodelay;
+        proxy_pass http://127.0.0.1:${PORT};
+        proxy_set_header Host \$host;
+        proxy_set_header X-Forwarded-For \$remote_addr;
+        proxy_read_timeout 120s;
+    }
+
+    location / { return 404; }
+}
+EOF
   ln -sf /etc/nginx/sites-available/clickvpn-share /etc/nginx/sites-enabled/clickvpn-share
 
   if nginx -t 2>/tmp/nginx-test.log; then
     systemctl enable nginx >/dev/null 2>&1 || true
     systemctl restart nginx
-    info "nginx настроен и запущен ✓"
+    info "nginx настроен и запущен на порту ${HTTPS_PORT} ✓"
   else
     warn "nginx -t выдал ошибку:"
     cat /tmp/nginx-test.log
@@ -160,14 +192,16 @@ echo "  • доступ только к: ${SHARE_DIR}"
 echo "  • слушает:        127.0.0.1:${PORT}"
 [ -f "$CERT" ] && echo "  • TLS-сертификат: ${CERT} / ${KEY}"
 echo ""
+PUB_PORT_SUFFIX=""
+[ -n "${HTTPS_PORT:-}" ] && [ "${HTTPS_PORT}" != "443" ] && PUB_PORT_SUFFIX=":${HTTPS_PORT}"
 if [ -n "$WAN_IP" ]; then
   info "Укажите в настройках панели «Публичный адрес»:"
-  echo "      https://${WAN_IP}"
+  echo "      https://${WAN_IP}${PUB_PORT_SUFFIX}"
   echo ""
   info "Проверка снаружи (с другого устройства):"
-  echo "      откройте https://${WAN_IP}/s/test — должно показать «Неверная ссылка»"
-  echo "      (это значит сервис доступен; предупреждение браузера о self-signed — норма)"
+  echo "      откройте https://${WAN_IP}${PUB_PORT_SUFFIX}/s/test — должно показать «Неверная ссылка»"
+  echo "      (сервис доступен; предупреждение браузера о self-signed — норма)"
 fi
 echo ""
-warn "Не забудьте пробросить порты 80 и 443 на этот сервер (роутер/firewall)."
+warn "Не забудьте пробросить порт ${HTTPS_PORT:-443} на этот сервер (роутер/firewall)."
 echo "════════════════════════════════════════════"
