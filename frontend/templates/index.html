@@ -1027,13 +1027,17 @@
       </div>
 
       <!-- Панель массовых действий -->
-      <div x-show="selectedUsers.length > 0" class="fade-in" style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:#eef2ff;border:1.5px solid #c7d2fe;border-radius:12px;margin-bottom:16px">
-        <span style="font-weight:600;color:#4338ca;font-size:14px" x-text="'Выбрано: ' + selectedUsers.length"></span>
+      <div x-show="selectedUsers.length > 0" class="fade-in" style="display:flex;align-items:center;gap:8px;padding:12px 16px;background:#eef2ff;border:1.5px solid #c7d2fe;border-radius:12px;margin-bottom:16px;flex-wrap:wrap">
+        <span style="font-weight:600;color:#4338ca;font-size:14px;margin-right:4px" x-text="'Выбрано: ' + selectedUsers.length"></span>
         <button class="btn btn-primary btn-sm" @click="bulkDownload()">
           <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-          Скачать .ovpn (ZIP)
+          Скачать ZIP
         </button>
-        <button class="btn btn-gray btn-sm" @click="selectedUsers=[]">Снять выделение</button>
+        <button class="btn btn-success btn-sm" @click="bulkAction('enable')">Включить</button>
+        <button class="btn btn-sm" style="background:#fff7ed;color:#c2410c;border:1.5px solid #fed7aa" @click="bulkAction('disable')">Выключить</button>
+        <button class="btn btn-gray btn-sm" @click="bulkAction('archive')">В архив</button>
+        <button class="btn btn-danger btn-sm" @click="bulkAction('delete')">Удалить</button>
+        <button class="btn btn-gray btn-sm" style="margin-left:auto" @click="selectedUsers=[]">Снять выделение</button>
       </div>
 
       <!-- Filters -->
@@ -2833,6 +2837,19 @@ function app() {
         a.href = url; a.download = 'vpn_profiles.zip'; a.click();
         URL.revokeObjectURL(url);
       } catch(e) { alert('Ошибка: ' + e.message); }
+    },
+
+    async bulkAction(action) {
+      if (!this.selectedUsers.length) return;
+      const labels = { enable:'включить', disable:'выключить', archive:'архивировать', delete:'УДАЛИТЬ' };
+      const n = this.selectedUsers.length;
+      if (!confirm(`Действительно ${labels[action]} выбранных клиентов (${n})?`)) return;
+      try {
+        const r = await this.api('POST', '/users/bulk-action', { ids: this.selectedUsers, action });
+        this.selectedUsers = [];
+        await this.loadUsers();
+        alert(`✅ Готово: ${r.affected} клиентов`);
+      } catch(e) { alert('❌ ' + e.message); }
     },
 
     openImport() {

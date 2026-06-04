@@ -275,6 +275,83 @@ class BulkIds(BaseModel):
     ids: list[int]
 
 
+class BulkAction(BaseModel):
+    ids: list[int]
+    action: str   # enable | disable | archive | unarchive | delete
+
+
+@router.post("/bulk-action")
+def bulk_action(
+    data: BulkAction,
+    db: Session = Depends(get_db),
+    admin: AdminUser = Depends(get_current_user),
+):
+    """Массовое действие над выбранными клиентами."""
+    if data.action not in ("enable", "disable", "archive", "unarchive", "delete"):
+        raise HTTPException(400, "Неизвестное действие")
+    users = db.query(VPNUser).filter(VPNUser.id.in_(data.ids)).all()
+    if not users:
+        raise HTTPException(404, "Клиенты не найдены")
+
+    affected_servers = {}   # server_id -> server (для resync/CRL один раз)
+    done = 0
+    for user in users:
+        server = db.query(VPNServer).filter(VPNServer.id == user.server_id).first()
+
+        if data.action == "enable":
+            user.is_active = True
+            user.cert_status = CertStatus.active
+            user.revoked_at = None
+        elif data.action == "disable":
+            user.is_active = False
+            user.cert_status = CertStatus.revoked
+            user.revoked_at = datetime.utcnow()
+        elif data.action == "archive":
+            user.archived = True
+        elif data.action == "unarchive":
+            user.archived = False
+        elif data.action == "delete":
+            if user.cert_serial:
+                exists = db.query(RevokedSerial).filter(
+                    RevokedSerial.ca_id == user.ca_id, RevokedSerial.serial == user.cert_serial
+                ).first()
+                if not exists:
+                    db.add(RevokedSerial(ca_id=user.ca_id, serial=user.cert_serial))
+            if server:
+                affected_servers[server.id] = server
+            db.delete(user)
+            done += 1
+            continue
+
+        if server:
+            affected_servers[server.id] = server
+        done += 1
+
+    db.commit()
+
+    # применяем блокировки/удаления один раз на сервер
+    for server in affected_servers.values():
+        try:
+            if _is_wg(server.kind):
+                _wg_resync(db, server)
+            elif server.kind == "ikev2":
+                ikev2_resync(db, server)
+            elif server.ca_id:
+                rebuild_crl(db, server.ca_id)
+        except Exception:
+            pass
+    # для OpenVPN — разрываем сессии заблокированных/удалённых
+    if data.action in ("disable", "archive", "delete"):
+        for user in users if data.action != "delete" else []:
+            try:
+                ovpn_mgmt.kill_client(user.server_id, user.username)
+            except Exception:
+                pass
+
+    audit.log(db, admin.username, "user.bulk_" + data.action, f"{done} шт.")
+    return {"status": "ok", "affected": done}
+
+
 class DisconnectReq(BaseModel):
     server_id: int
     common_name: str
