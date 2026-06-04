@@ -71,10 +71,10 @@ Section "Install"
         File "/oname={profile_name}.ovpn" "{ovpn_path}"
 
         ; --- Ярлык GUI на рабочем столе ---
-        CreateShortcut "$DESKTOP\Click VPN.lnk" "$PROGRAMFILES64\OpenVPN\bin\openvpn-gui.exe"
+        CreateShortcut "$DESKTOP\OpenVPN GUI.lnk" "$PROGRAMFILES64\OpenVPN\bin\openvpn-gui.exe"
 
         DetailPrint "Профиль {display_name} установлен."
-        MessageBox MB_OK "Click VPN установлен!$\r$\n$\r$\nЗапустите 'Click VPN' с рабочего стола, нажмите правой кнопкой на значок OpenVPN в трее и выберите 'Подключиться'."
+        MessageBox MB_OK "Готово! VPN-профиль установлен.$\r$\n$\r$\nЗапустите 'OpenVPN GUI' с рабочего стола, нажмите правой кнопкой на значок OpenVPN в трее (справа от часов) и выберите 'Подключиться'."
 SectionEnd
 """
 

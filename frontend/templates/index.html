@@ -2044,12 +2044,10 @@ petrov,Петров Пётр,petrov@co.ru,ЗПК,730,secret</code>
             <input type="checkbox" x-model="emailModal.attach_profile" style="width:16px;height:16px;cursor:pointer"/>
             <span>Файл профиля <span style="color:#94a3b8;font-size:12px">(.ovpn / .conf / .mobileconfig)</span></span>
           </label>
-          <!-- Ссылка на установщик временно отключена (требует проброса /d/ наружу)
           <label x-show="emailModal.isOpenVPN" style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;color:#334155">
             <input type="checkbox" x-model="emailModal.attach_installer" style="width:16px;height:16px;cursor:pointer"/>
-            <span>Ссылка на установщик Windows <span style="color:#94a3b8;font-size:12px">(кнопка «Скачать» в письме — .exe файлы почта режет)</span></span>
+            <span>Установщик Windows <span style="color:#94a3b8;font-size:12px">(.exe во вложении — ставит OpenVPN автоматически)</span></span>
           </label>
-          -->
           <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;color:#334155">
             <input type="checkbox" x-model="emailModal.include_password" style="width:16px;height:16px;cursor:pointer"/>
             <span>Пароль для подключения <span style="color:#94a3b8;font-size:12px">(в тексте письма)</span></span>
@@ -2059,6 +2057,10 @@ petrov,Петров Пётр,petrov@co.ru,ЗПК,730,secret</code>
             <span>Инструкция по подключению <span style="color:#94a3b8;font-size:12px">(трей, как сохранить пароль)</span></span>
           </label>
         </div>
+      </div>
+
+      <div x-show="emailModal.attach_installer" class="alert alert-warning" style="font-size:12px;margin:0">
+        <span>Сборка установщика занимает 10–30 секунд — подождите после отправки.</span>
       </div>
 
       <div style="display:flex;gap:10px;margin-top:4px">
@@ -2659,7 +2661,7 @@ function app() {
         open: true, user: u, sending: false, linking: false,
         to: u.email || '',
         attach_profile: true,
-        attach_installer: false,          // ссылка на установщик временно отключена
+        attach_installer: isOpenVPN,      // для OpenVPN по умолчанию шлём установщик
         include_password: true,
         include_instructions: true,
         isOpenVPN,

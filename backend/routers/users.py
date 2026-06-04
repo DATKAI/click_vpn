@@ -615,8 +615,7 @@ def send_profile_email(
             attachments.append((ovpn.encode("utf-8"), "application", "x-openvpn-profile",
                                 f"{user.username}.ovpn"))
 
-    # Установщик .exe режут почтовые фильтры → отдаём ссылкой на скачивание
-    install_url = None
+    # Установщик Windows — вложением .exe (на корп. почту доходит)
     if data.attach_installer:
         if kind != "openvpn":
             raise HTTPException(400, "Установщик доступен только для OpenVPN-клиентов")
@@ -624,12 +623,16 @@ def send_profile_email(
         ok, msg = win_installer.is_available()
         if not ok:
             raise HTTPException(400, msg)
-        from routers.download import create_token
-        tok = create_token(db, user.id)
-        install_url = f"{_base_url(settings, request)}/d/{tok}"
+        ovpn = _build_user_ovpn(db, user)
+        try:
+            exe = win_installer.build_installer(user.username, ovpn)
+        except Exception as e:
+            raise HTTPException(500, f"Не удалось собрать установщик: {e}")
+        attachments.append((exe, "application", "octet-stream",
+                            f"ClickVPN-{user.username}-setup.exe"))
 
-    if not attachments and not data.include_password and not install_url:
-        raise HTTPException(400, "Нечего отправлять — выберите вложения, ссылку или пароль")
+    if not attachments and not data.include_password:
+        raise HTTPException(400, "Нечего отправлять — выберите вложения или пароль")
 
     # пароль по типу клиента
     password = None
@@ -651,7 +654,6 @@ def send_profile_email(
             kind=kind,
             attachments=attachments,
             password=password,
-            install_url=install_url,
             include_instructions=data.include_instructions,
         )
     except Exception as e:
