@@ -33,6 +33,12 @@
     .btn-gray:hover:not(:disabled){background:#f1f5f9;border-color:#cbd5e1;transform:translateY(-1px)}
     .btn-sm{padding:6px 14px;font-size:12px;border-radius:50px}
 
+    /* Row dropdown menu */
+    .row-menu-item{display:flex;align-items:center;gap:10px;width:100%;padding:9px 12px;border:none;background:none;
+      border-radius:8px;font-size:13px;font-weight:500;color:#334155;cursor:pointer;text-align:left;transition:background .12s;white-space:nowrap}
+    .row-menu-item:hover{background:#f1f5f9}
+    .row-menu-item svg{flex-shrink:0;opacity:.7}
+
     /* Badges */
     .badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:50px;font-size:12px;font-weight:600}
     .badge-green{background:#dcfce7;color:#15803d}
@@ -1063,28 +1069,15 @@
                 <td style="color:#94a3b8;font-size:12px;white-space:nowrap" x-text="u.last_connected_at ? formatDateTime(u.last_connected_at) : 'не заходил'"></td>
                 <td style="color:#94a3b8;font-size:12px" x-text="u.cert_expires_at ? formatDate(u.cert_expires_at) : '—'"></td>
                 <td style="padding-right:20px">
-                  <div style="display:flex;gap:6px;flex-wrap:wrap">
-                    <!-- Скачать (только включённые, не архив) -->
+                  <div style="display:flex;gap:6px;align-items:center;justify-content:flex-end">
+                    <!-- Главное: скачать профиль (не архив) -->
                     <button x-show="!u.archived"
                        @click="downloadOvpn(u.id, u.username)"
                        class="btn btn-primary btn-sm" title="Скачать профиль">
                       <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
                       <span x-text="profileLabel(u)"></span>
                     </button>
-                    <button x-show="!u.archived"
-                       @click="openEmailModal(u)"
-                       class="btn btn-sm" style="background:#eff6ff;color:#2563eb;border:1.5px solid #bfdbfe" title="Отправить на email">
-                      <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-                    </button>
-                    <!-- Windows-установщик (.exe) — только OpenVPN -->
-                    <button x-show="!u.archived && userKind(u)==='openvpn'"
-                       @click="downloadInstaller(u.id, u.username)"
-                       class="btn btn-sm" style="background:#f0f9ff;color:#0369a1;border:1.5px solid #bae6fd" title="Скачать установщик Windows (.exe)">
-                      <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24"><path d="M3 5.1L10 4v7.5H3V5.1zM3 12.5h7V20l-7-1.1V12.5zM11 3.9L21 2.5v9H11V3.9zM11 12.5h10V21.5L11 20.1V12.5z"/></svg>
-                      .exe
-                    </button>
-
-                    <!-- Вкл/Выкл доступ (не в архиве) -->
+                    <!-- Вкл/Выкл доступ (не архив) -->
                     <button x-show="!u.archived && u.is_active" @click="disableUser(u.id)" class="btn btn-sm" style="background:#fff7ed;color:#c2410c;border:1.5px solid #fed7aa" title="Выключить доступ">
                       Выключить
                     </button>
@@ -1092,22 +1085,42 @@
                       Включить
                     </button>
 
-                    <button @click="openEditUser(u)" class="btn btn-gray btn-sm" title="Редактировать">
-                      <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                    <!-- Меню «ещё» -->
+                    <button @click="toggleRowMenu(u, $event)" class="btn btn-gray btn-sm" title="Ещё" style="padding:6px 10px">
+                      <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
                     </button>
 
-                    <!-- Архив / Из архива -->
-                    <button x-show="!u.archived" @click="archiveUser(u.id)" class="btn btn-gray btn-sm" title="В архив">
-                      <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
-                    </button>
-                    <button x-show="u.archived" @click="unarchiveUser(u.id)" class="btn btn-success btn-sm" title="Вернуть из архива">
-                      Восстановить
-                    </button>
-
-                    <!-- Удалить -->
-                    <button @click="deleteUser(u.id, u.username)" class="btn btn-danger btn-sm" title="Удалить">
-                      <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                    </button>
+                    <!-- Выпадающее меню (fixed, чтобы не обрезалось overflow) -->
+                    <div x-show="openMenuId===u.id" x-cloak @click.outside="openMenuId=null"
+                         style="position:fixed;z-index:100;background:#fff;border:1px solid #e2e8f0;border-radius:12px;
+                                box-shadow:0 10px 30px rgba(0,0,0,.15);padding:6px;min-width:200px;display:flex;flex-direction:column;gap:2px"
+                         :style="`top:${menuPos.top}px;left:${menuPos.left}px`">
+                      <button x-show="!u.archived" @click="openEmailModal(u);openMenuId=null" class="row-menu-item">
+                        <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                        Отправить на email
+                      </button>
+                      <button x-show="!u.archived && userKind(u)==='openvpn'" @click="downloadInstaller(u.id,u.username);openMenuId=null" class="row-menu-item">
+                        <svg width="15" height="15" fill="currentColor" viewBox="0 0 24 24"><path d="M3 5.1L10 4v7.5H3V5.1zM3 12.5h7V20l-7-1.1V12.5zM11 3.9L21 2.5v9H11V3.9zM11 12.5h10V21.5L11 20.1V12.5z"/></svg>
+                        Установщик Windows (.exe)
+                      </button>
+                      <button @click="openEditUser(u);openMenuId=null" class="row-menu-item">
+                        <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                        Редактировать
+                      </button>
+                      <button x-show="!u.archived" @click="archiveUser(u.id);openMenuId=null" class="row-menu-item">
+                        <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
+                        В архив
+                      </button>
+                      <button x-show="u.archived" @click="unarchiveUser(u.id);openMenuId=null" class="row-menu-item">
+                        <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                        Восстановить из архива
+                      </button>
+                      <div style="height:1px;background:#f1f5f9;margin:4px 0"></div>
+                      <button @click="deleteUser(u.id,u.username);openMenuId=null" class="row-menu-item" style="color:#dc2626">
+                        <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                        Удалить
+                      </button>
+                    </div>
                   </div>
                 </td>
               </tr>
@@ -2290,6 +2303,8 @@ function app() {
     showEditUser: false,
     showEditOrg: false,
     emailModal: { open:false, user:null, to:'', attach_profile:true, attach_installer:false, include_password:true, include_instructions:true, isOpenVPN:true, sending:false, linking:false },
+    openMenuId: null,
+    menuPos: { top: 0, left: 0 },
     showServerOrgs: false,
     serverOrgsForm: { id:null, name:'', org_ids:[] },
     serverOrgsError: '',
@@ -2653,6 +2668,17 @@ function app() {
         this.testEmailOk = false;
         this.testEmailResult = '❌ ' + e.message;
       } finally { this.testEmailRunning = false; }
+    },
+
+    toggleRowMenu(u, event) {
+      if (this.openMenuId === u.id) { this.openMenuId = null; return; }
+      const r = event.currentTarget.getBoundingClientRect();
+      const menuW = 210, menuH = 250;
+      // открываем вниз-влево от кнопки; если не влезает вниз — вверх
+      let top = r.bottom + 4;
+      if (top + menuH > window.innerHeight) top = Math.max(8, r.top - menuH - 4);
+      this.menuPos = { top, left: Math.max(8, r.right - menuW) };
+      this.openMenuId = u.id;
     },
 
     openEmailModal(u) {
