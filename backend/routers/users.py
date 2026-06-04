@@ -2,7 +2,7 @@ import os
 import io
 import csv
 import zipfile
-from datetime import datetime
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile, File, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -278,6 +278,91 @@ class BulkIds(BaseModel):
 class BulkAction(BaseModel):
     ids: list[int]
     action: str   # enable | disable | archive | unarchive | delete
+
+
+class BulkExtend(BaseModel):
+    ids: list[int]
+    valid_days: int = 365
+
+
+@router.get("/expiring")
+def expiring_certs(
+    days: int = 30,
+    db: Session = Depends(get_db),
+    _: AdminUser = Depends(get_current_user),
+):
+    """Клиенты с истекающим (в пределах N дней) или просроченным сертификатом."""
+    now = datetime.utcnow()
+    horizon = now + timedelta(days=days)
+    rows = (
+        db.query(VPNUser)
+        .filter(VPNUser.archived == False,
+                VPNUser.cert_expires_at.isnot(None),
+                VPNUser.cert_expires_at <= horizon)
+        .order_by(VPNUser.cert_expires_at.asc())
+        .all()
+    )
+    items = []
+    for u in rows:
+        left = (u.cert_expires_at - now).total_seconds() / 86400
+        items.append({
+            "id": u.id, "username": u.username, "full_name": u.full_name,
+            "email": u.email, "server_id": u.server_id,
+            "cert_expires_at": u.cert_expires_at.isoformat() if u.cert_expires_at else None,
+            "days_left": int(left // 1) if left >= 0 else int(left // 1),
+            "expired": left < 0,
+        })
+    expired = sum(1 for i in items if i["expired"])
+    return {"items": items, "total": len(items), "expired": expired}
+
+
+@router.post("/bulk-extend")
+def bulk_extend(
+    data: BulkExtend,
+    db: Session = Depends(get_db),
+    admin: AdminUser = Depends(get_current_user),
+):
+    """Массовое продление: перевыпуск сертификатов выбранных клиентов с новым сроком."""
+    users = db.query(VPNUser).filter(VPNUser.id.in_(data.ids)).all()
+    if not users:
+        raise HTTPException(404, "Клиенты не найдены")
+    affected_cas = set()
+    done = 0
+    for user in users:
+        ca = db.query(CA).filter(CA.id == user.ca_id).first()
+        if not ca or not user.cert_pem:
+            continue  # WG/IKEv2 или без серта — пропускаем
+        # старый серийник навсегда в отозванные
+        if user.cert_serial:
+            already = db.query(RevokedSerial).filter(
+                RevokedSerial.ca_id == ca.id, RevokedSerial.serial == user.cert_serial
+            ).first()
+            if not already:
+                db.add(RevokedSerial(ca_id=ca.id, serial=user.cert_serial))
+        ca.serial += 1
+        cert_pem, key_pem, expires_at = pki.create_client_cert(
+            ca_cert_pem=ca.cert_pem, ca_key_pem=ca.key_pem, serial=ca.serial,
+            common_name=user.username, valid_days=data.valid_days,
+            password=user.cert_password or None,
+        )
+        user.cert_pem = cert_pem
+        user.key_pem = key_pem
+        user.cert_serial = ca.serial
+        user.cert_expires_at = expires_at
+        user.cert_status = CertStatus.active
+        user.is_active = True
+        user.revoked_at = None
+        user.expiry_notified = 0
+        affected_cas.add(ca.id)
+        done += 1
+    db.commit()
+    for ca_id in affected_cas:
+        try:
+            rebuild_crl(db, ca_id)
+        except Exception:
+            pass
+    audit.log(db, admin.username, "user.bulk_extend", f"{done} шт.", f"valid_days={data.valid_days}")
+    return {"status": "ok", "affected": done}
 
 
 @router.post("/bulk-action")

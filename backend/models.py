@@ -53,6 +53,7 @@ class Settings(Base):
     public_urls = Column(Text, nullable=True)         # доп. адреса (по провайдерам), по одному на строку
     share_ttl_hours = Column(Integer, default=72)     # срок ссылки по умолчанию
     share_max_downloads = Column(Integer, default=5)  # лимит скачиваний по умолчанию
+    expiry_notify_enabled = Column(Boolean, default=False)  # email-напоминания об истечении сертов
     # SMTP
     smtp_host = Column(String(256), nullable=True)
     smtp_port = Column(Integer, default=587)
@@ -171,6 +172,7 @@ class VPNUser(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     revoked_at = Column(DateTime, nullable=True)
     last_connected_at = Column(DateTime, nullable=True)  # последнее подключение
+    expiry_notified = Column(Integer, default=0)         # порог дней последнего уведомления (30/7/1)
 
     ca = relationship("CA", back_populates="users")
     server = relationship("VPNServer", back_populates="users")

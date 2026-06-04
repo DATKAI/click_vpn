@@ -50,6 +50,7 @@ class SettingsUpdate(BaseModel):
     public_urls: Optional[str] = None
     share_ttl_hours: Optional[int] = 72
     share_max_downloads: Optional[int] = 5
+    expiry_notify_enabled: Optional[bool] = False
     # SMTP
     smtp_host: Optional[str] = None
     smtp_port: Optional[int] = 587

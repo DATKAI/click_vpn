@@ -98,6 +98,14 @@ def _start_background():
             _time.sleep(3600)
     threading.Thread(target=_share_cleanup_loop, daemon=True).start()
 
+    # напоминания об истечении сертификатов
+    try:
+        from services import expiry
+        from models import VPNUser as _VU, Settings as _S
+        expiry.start_checker(SessionLocal, _VU, _S)
+    except Exception:
+        pass
+
 
 def _migrate_db():
     """Добавляет новые колонки в существующую БД если их нет (safe migrations)."""
@@ -125,6 +133,8 @@ def _migrate_db():
         ("settings",  "public_urls",    "TEXT"),
         ("settings",  "share_ttl_hours", "INTEGER DEFAULT 72"),
         ("settings",  "share_max_downloads", "INTEGER DEFAULT 5"),
+        ("settings",  "expiry_notify_enabled", "BOOLEAN DEFAULT 0"),
+        ("vpn_users", "expiry_notified", "INTEGER DEFAULT 0"),
         ("vpn_users", "notes",          "TEXT"),
         ("vpn_users", "last_connected_at", "DATETIME"),
         ("vpn_servers", "obfuscation",   "BOOLEAN DEFAULT 0"),
