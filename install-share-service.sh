@@ -113,6 +113,43 @@ else
   warn "Не удалось определить WAN IP. Задайте вручную: WAN_IP=1.2.3.4 bash $0"
 fi
 
+# ── Настройка nginx (проброс только /s/ наружу) ──────────────────────────────
+if [ "${SKIP_NGINX:-0}" = "1" ]; then
+  warn "Пропуск настройки nginx (SKIP_NGINX=1)"
+elif [ ! -f "$CERT" ]; then
+  warn "Нет TLS-сертификата — пропускаю настройку nginx.
+Задайте WAN_IP и перезапустите: WAN_IP=1.2.3.4 bash $0"
+else
+  info "Установка и настройка nginx..."
+  if ! command -v nginx >/dev/null 2>&1; then
+    apt-get update -qq
+    apt-get install -y -qq nginx
+  fi
+
+  # Debian-структура sites-available/enabled
+  mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
+  if ! grep -q "sites-enabled" /etc/nginx/nginx.conf; then
+    # на некоторых сборках include отсутствует — добавим в http-блок
+    sed -i '/http {/a \    include /etc/nginx/sites-enabled/*;' /etc/nginx/nginx.conf
+  fi
+
+  # убираем дефолтный сайт (конфликт по 80)
+  rm -f /etc/nginx/sites-enabled/default
+
+  cp "${INSTALL_DIR}/nginx-share.conf.example" /etc/nginx/sites-available/clickvpn-share
+  ln -sf /etc/nginx/sites-available/clickvpn-share /etc/nginx/sites-enabled/clickvpn-share
+
+  if nginx -t 2>/tmp/nginx-test.log; then
+    systemctl enable nginx >/dev/null 2>&1 || true
+    systemctl restart nginx
+    info "nginx настроен и запущен ✓"
+  else
+    warn "nginx -t выдал ошибку:"
+    cat /tmp/nginx-test.log
+    warn "Проверьте конфиг /etc/nginx/sites-available/clickvpn-share"
+  fi
+fi
+
 echo ""
 echo "════════════════════════════════════════════"
 info "Готово! Микросервис раздачи изолирован:"
@@ -121,10 +158,14 @@ echo "  • доступ только к: ${SHARE_DIR}"
 echo "  • слушает:        127.0.0.1:${PORT}"
 [ -f "$CERT" ] && echo "  • TLS-сертификат: ${CERT} / ${KEY}"
 echo ""
-warn "Осталось пробросить наружу через nginx (только путь /s/):"
-echo "  cp ${INSTALL_DIR}/nginx-share.conf.example /etc/nginx/sites-available/clickvpn-share"
-echo "  ln -s /etc/nginx/sites-available/clickvpn-share /etc/nginx/sites-enabled/"
-echo "  nginx -t && systemctl reload nginx"
+if [ -n "$WAN_IP" ]; then
+  info "Укажите в настройках панели «Публичный адрес»:"
+  echo "      https://${WAN_IP}"
+  echo ""
+  info "Проверка снаружи (с другого устройства):"
+  echo "      откройте https://${WAN_IP}/s/test — должно показать «Неверная ссылка»"
+  echo "      (это значит сервис доступен; предупреждение браузера о self-signed — норма)"
+fi
 echo ""
-[ -n "$WAN_IP" ] && info "В настройках панели «Публичный адрес»: https://${WAN_IP}"
+warn "Не забудьте пробросить порты 80 и 443 на этот сервер (роутер/firewall)."
 echo "════════════════════════════════════════════"
