@@ -2000,8 +2000,11 @@ petrov,Петров Пётр,petrov@co.ru,ЗПК,730,secret</code>
 </div>
 
 <!-- Modal: Edit User -->
+<!-- Фон-оверлей для закрытия контекстного меню -->
+<div x-show="menuUser" x-cloak @click="menuUser=null" style="position:fixed;inset:0;z-index:59;background:transparent"></div>
+
 <!-- Контекстное меню действий клиента (один экземпляр на странице) -->
-<div x-show="menuUser" x-cloak @click.outside="menuUser=null"
+<div x-show="menuUser" x-cloak
      style="position:fixed;z-index:60;background:#fff;border:1px solid #e2e8f0;border-radius:12px;
             box-shadow:0 10px 30px rgba(0,0,0,.15);padding:6px;min-width:210px;display:flex;flex-direction:column;gap:2px"
      :style="`top:${menuPos.top}px;left:${menuPos.left}px`">
@@ -2671,7 +2674,6 @@ function app() {
     },
 
     toggleRowMenu(u, event) {
-      console.log('toggleRowMenu', u && u.id, 'currentTarget:', event && event.currentTarget);
       if (this.menuUser && this.menuUser.id === u.id) { this.menuUser = null; return; }
       const r = event.currentTarget.getBoundingClientRect();
       const menuW = 210, menuH = 250;
