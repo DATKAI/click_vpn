@@ -19,14 +19,24 @@ import subprocess
 
 DATA_DIR = os.getenv("DATA_DIR", "./data")
 ASSETS_DIR = os.path.join(DATA_DIR, "assets")
-OPENVPN_BUNDLE = os.path.join(ASSETS_DIR, "openvpn-installer.msi")
+BUNDLE_AMD64 = os.path.join(ASSETS_DIR, "openvpn-installer-amd64.msi")
+BUNDLE_X86 = os.path.join(ASSETS_DIR, "openvpn-installer-x86.msi")
+# Совместимость со старой установкой (одиночный amd64-бандл)
+BUNDLE_LEGACY = os.path.join(ASSETS_DIR, "openvpn-installer.msi")
+
+
+def _amd64_path() -> str | None:
+    for p in (BUNDLE_AMD64, BUNDLE_LEGACY):
+        if os.path.exists(p):
+            return p
+    return None
 
 
 def is_available() -> tuple[bool, str]:
     """Готов ли сервер собирать установщики."""
     if shutil.which("makensis") is None:
         return False, "NSIS не установлен. Запустите: bash /opt/click-vpn/install-client-installer.sh"
-    if not os.path.exists(OPENVPN_BUNDLE):
+    if not _amd64_path():
         return False, "Нет бандла OpenVPN. Запустите: bash /opt/click-vpn/install-client-installer.sh"
     return True, "ok"
 
@@ -36,8 +46,10 @@ def _safe_name(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]", "_", name) or "client"
 
 
-_NSI_TEMPLATE = r"""
+_NSI_HEAD = r"""
 !include "MUI2.nsh"
+!include "x64.nsh"
+!include "LogicLib.nsh"
 
 Name "Click VPN — {display_name}"
 OutFile "{out_exe}"
@@ -51,32 +63,47 @@ Unicode true
 !insertmacro MUI_LANGUAGE "Russian"
 !insertmacro MUI_LANGUAGE "English"
 
+Var OVPN_DIR
+
 Section "Install"
     SetOutPath "$TEMP"
 
+    ; Каталог OpenVPN по разрядности системы
+    ${{If}} ${{RunningX64}}
+        StrCpy $OVPN_DIR "$PROGRAMFILES64\OpenVPN"
+    ${{Else}}
+        StrCpy $OVPN_DIR "$PROGRAMFILES32\OpenVPN"
+    ${{EndIf}}
+
     ; --- Установка OpenVPN, если не установлен ---
-    IfFileExists "$PROGRAMFILES64\OpenVPN\bin\openvpn-gui.exe" openvpn_present install_openvpn
+    IfFileExists "$OVPN_DIR\bin\openvpn-gui.exe" openvpn_present install_openvpn
 
     install_openvpn:
         DetailPrint "Установка OpenVPN..."
-        File "/oname=$TEMP\ovpn-setup.msi" "{bundle_path}"
+{install_block}
         ExecWait 'msiexec /i "$TEMP\ovpn-setup.msi" /qn /norestart' $0
         Delete "$TEMP\ovpn-setup.msi"
         Sleep 2000
 
     openvpn_present:
-        ; --- Каталог config (для всех пользователей) ---
-        CreateDirectory "$PROGRAMFILES64\OpenVPN\config"
-        SetOutPath "$PROGRAMFILES64\OpenVPN\config"
+        CreateDirectory "$OVPN_DIR\config"
+        SetOutPath "$OVPN_DIR\config"
         File "/oname={profile_name}.ovpn" "{ovpn_path}"
-
-        ; --- Ярлык GUI на рабочем столе ---
-        CreateShortcut "$DESKTOP\OpenVPN GUI.lnk" "$PROGRAMFILES64\OpenVPN\bin\openvpn-gui.exe"
+        CreateShortcut "$DESKTOP\OpenVPN GUI.lnk" "$OVPN_DIR\bin\openvpn-gui.exe"
 
         DetailPrint "Профиль {display_name} установлен."
         MessageBox MB_OK "Готово! VPN-профиль установлен.$\r$\n$\r$\nЗапустите 'OpenVPN GUI' с рабочего стола, нажмите правой кнопкой на значок OpenVPN в трее (справа от часов) и выберите 'Подключиться'."
 SectionEnd
 """
+
+# Блок установки для универсального (32+64) и только-amd64 случая
+_INSTALL_DUAL = r"""        ${{If}} ${{RunningX64}}
+            File "/oname=$TEMP\ovpn-setup.msi" "{amd64}"
+        ${{Else}}
+            File "/oname=$TEMP\ovpn-setup.msi" "{x86}"
+        ${{EndIf}}"""
+
+_INSTALL_AMD64 = r"""        File "/oname=$TEMP\ovpn-setup.msi" "{amd64}" """
 
 
 def build_installer(client_name: str, ovpn_content: str) -> bytes:
@@ -85,6 +112,9 @@ def build_installer(client_name: str, ovpn_content: str) -> bytes:
     if not ok:
         raise RuntimeError(msg)
 
+    amd64 = _amd64_path()
+    has_x86 = os.path.exists(BUNDLE_X86)
+
     safe = _safe_name(client_name)
     workdir = tempfile.mkdtemp(prefix="clickvpn-nsis-")
     try:
@@ -92,13 +122,18 @@ def build_installer(client_name: str, ovpn_content: str) -> bytes:
         with open(ovpn_path, "w", encoding="utf-8", newline="\r\n") as f:
             f.write(ovpn_content)
 
+        if has_x86:
+            install_block = _INSTALL_DUAL.format(amd64=amd64, x86=BUNDLE_X86)
+        else:
+            install_block = _INSTALL_AMD64.format(amd64=amd64)
+
         out_exe = os.path.join(workdir, f"ClickVPN-{safe}-setup.exe")
-        nsi = _NSI_TEMPLATE.format(
+        nsi = _NSI_HEAD.format(
             display_name=client_name.replace('"', "'"),
             out_exe=out_exe,
-            bundle_path=OPENVPN_BUNDLE,
             ovpn_path=ovpn_path,
             profile_name=safe,
+            install_block=install_block,
         )
         nsi_path = os.path.join(workdir, "installer.nsi")
         with open(nsi_path, "w", encoding="utf-8") as f:

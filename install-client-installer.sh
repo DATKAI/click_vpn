@@ -14,11 +14,14 @@ err(){ echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
 # Версия OpenVPN Community (можно переопределить: OPENVPN_VERSION=2.6.x bash ...)
 OPENVPN_VERSION="${OPENVPN_VERSION:-2.6.12-I001}"
-OPENVPN_URL="https://swupdate.openvpn.org/community/releases/OpenVPN-${OPENVPN_VERSION}-amd64.msi"
+BASE_URL="https://swupdate.openvpn.org/community/releases"
+URL_AMD64="${BASE_URL}/OpenVPN-${OPENVPN_VERSION}-amd64.msi"
+URL_X86="${BASE_URL}/OpenVPN-${OPENVPN_VERSION}-x86.msi"
 
 DATA_DIR="${DATA_DIR:-/var/lib/click-vpn}"
 ASSETS_DIR="${DATA_DIR}/assets"
-BUNDLE="${ASSETS_DIR}/openvpn-installer.msi"
+BUNDLE_AMD64="${ASSETS_DIR}/openvpn-installer-amd64.msi"
+BUNDLE_X86="${ASSETS_DIR}/openvpn-installer-x86.msi"
 
 echo ""
 echo "╔══════════════════════════════════════════╗"
@@ -32,19 +35,38 @@ apt-get install -y -qq nsis curl
 
 mkdir -p "$ASSETS_DIR"
 
-if [ -f "$BUNDLE" ]; then
-  info "Бандл OpenVPN уже есть: $BUNDLE ($(du -h "$BUNDLE" | cut -f1))"
+# 64-bit (обязательно)
+if [ -f "$BUNDLE_AMD64" ]; then
+  info "OpenVPN 64-bit уже есть ($(du -h "$BUNDLE_AMD64" | cut -f1))"
 else
-  info "Скачивание OpenVPN ${OPENVPN_VERSION}..."
-  if curl -fSL "$OPENVPN_URL" -o "$BUNDLE"; then
-    info "Скачано: $(du -h "$BUNDLE" | cut -f1)"
+  info "Скачивание OpenVPN ${OPENVPN_VERSION} (64-bit)..."
+  if curl -fSL "$URL_AMD64" -o "$BUNDLE_AMD64"; then
+    info "Скачано 64-bit: $(du -h "$BUNDLE_AMD64" | cut -f1)"
   else
-    rm -f "$BUNDLE"
-    err "Не удалось скачать OpenVPN с $OPENVPN_URL
+    rm -f "$BUNDLE_AMD64"
+    err "Не удалось скачать 64-bit OpenVPN с $URL_AMD64
 Скачайте MSI вручную с https://openvpn.net/community-downloads/ и положите как:
-  $BUNDLE"
+  $BUNDLE_AMD64"
   fi
 fi
+
+# 32-bit (для старых машин; не критично если недоступен)
+if [ -f "$BUNDLE_X86" ]; then
+  info "OpenVPN 32-bit уже есть ($(du -h "$BUNDLE_X86" | cut -f1))"
+else
+  info "Скачивание OpenVPN ${OPENVPN_VERSION} (32-bit)..."
+  if curl -fSL "$URL_X86" -o "$BUNDLE_X86"; then
+    info "Скачано 32-bit: $(du -h "$BUNDLE_X86" | cut -f1)"
+  else
+    rm -f "$BUNDLE_X86"
+    warn "Не удалось скачать 32-bit OpenVPN — установщик будет только 64-bit.
+Для поддержки 32-bit скачайте x86-MSI вручную и положите как:
+  $BUNDLE_X86"
+  fi
+fi
+
+# Чистим старый одиночный бандл (если был от прежней версии)
+[ -f "${ASSETS_DIR}/openvpn-installer.msi" ] && rm -f "${ASSETS_DIR}/openvpn-installer.msi" || true
 
 # Проверка makensis
 if command -v makensis >/dev/null 2>&1; then
@@ -54,10 +76,13 @@ else
 fi
 
 # Права на assets (сервис работает от root, но на всякий случай)
-chmod 644 "$BUNDLE" 2>/dev/null || true
+chmod 644 "$BUNDLE_AMD64" 2>/dev/null || true
+chmod 644 "$BUNDLE_X86" 2>/dev/null || true
 
 echo ""
 echo "════════════════════════════════════════════"
 info "Готово! Теперь в панели у OpenVPN-клиентов появится"
 info "кнопка «Установщик Windows» (.exe с профилем + OpenVPN GUI)."
+[ -f "$BUNDLE_X86" ] && info "Установщик универсальный: 32-bit и 64-bit." \
+                     || warn "Установщик только 64-bit (нет 32-bit бандла)."
 echo "════════════════════════════════════════════"
