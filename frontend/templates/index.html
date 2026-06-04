@@ -2044,10 +2044,12 @@ petrov,Петров Пётр,petrov@co.ru,ЗПК,730,secret</code>
             <input type="checkbox" x-model="emailModal.attach_profile" style="width:16px;height:16px;cursor:pointer"/>
             <span>Файл профиля <span style="color:#94a3b8;font-size:12px">(.ovpn / .conf / .mobileconfig)</span></span>
           </label>
+          <!-- Ссылка на установщик временно отключена (требует проброса /d/ наружу)
           <label x-show="emailModal.isOpenVPN" style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;color:#334155">
             <input type="checkbox" x-model="emailModal.attach_installer" style="width:16px;height:16px;cursor:pointer"/>
             <span>Ссылка на установщик Windows <span style="color:#94a3b8;font-size:12px">(кнопка «Скачать» в письме — .exe файлы почта режет)</span></span>
           </label>
+          -->
           <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;color:#334155">
             <input type="checkbox" x-model="emailModal.include_password" style="width:16px;height:16px;cursor:pointer"/>
             <span>Пароль для подключения <span style="color:#94a3b8;font-size:12px">(в тексте письма)</span></span>
@@ -2057,19 +2059,6 @@ petrov,Петров Пётр,petrov@co.ru,ЗПК,730,secret</code>
             <span>Инструкция по подключению <span style="color:#94a3b8;font-size:12px">(трей, как сохранить пароль)</span></span>
           </label>
         </div>
-      </div>
-
-      <div x-show="emailModal.attach_installer" class="alert alert-warning" style="font-size:12px;margin:0">
-        <span>В письмо вставится кнопка «Скачать установщик» (ссылка действует 72 ч, до 5 скачиваний). Сервер должен быть доступен по адресу из настроек.</span>
-      </div>
-
-      <!-- Скопировать ссылку — для передачи через мессенджер, минуя почту -->
-      <div x-show="emailModal.isOpenVPN" style="border-top:1px solid #f1f5f9;padding-top:12px">
-        <button @click="copyInstallerLink()" class="btn btn-gray btn-sm" style="width:100%;justify-content:center" :disabled="emailModal.linking">
-          <svg x-show="emailModal.linking" class="spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-dasharray="31" stroke-dashoffset="10"/></svg>
-          <span x-text="emailModal.linking ? 'Генерация...' : '🔗 Скопировать ссылку на установщик'"></span>
-        </button>
-        <p style="font-size:11px;color:#94a3b8;margin:6px 0 0;text-align:center">Чтобы отправить через мессенджер, минуя почту</p>
       </div>
 
       <div style="display:flex;gap:10px;margin-top:4px">
@@ -2670,7 +2659,7 @@ function app() {
         open: true, user: u, sending: false, linking: false,
         to: u.email || '',
         attach_profile: true,
-        attach_installer: isOpenVPN,      // по умолчанию шлём установщик для OpenVPN
+        attach_installer: false,          // ссылка на установщик временно отключена
         include_password: true,
         include_instructions: true,
         isOpenVPN,
