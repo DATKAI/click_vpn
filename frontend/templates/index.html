@@ -1011,6 +1011,10 @@
           <p style="color:#94a3b8;font-size:13px;margin-top:4px" x-text="'Всего: ' + users.length"></p>
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-gray" @click="openSharesModal()">
+            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+            Ссылки
+          </button>
           <button class="btn btn-gray" @click="openImport()">
             <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
             Импорт CSV
@@ -2076,6 +2080,57 @@ petrov,Петров Пётр,petrov@co.ru,ЗПК,730,secret</code>
 <!-- Фон-оверлей для закрытия контекстного меню -->
 <div x-show="menuUser" x-cloak @click="menuUser=null" style="position:fixed;inset:0;z-index:59;background:transparent"></div>
 
+<!-- Модалка: управление активными ссылками -->
+<div x-show="sharesModal.open" x-cloak class="modal-backdrop">
+  <div class="modal fade-in" style="max-width:760px">
+    <div class="modal-head">
+      <div>
+        <h3 style="font-size:18px;font-weight:700;margin:0 0 4px">Активные ссылки</h3>
+        <p style="color:#94a3b8;font-size:13px;margin:0">Временные ссылки для скачивания файлов</p>
+      </div>
+      <button class="modal-x" @click="sharesModal.open=false" title="Закрыть">
+        <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+      <button @click="loadShares()" class="btn btn-gray btn-sm">↺ Обновить</button>
+    </div>
+    <template x-if="sharesModal.items.length===0">
+      <div style="text-align:center;padding:40px 0;color:#94a3b8">
+        <p style="font-size:14px;margin:0">Активных ссылок нет</p>
+      </div>
+    </template>
+    <div x-show="sharesModal.items.length>0" style="overflow-x:auto;max-height:60vh">
+      <table class="table" style="min-width:640px">
+        <thead><tr>
+          <th>Файл</th><th>Скачано</th><th>Истекает</th><th>Статус</th><th style="text-align:right">Действие</th>
+        </tr></thead>
+        <tbody>
+          <template x-for="s in sharesModal.items" :key="s.token">
+            <tr>
+              <td>
+                <div style="font-weight:600;font-size:13px" x-text="s.filename"></div>
+                <div style="font-size:11px;color:#94a3b8" x-text="s.label"></div>
+              </td>
+              <td>
+                <span class="badge" :class="s.download_count>=s.max_downloads?'badge-red':'badge-gray'"
+                      x-text="s.download_count + ' / ' + s.max_downloads"></span>
+              </td>
+              <td style="font-size:12px;color:#64748b" x-text="formatDateTime(s.expires_at)"></td>
+              <td>
+                <span class="badge" :class="s.expired?'badge-red':'badge-green'" x-text="s.expired?'истекла':'активна'"></span>
+              </td>
+              <td style="text-align:right">
+                <button @click="revokeShare(s.token)" class="btn btn-danger btn-sm">Отозвать</button>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <!-- Модалка: создание ссылки для скачивания -->
 <div x-show="shareModal.open" x-cloak class="modal-backdrop">
   <div class="modal fade-in" style="max-width:480px">
@@ -2456,6 +2511,7 @@ function app() {
     menuUser: null,
     menuPos: { top: 0, left: 0 },
     shareModal: { open:false, user:null, kind:'profile', ttl_hours:72, max_downloads:5, creating:false, url:'', urls:[], isOpenVPN:true },
+    sharesModal: { open:false, items:[] },
     showServerOrgs: false,
     serverOrgsForm: { id:null, name:'', org_ids:[] },
     serverOrgsError: '',
@@ -2830,6 +2886,25 @@ function app() {
       if (top + menuH > window.innerHeight) top = Math.max(8, r.top - menuH - 4);
       this.menuPos = { top, left: Math.max(8, r.right - menuW) };
       this.menuUser = u;
+    },
+
+    openSharesModal() {
+      this.sharesModal = { open: true, items: [] };
+      this.loadShares();
+    },
+
+    async loadShares() {
+      try {
+        this.sharesModal.items = await this.api('GET', '/users/shares/all') || [];
+      } catch(e) { console.warn('shares', e); }
+    },
+
+    async revokeShare(token) {
+      if (!confirm('Отозвать эту ссылку? Она перестанет работать.')) return;
+      try {
+        await this.api('DELETE', '/users/shares/' + token);
+        this.loadShares();
+      } catch(e) { alert('❌ ' + e.message); }
     },
 
     openShareModal(u) {
