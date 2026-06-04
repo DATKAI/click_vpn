@@ -157,9 +157,12 @@ def create_user(
     ca = db.query(CA).filter(CA.id == server.ca_id).first()
     ca.serial += 1
 
-    # Пароль обязателен — если не задан, генерируем
+    # Пароль ключа: без пароля (по запросу) / заданный / сгенерированный
     import secrets as _secrets
-    cert_pwd = data.password or _secrets.token_urlsafe(9)
+    if data.no_password:
+        cert_pwd = None
+    else:
+        cert_pwd = data.password or _secrets.token_urlsafe(9)
 
     cert_pem, key_pem, expires_at = pki.create_client_cert(
         ca_cert_pem=ca.cert_pem,

@@ -1873,7 +1873,13 @@ petrov,Петров Пётр,petrov@co.ru,ЗПК,730,secret</code>
       </div>
 
       <!-- Пароль: сертификата (OpenVPN) / EAP (IKEv2) -->
-      <div x-show="clientKind()==='openvpn' || clientKind()==='ikev2'">
+      <!-- Без пароля на сертификате (только OpenVPN) -->
+      <label x-show="clientKind()==='openvpn'" style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;color:#334155;padding:10px 12px;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:10px">
+        <input type="checkbox" x-model="userForm.no_password" style="width:16px;height:16px;cursor:pointer"/>
+        <span>Без пароля на сертификате <span style="color:#94a3b8;font-size:12px">— подключение в один клик, без запроса пароля</span></span>
+      </label>
+
+      <div x-show="(clientKind()==='openvpn' && !userForm.no_password) || clientKind()==='ikev2'">
         <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">
           <span x-text="clientKind()==='ikev2' ? 'Пароль для входа' : 'Пароль сертификата'"></span>
           <span style="font-weight:400;color:#94a3b8">(необязательно)</span>
@@ -2371,7 +2377,7 @@ function app() {
     serverCreateTimer: 0,
     _timerInterval: null,
     serverForm: { name:'', kind:'openvpn', ca_id:'', network:'10.8.0.0', netmask:'255.255.255.0', port:1194, protocol:'udp', dns_servers:'8.8.8.8,8.8.4.4', push_routes:'', obfuscation:false },
-    userForm: { username:'', full_name:'', email:'', server_id:'', org_id:'', valid_days:365, password:'', notes:'' },
+    userForm: { username:'', full_name:'', email:'', server_id:'', org_id:'', valid_days:365, password:'', no_password:false, notes:'' },
     showPassword: false,
     caForm: { common_name:'', country:'RU', org:'', valid_days:3650 },
     userFilter: { server_id:'', org_id:'', search:'', sort:'created', archived:false },
@@ -3074,7 +3080,8 @@ function app() {
           email: this.userForm.email || null,
           org_id: +this.userForm.org_id,
           valid_days: +this.userForm.valid_days || 365,
-          password: this.userForm.password || null,
+          password: this.userForm.no_password ? null : (this.userForm.password || null),
+          no_password: !!this.userForm.no_password,
           notes: this.userForm.notes || null,
         };
         if (this.availableServers.length > 1 && this.userForm.server_id) {
@@ -3084,7 +3091,7 @@ function app() {
         await this.loadUsers();
         this.showCreateUser = false;
         this.showPassword = false;
-        this.userForm = { username:'', full_name:'', email:'', server_id:'', org_id:'', valid_days:365, password:'', notes:'' };
+        this.userForm = { username:'', full_name:'', email:'', server_id:'', org_id:'', valid_days:365, password:'', no_password:false, notes:'' };
         this.availableServers = [];
         // Автоскачивание .ovpn
         await this.downloadOvpn(u.id, u.username);

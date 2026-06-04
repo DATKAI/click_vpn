@@ -152,6 +152,7 @@ class UserCreate(BaseModel):
     server_id: Optional[int] = None      # если у орг несколько серверов — указать явно
     valid_days: int = 365
     password: Optional[str] = None
+    no_password: bool = False            # True = ключ без пароля (подключение без запроса)
     notes: Optional[str] = None
 
 class UserUpdate(BaseModel):
