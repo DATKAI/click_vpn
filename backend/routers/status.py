@@ -21,7 +21,8 @@ def get_status(db: Session = Depends(get_db), _: AdminUser = Depends(get_current
         running = ovpn_manager.is_running(s.id, DATA_DIR)
         status_log = os.path.join(DATA_DIR, "openvpn", f"status_{s.id}.log")
         clients_raw = ovpn_manager.parse_status(status_log) if running else []
-        clients = [ConnectedClient(**c) for c in clients_raw]
+        # UNDEF = неудачная TLS-попытка (бот/сканер), не реальный клиент
+        clients = [ConnectedClient(**c) for c in clients_raw if c.get("common_name") != "UNDEF"]
         result.append(ServerStatusOut(
             server_id=s.id,
             server_name=s.name,
