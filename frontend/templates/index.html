@@ -2004,7 +2004,7 @@ petrov,Петров Пётр,petrov@co.ru,ЗПК,730,secret</code>
 <div x-show="menuUser" x-cloak @click="menuUser=null" style="position:fixed;inset:0;z-index:59;background:transparent"></div>
 
 <!-- Контекстное меню действий клиента (один экземпляр на странице) -->
-<div x-show="menuUser" x-cloak
+<div id="rowMenu" x-show="menuUser" x-cloak
      style="position:fixed;z-index:60;background:#fff;border:1px solid #e2e8f0;border-radius:12px;
             box-shadow:0 10px 30px rgba(0,0,0,.15);padding:6px;min-width:210px;display:flex;flex-direction:column;gap:2px"
      :style="`top:${menuPos.top}px;left:${menuPos.left}px`">
@@ -2682,6 +2682,12 @@ function app() {
       if (top + menuH > window.innerHeight) top = Math.max(8, r.top - menuH - 4);
       this.menuPos = { top, left: Math.max(8, r.right - menuW) };
       this.menuUser = u;
+      this.$nextTick(() => {
+        const el = document.getElementById('rowMenu');
+        console.log('MENU el:', el, 'display:', el && getComputedStyle(el).display,
+                    'hasCloak:', el && el.hasAttribute('x-cloak'), 'pos:', JSON.stringify(this.menuPos),
+                    'rect:', el && JSON.stringify(el.getBoundingClientRect()));
+      });
     },
 
     openEmailModal(u) {
