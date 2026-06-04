@@ -25,6 +25,10 @@ class AdminUserOut(BaseModel):
     class Config:
         from_attributes = True
 
+class AdminPasswordChange(BaseModel):
+    new_password: str
+    old_password: Optional[str] = None   # требуется при смене своего пароля
+
 
 # ── Settings ──────────────────────────────────────────────────────────────────
 

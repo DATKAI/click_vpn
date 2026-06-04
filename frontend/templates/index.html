@@ -1404,6 +1404,10 @@
           <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
           <span>Обновление</span>
         </button>
+        <button class="stab" :class="{active: settingsTab==='admins'}" @click="settingsTab='admins'; loadAdmins()">
+          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          <span>Админы</span>
+        </button>
       </div>
 
       <!-- Вкладка: Общее -->
@@ -1651,9 +1655,89 @@
         </div>
       </div>
       </div>
+
+      <!-- Вкладка: Администраторы -->
+      <div x-show="settingsTab==='admins'">
+        <!-- Список админов -->
+        <div class="card" style="margin-bottom:16px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+            <h3 style="font-size:14px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.05em;margin:0">Администраторы панели</h3>
+            <button @click="loadAdmins()" class="btn btn-gray btn-sm">↺ Обновить</button>
+          </div>
+          <div style="overflow-x:auto">
+            <table class="table">
+              <thead><tr><th>Логин</th><th>Статус</th><th>Создан</th><th style="text-align:right">Действия</th></tr></thead>
+              <tbody>
+                <template x-for="a in admins" :key="a.id">
+                  <tr>
+                    <td style="font-weight:600">
+                      <span x-text="a.username"></span>
+                      <span x-show="a.username===currentAdmin" class="badge badge-green" style="margin-left:6px">вы</span>
+                    </td>
+                    <td><span class="badge badge-dot" :class="a.is_active?'badge-green':'badge-gray'" x-text="a.is_active?'активен':'отключён'"></span></td>
+                    <td style="font-size:12px;color:#64748b" x-text="formatDate(a.created_at)"></td>
+                    <td style="text-align:right">
+                      <div style="display:flex;gap:6px;justify-content:flex-end">
+                        <button @click="openAdminPassword(a)" class="btn btn-gray btn-sm">Пароль</button>
+                        <button x-show="a.username!==currentAdmin" @click="toggleAdmin(a.id)" class="btn btn-sm" :class="a.is_active?'btn-gray':'btn-success'" x-text="a.is_active?'Откл.':'Вкл.'"></button>
+                        <button x-show="a.username!==currentAdmin" @click="deleteAdmin(a.id, a.username)" class="btn btn-danger btn-sm">Удалить</button>
+                      </div>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Добавить админа -->
+        <div class="card">
+          <h3 style="font-size:14px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.05em;margin:0 0 16px">Новый администратор</h3>
+          <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end">
+            <div>
+              <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Логин</label>
+              <input x-model="newAdmin.username" class="input" placeholder="ivanov"/>
+            </div>
+            <div>
+              <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Пароль</label>
+              <input x-model="newAdmin.password" type="text" class="input" placeholder="надёжный пароль"/>
+            </div>
+            <button @click="createAdmin()" class="btn btn-primary" :disabled="!newAdmin.username.trim() || !newAdmin.password">Создать</button>
+          </div>
+        </div>
+      </div>
     </div>
 
   </main>
+</div>
+
+<!-- Модалка: смена пароля администратора -->
+<div x-show="adminPwModal.open" x-cloak class="modal-backdrop">
+  <div class="modal fade-in" style="max-width:420px">
+    <div class="modal-head">
+      <div>
+        <h3 style="font-size:18px;font-weight:700;margin:0 0 4px">Смена пароля</h3>
+        <p style="color:#94a3b8;font-size:13px;margin:0" x-text="adminPwModal.username"></p>
+      </div>
+      <button class="modal-x" @click="adminPwModal.open=false" title="Закрыть">
+        <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div x-show="adminPwModal.isSelf">
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Текущий пароль</label>
+        <input x-model="adminPwModal.old_password" type="password" class="input" placeholder="••••••••"/>
+      </div>
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Новый пароль</label>
+        <input x-model="adminPwModal.new_password" type="text" class="input" placeholder="новый пароль"/>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:4px">
+        <button class="btn btn-gray" style="flex:1;justify-content:center" @click="adminPwModal.open=false">Отмена</button>
+        <button class="btn btn-primary" style="flex:1;justify-content:center" @click="saveAdminPassword()" :disabled="!adminPwModal.new_password">Сохранить</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- Modal: Create Server -->
@@ -2512,6 +2596,10 @@ function app() {
     menuPos: { top: 0, left: 0 },
     shareModal: { open:false, user:null, kind:'profile', ttl_hours:72, max_downloads:5, creating:false, url:'', urls:[], isOpenVPN:true },
     sharesModal: { open:false, items:[] },
+    admins: [],
+    currentAdmin: '',
+    newAdmin: { username:'', password:'' },
+    adminPwModal: { open:false, id:null, username:'', isSelf:false, old_password:'', new_password:'' },
     showServerOrgs: false,
     serverOrgsForm: { id:null, name:'', org_ids:[] },
     serverOrgsError: '',
@@ -2886,6 +2974,48 @@ function app() {
       if (top + menuH > window.innerHeight) top = Math.max(8, r.top - menuH - 4);
       this.menuPos = { top, left: Math.max(8, r.right - menuW) };
       this.menuUser = u;
+    },
+
+    async loadAdmins() {
+      try {
+        this.admins = await this.api('GET', '/auth/users') || [];
+        if (!this.currentAdmin) {
+          const me = await this.api('GET', '/auth/me');
+          this.currentAdmin = me?.username || '';
+        }
+      } catch(e) { console.warn('admins', e); }
+    },
+
+    async createAdmin() {
+      try {
+        await this.api('POST', '/auth/users', { username: this.newAdmin.username.trim(), password: this.newAdmin.password });
+        this.newAdmin = { username:'', password:'' };
+        this.loadAdmins();
+      } catch(e) { alert('❌ ' + e.message); }
+    },
+
+    async toggleAdmin(id) {
+      try { await this.api('POST', '/auth/users/' + id + '/toggle'); this.loadAdmins(); }
+      catch(e) { alert('❌ ' + e.message); }
+    },
+
+    async deleteAdmin(id, username) {
+      if (!confirm('Удалить администратора «' + username + '»?')) return;
+      try { await this.api('DELETE', '/auth/users/' + id); this.loadAdmins(); }
+      catch(e) { alert('❌ ' + e.message); }
+    },
+
+    openAdminPassword(a) {
+      this.adminPwModal = { open:true, id:a.id, username:a.username, isSelf:(a.username===this.currentAdmin), old_password:'', new_password:'' };
+    },
+
+    async saveAdminPassword() {
+      const m = this.adminPwModal;
+      try {
+        await this.api('PUT', '/auth/users/' + m.id + '/password', { old_password: m.old_password || null, new_password: m.new_password });
+        this.adminPwModal.open = false;
+        alert('✅ Пароль изменён');
+      } catch(e) { alert('❌ ' + e.message); }
     },
 
     openSharesModal() {
