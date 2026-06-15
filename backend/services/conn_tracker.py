@@ -117,11 +117,32 @@ def _record_attempt(db, server_id, common_name, real_address):
         row.last_seen = now
         row.common_name = common_name
     else:
-        db.add(_AttemptModel(
+        row = _AttemptModel(
             ip=ip, server_id=server_id, common_name=common_name,
             attempts=1, first_seen=now, last_seen=now,
-        ))
+        )
+        db.add(row)
     db.commit()
+
+    # автобан: при достижении порога — банить один раз
+    try:
+        _maybe_autoban(db, ip, row.attempts)
+    except Exception:
+        pass
+
+
+def _maybe_autoban(db, ip, attempts):
+    """Если включён автобан и попытки достигли порога — банит IP (один раз)."""
+    from models import Settings
+    s = db.query(Settings).filter(Settings.id == 1).first()
+    if not s or not getattr(s, "autoban_enabled", False):
+        return
+    threshold = getattr(s, "autoban_threshold", 10) or 10
+    # банить ровно при достижении порога, чтобы не дёргать каждый раз
+    if attempts == threshold:
+        from services import fail2ban
+        if fail2ban.is_installed():
+            fail2ban.ban(ip)
 
 
 def _poll_once(SessionLocal, VPNServer, VPNUser, ConnectionLog):

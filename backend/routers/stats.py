@@ -560,6 +560,34 @@ def unban_ip(
     return {"status": "ok", "message": msg}
 
 
+class BanThreshold(BaseModel):
+    min_attempts: int = 3
+
+
+@router.post("/ban-threshold")
+def ban_by_threshold(
+    data: BanThreshold,
+    db: Session = Depends(get_db),
+    admin: AdminUser = Depends(get_current_user),
+):
+    """Разово забанить все IP с количеством попыток >= порога."""
+    from services import fail2ban
+    if not fail2ban.is_installed():
+        raise HTTPException(400, "fail2ban не установлен")
+    thr = max(1, int(data.min_attempts))
+    rows = db.query(ConnectionAttempt).filter(ConnectionAttempt.attempts >= thr).all()
+    banned = 0
+    already = set(fail2ban.status().get("banned_ips", []))
+    for r in rows:
+        if r.ip in already:
+            continue
+        ok, _ = fail2ban.ban(r.ip)
+        if ok:
+            banned += 1
+    audit.log(db, admin.username, "security.ban_threshold", f">={thr}", f"{banned} IP")
+    return {"status": "ok", "banned": banned}
+
+
 # ── Здоровье системы + статус серверов ────────────────────────────────────────
 
 def _online_counts(db: Session) -> dict:

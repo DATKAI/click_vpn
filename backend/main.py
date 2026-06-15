@@ -134,6 +134,8 @@ def _migrate_db():
         ("settings",  "share_ttl_hours", "INTEGER DEFAULT 72"),
         ("settings",  "share_max_downloads", "INTEGER DEFAULT 5"),
         ("settings",  "expiry_notify_enabled", "BOOLEAN DEFAULT 0"),
+        ("settings",  "autoban_enabled", "BOOLEAN DEFAULT 0"),
+        ("settings",  "autoban_threshold", "INTEGER DEFAULT 10"),
         ("vpn_users", "expiry_notified", "INTEGER DEFAULT 0"),
         ("vpn_users", "notes",          "TEXT"),
         ("vpn_users", "last_connected_at", "DATETIME"),

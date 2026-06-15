@@ -892,6 +892,19 @@
           </button>
           <span x-show="f2bSaved" x-transition style="color:#16a34a;font-size:13px;font-weight:600">✓ Сохранено</span>
         </div>
+
+        <!-- Автобан -->
+        <div x-show="bans.installed" style="margin-top:16px;border-top:1px solid #f1f5f9;padding-top:16px">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;color:#334155;margin-bottom:10px">
+            <input type="checkbox" x-model="settings.autoban_enabled" @change="saveSettings()" style="width:16px;height:16px;accent-color:#4f46e5"/>
+            <span><b>Автобан</b> — автоматически банить IP, превысившие порог попыток</span>
+          </label>
+          <div x-show="settings.autoban_enabled" style="display:flex;align-items:center;gap:10px;padding-left:26px">
+            <span style="font-size:13px;color:#64748b">Банить при</span>
+            <input x-model.number="settings.autoban_threshold" @change="saveSettings()" type="number" min="2" class="input" style="width:90px;padding:6px 10px"/>
+            <span style="font-size:13px;color:#64748b">попытках</span>
+          </div>
+        </div>
       </div>
 
       <!-- Попытки подключения -->
@@ -904,7 +917,18 @@
               <span x-text="statsAttempts.total_attempts || 0"></span> попыток всего
             </p>
           </div>
-          <button x-show="statsAttempts.items.length>0" @click="clearAttempts()" class="btn btn-danger btn-sm">Очистить журнал</button>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <template x-if="bans.installed && statsAttempts.items.length>0">
+              <div style="display:flex;gap:6px;align-items:center">
+                <span style="font-size:12px;color:#64748b">забанить с ≥</span>
+                <input x-model.number="banThr" type="number" min="1" class="input" style="width:64px;padding:5px 8px"/>
+                <button @click="banByThreshold()" class="btn btn-sm" style="background:#fff7ed;color:#c2410c;border:1.5px solid #fed7aa" :disabled="banThrBusy">
+                  <span x-text="banThrBusy ? '...' : 'Забанить'"></span>
+                </button>
+              </div>
+            </template>
+            <button x-show="statsAttempts.items.length>0" @click="clearAttempts()" class="btn btn-danger btn-sm">Очистить журнал</button>
+          </div>
         </div>
         <template x-if="statsAttempts.items.length===0">
           <div style="text-align:center;padding:40px 0;color:#94a3b8">
@@ -2635,6 +2659,8 @@ function app() {
     f2bConfig: { maxretry: 5, findtime: 600, bantime: 3600, ignoreip: '' },
     f2bSaving: false,
     f2bSaved: false,
+    banThr: 3,
+    banThrBusy: false,
     sessionStats: { distribution: [], total_sessions: 0, avg_sec: 0, median_sec: 0, max_sec: 0 },
     heatmap: { grid: [], total: 0, busiest_hour: null },
     sysHealth: { servers: [], mem: {}, disk: {} },
@@ -3828,6 +3854,17 @@ function app() {
     async loadSecurity() {
       await Promise.all([this.loadAttempts(), this.loadBans(), this.loadF2bConfig()]);
       this.securityAlert = this.statsAttempts.unique_ips || 0;
+    },
+
+    async banByThreshold() {
+      if (!confirm('Забанить все IP с количеством попыток ≥ ' + this.banThr + '?')) return;
+      this.banThrBusy = true;
+      try {
+        const r = await this.api('POST', '/stats/ban-threshold', { min_attempts: this.banThr });
+        await this.loadBans();
+        alert('✅ Забанено: ' + r.banned + ' IP');
+      } catch(e) { alert('❌ ' + e.message); }
+      finally { this.banThrBusy = false; }
     },
 
     async loadF2bConfig() {
