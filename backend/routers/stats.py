@@ -7,13 +7,84 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from fastapi import Request
 from database import get_db
 from models import (AdminUser, TrafficSample, ConnectionLog, VPNServer, VPNUser,
-                    Organization, ConnectionAttempt)
+                    Organization, ConnectionAttempt, CA, Settings)
 from auth import get_current_user
 from services import audit
 
 router = APIRouter(prefix="/api/stats", tags=["stats"])
+
+
+@router.get("/security-check")
+def security_check(request: Request, db: Session = Depends(get_db),
+                   _: AdminUser = Depends(get_current_user)):
+    """Чеклист защищённости панели. Возвращает проверки + общий балл."""
+    import os as _os
+    from auth import verify_password
+    checks = []
+
+    def add(key, title, status, hint=""):
+        checks.append({"key": key, "title": title, "status": status, "hint": hint})
+
+    # 1. HTTPS (по схеме запроса / заголовку прокси)
+    proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+    add("https", "Доступ к панели по HTTPS",
+        "ok" if proto == "https" else "warn",
+        "" if proto == "https" else "Включите HTTPS (enable-https.sh или nginx) — пароли идут открыто")
+
+    # 2. Дефолтный пароль admin
+    s = db.query(Settings).filter(Settings.id == 1).first()
+    admin_user = db.query(AdminUser).filter(AdminUser.username == "admin").first()
+    default_pw = _os.getenv("ADMIN_PASSWORD", "admin")
+    default_used = bool(admin_user and verify_password(default_pw, admin_user.password_hash))
+    add("admin_pw", "Сменён пароль admin по умолчанию",
+        "critical" if default_used else "ok",
+        "Смените пароль admin в Настройки → Админы" if default_used else "")
+
+    # 3. fail2ban
+    from services import fail2ban
+    f2b = fail2ban.status()
+    add("fail2ban", "fail2ban активен",
+        "ok" if f2b.get("jail_active") else "warn",
+        "" if f2b.get("jail_active") else "Установите fail2ban: bash install-fail2ban.sh")
+
+    # 4. Автобан
+    add("autoban", "Автобан ботов включён",
+        "ok" if (s and s.autoban_enabled) else "warn",
+        "Включите автобан на странице Безопасность" if not (s and s.autoban_enabled) else "")
+
+    # 5. Шифрование ключей в БД
+    ca = db.query(CA).first()
+    enc = bool(ca and isinstance(ca.key_pem, str))  # TypeDecorator вернёт расшифрованное; проверим сырое
+    try:
+        import sqlalchemy as _sa
+        raw = db.execute(_sa.text("SELECT key_pem FROM ca LIMIT 1")).first()
+        enc = bool(raw and raw[0] and str(raw[0]).startswith("enc:"))
+    except Exception:
+        pass
+    add("db_enc", "Приватные ключи в БД зашифрованы",
+        "ok" if (ca is None or enc) else "warn",
+        "" if (ca is None or enc) else "Ключи хранятся открыто")
+
+    # 6. Бэкап
+    add("backup", "Автобэкап включён",
+        "ok" if (s and s.backup_enabled) else "warn",
+        "Включите автобэкап в Настройки → Бэкап" if not (s and s.backup_enabled) else "")
+
+    # 7. Обфускация OpenVPN
+    ovpn = db.query(VPNServer).filter(VPNServer.kind == "openvpn").all()
+    if ovpn:
+        plain = [srv for srv in ovpn if not srv.obfuscation]
+        add("obfuscation", "Обфускация на OpenVPN-серверах",
+            "ok" if not plain else "warn",
+            "" if not plain else f"{len(plain)} серв. без обфускации — уязвимы к DPI-блокировке")
+
+    score = sum(1 for c in checks if c["status"] == "ok")
+    total = len(checks)
+    return {"checks": checks, "score": score, "total": total,
+            "percent": round(100 * score / total) if total else 100}
 
 
 class IPBody(BaseModel):
