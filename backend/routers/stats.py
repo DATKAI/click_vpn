@@ -455,19 +455,34 @@ def sessions(
 
 @router.get("/attempts")
 def attempts(
-    limit: int  = Query(100, ge=1, le=500),
+    limit: int  = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    search: str = Query(""),
+    min_attempts: int = Query(1, ge=1),
+    sort: str = Query("last"),    # last | attempts | first
     db: Session = Depends(get_db),
     _: AdminUser = Depends(get_current_user),
 ):
     """Неудачные/анонимные попытки подключения (CN=UNDEF) — боты/сканеры.
-    Сгруппировано по IP, отсортировано по последней активности."""
+    Сгруппировано по IP. Поддержка поиска по IP, фильтра по порогу, пагинации."""
     srv_names = {s.id: s.name for s in db.query(VPNServer).all()}
-    rows = (
-        db.query(ConnectionAttempt)
-        .order_by(ConnectionAttempt.last_seen.desc())
-        .limit(limit)
-        .all()
-    )
+
+    q = db.query(ConnectionAttempt)
+    if search.strip():
+        q = q.filter(ConnectionAttempt.ip.like(f"%{search.strip()}%"))
+    if min_attempts > 1:
+        q = q.filter(ConnectionAttempt.attempts >= min_attempts)
+
+    filtered_total = q.count()
+
+    if sort == "attempts":
+        q = q.order_by(ConnectionAttempt.attempts.desc())
+    elif sort == "first":
+        q = q.order_by(ConnectionAttempt.first_seen.desc())
+    else:
+        q = q.order_by(ConnectionAttempt.last_seen.desc())
+
+    rows = q.offset(offset).limit(limit).all()
     items = [{
         "id":          r.id,
         "ip":          r.ip,
@@ -483,7 +498,8 @@ def attempts(
 
     total_attempts = db.query(func.coalesce(func.sum(ConnectionAttempt.attempts), 0)).scalar() or 0
     unique_ips     = db.query(func.count(func.distinct(ConnectionAttempt.ip))).scalar() or 0
-    return {"items": items, "unique_ips": int(unique_ips), "total_attempts": int(total_attempts)}
+    return {"items": items, "unique_ips": int(unique_ips), "total_attempts": int(total_attempts),
+            "filtered_total": int(filtered_total)}
 
 
 @router.delete("/attempts")

@@ -10,12 +10,31 @@ router = APIRouter(prefix="/api", tags=["audit"])
 
 @router.get("/audit")
 def list_audit(
-    limit: int = Query(200, ge=10, le=1000),
+    limit: int = Query(50, ge=10, le=1000),
+    offset: int = Query(0, ge=0),
+    search: str = Query(""),
+    admin_f: str = Query("", alias="admin"),
+    action_f: str = Query("", alias="action"),
     db: Session = Depends(get_db),
     _: AdminUser = Depends(get_current_user),
 ):
-    rows = db.query(AuditLog).order_by(AuditLog.timestamp.desc()).limit(limit).all()
-    return [
+    q = db.query(AuditLog)
+    if admin_f.strip():
+        q = q.filter(AuditLog.admin == admin_f.strip())
+    if action_f.strip():
+        q = q.filter(AuditLog.action == action_f.strip())
+    if search.strip():
+        s = f"%{search.strip()}%"
+        q = q.filter((AuditLog.target.like(s)) | (AuditLog.details.like(s)) | (AuditLog.action.like(s)))
+
+    total = q.count()
+    rows = q.order_by(AuditLog.timestamp.desc()).offset(offset).limit(limit).all()
+
+    # уникальные значения для выпадающих фильтров
+    admins = [a[0] for a in db.query(AuditLog.admin).distinct().all() if a[0]]
+    actions = [a[0] for a in db.query(AuditLog.action).distinct().all() if a[0]]
+
+    items = [
         {
             "id": r.id,
             "timestamp": r.timestamp.isoformat() if r.timestamp else None,
@@ -26,6 +45,7 @@ def list_audit(
         }
         for r in rows
     ]
+    return {"items": items, "total": total, "admins": sorted(admins), "actions": sorted(actions)}
 
 
 @router.get("/users/{user_id}/connections")

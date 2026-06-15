@@ -106,10 +106,12 @@ def _start_background():
     except Exception:
         pass
 
-    # фоновое определение страны для попыток подключения (GeoIP)
+    # фоновое определение страны для попыток + ретеншн старых попыток
     def _geoip_loop():
+        from datetime import datetime, timedelta
         from services import geoip
         from models import ConnectionAttempt
+        ticks = 0
         while True:
             db = SessionLocal()
             try:
@@ -122,6 +124,15 @@ def _start_background():
                     r.country_code = code or "??"
                     db.commit()
                     _time.sleep(1.5)   # бережём лимит ip-api
+                # ретеншн: раз в ~час чистим попытки старше 30 дней
+                ticks += 1
+                if ticks >= 120:
+                    ticks = 0
+                    cutoff = datetime.utcnow() - timedelta(days=30)
+                    db.query(ConnectionAttempt).filter(
+                        ConnectionAttempt.last_seen < cutoff
+                    ).delete()
+                    db.commit()
             except Exception:
                 db.rollback()
             finally:

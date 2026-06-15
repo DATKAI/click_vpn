@@ -927,13 +927,31 @@
                 </button>
               </div>
             </template>
-            <button x-show="statsAttempts.items.length>0" @click="clearAttempts()" class="btn btn-danger btn-sm">Очистить журнал</button>
+            <button @click="clearAttempts()" class="btn btn-danger btn-sm">Очистить журнал</button>
           </div>
         </div>
+
+        <!-- Поиск / фильтр / сортировка -->
+        <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
+          <input x-model="attemptsSearch" @input="attemptsSearchDebounced()" class="input" placeholder="🔍 Поиск по IP..." style="max-width:220px;font-family:monospace"/>
+          <select x-model.number="attemptsMin" @change="attemptsPage=0; loadAttempts()" class="input" style="width:auto;padding:8px 10px">
+            <option :value="1">Все попытки</option>
+            <option :value="3">≥ 3 попыток</option>
+            <option :value="5">≥ 5 попыток</option>
+            <option :value="10">≥ 10 попыток</option>
+          </select>
+          <select x-model="attemptsSort" @change="attemptsPage=0; loadAttempts()" class="input" style="width:auto;padding:8px 10px">
+            <option value="last">Сначала свежие</option>
+            <option value="attempts">По числу попыток</option>
+            <option value="first">По первому появлению</option>
+          </select>
+          <span style="font-size:12px;color:#94a3b8;margin-left:auto" x-text="'Найдено: ' + (statsAttempts.filtered_total||0)"></span>
+        </div>
+
         <template x-if="statsAttempts.items.length===0">
           <div style="text-align:center;padding:40px 0;color:#94a3b8">
             <svg width="40" height="40" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="margin-bottom:10px;opacity:.4"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-            <p style="font-size:14px;margin:0">Попыток не зафиксировано</p>
+            <p style="font-size:14px;margin:0">Ничего не найдено</p>
           </div>
         </template>
         <div x-show="statsAttempts.items.length>0" style="overflow-x:auto">
@@ -971,6 +989,13 @@
               </template>
             </tbody>
           </table>
+        </div>
+
+        <!-- Пагинация попыток -->
+        <div x-show="(statsAttempts.filtered_total||0) > 50" style="display:flex;align-items:center;justify-content:space-between;margin-top:14px">
+          <button class="btn btn-gray btn-sm" @click="attemptsPage=Math.max(0,attemptsPage-1); loadAttempts()" :disabled="attemptsPage===0">← Назад</button>
+          <span style="font-size:13px;color:#64748b">Стр. <span x-text="attemptsPage+1"></span> из <span x-text="Math.ceil((statsAttempts.filtered_total||1)/50)"></span></span>
+          <button class="btn btn-gray btn-sm" @click="attemptsPage++; loadAttempts()" :disabled="(attemptsPage+1)*50 >= (statsAttempts.filtered_total||0)">Вперёд →</button>
         </div>
       </div>
     </div>
@@ -1269,6 +1294,21 @@
           Обновить
         </button>
       </div>
+
+      <!-- Фильтры журнала -->
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
+        <input x-model="auditSearch" @input="auditSearchDebounced()" class="input" placeholder="🔍 Поиск по объекту/деталям..." style="max-width:260px"/>
+        <select x-model="auditAdmin" @change="auditPage=0; loadAudit()" class="input" style="width:auto;padding:8px 10px">
+          <option value="">Все админы</option>
+          <template x-for="a in auditMeta.admins" :key="a"><option :value="a" x-text="a"></option></template>
+        </select>
+        <select x-model="auditAction" @change="auditPage=0; loadAudit()" class="input" style="width:auto;padding:8px 10px">
+          <option value="">Все действия</option>
+          <template x-for="a in auditMeta.actions" :key="a"><option :value="a" x-text="auditLabel(a)"></option></template>
+        </select>
+        <span style="font-size:12px;color:#94a3b8;margin-left:auto" x-text="'Записей: ' + (auditMeta.total||0)"></span>
+      </div>
+
       <div class="card" style="padding:0;overflow:hidden">
         <table class="table">
           <thead><tr>
@@ -1293,6 +1333,13 @@
             </tr>
           </tbody>
         </table>
+      </div>
+
+      <!-- Пагинация журнала -->
+      <div x-show="(auditMeta.total||0) > 50" style="display:flex;align-items:center;justify-content:space-between;margin-top:14px">
+        <button class="btn btn-gray btn-sm" @click="auditPage=Math.max(0,auditPage-1); loadAudit()" :disabled="auditPage===0">← Назад</button>
+        <span style="font-size:13px;color:#64748b">Стр. <span x-text="auditPage+1"></span> из <span x-text="Math.ceil((auditMeta.total||1)/50)"></span></span>
+        <button class="btn btn-gray btn-sm" @click="auditPage++; loadAudit()" :disabled="(auditPage+1)*50 >= (auditMeta.total||0)">Вперёд →</button>
       </div>
     </div>
 
@@ -2657,7 +2704,11 @@ function app() {
     statsByProtocol: [],
     onlineClients: [],
     statsSessions: { items: [], total: 0 },
-    statsAttempts: { items: [], unique_ips: 0, total_attempts: 0 },
+    statsAttempts: { items: [], unique_ips: 0, total_attempts: 0, filtered_total: 0 },
+    attemptsSearch: '',
+    attemptsMin: 1,
+    attemptsSort: 'last',
+    attemptsPage: 0,
     bans: { installed: false, jail_active: false, banned_ips: [] },
     banInput: '',
     securityAlert: 0,
@@ -2752,6 +2803,11 @@ function app() {
     selectedUsers: [],
     connections: [],
     auditLog: [],
+    auditMeta: { total: 0, admins: [], actions: [] },
+    auditSearch: '',
+    auditAdmin: '',
+    auditAction: '',
+    auditPage: 0,
     backupList: [],
     backupBusy: false,
     backupMsg: '',
@@ -3509,8 +3565,23 @@ function app() {
       catch { this.connections = []; }
     },
 
+    auditSearchDebounced() {
+      clearTimeout(this._auditTimer);
+      this._auditTimer = setTimeout(() => { this.auditPage = 0; this.loadAudit(); }, 350);
+    },
+
     async loadAudit() {
-      try { this.auditLog = await this.api('GET', '/audit') || []; } catch {}
+      const p = new URLSearchParams();
+      p.set('limit', '50');
+      p.set('offset', String(this.auditPage * 50));
+      if (this.auditSearch.trim()) p.set('search', this.auditSearch.trim());
+      if (this.auditAdmin) p.set('admin', this.auditAdmin);
+      if (this.auditAction) p.set('action', this.auditAction);
+      try {
+        const r = await this.api('GET', '/audit?' + p.toString());
+        this.auditLog = r?.items || [];
+        this.auditMeta = { total: r?.total || 0, admins: r?.admins || [], actions: r?.actions || [] };
+      } catch {}
     },
 
     auditLabel(a) {
@@ -3896,9 +3967,20 @@ function app() {
     },
 
     async loadAttempts() {
+      const p = new URLSearchParams();
+      p.set('limit', '50');
+      p.set('offset', String(this.attemptsPage * 50));
+      if (this.attemptsSearch.trim()) p.set('search', this.attemptsSearch.trim());
+      if (this.attemptsMin > 1) p.set('min_attempts', String(this.attemptsMin));
+      p.set('sort', this.attemptsSort);
       try {
-        this.statsAttempts = await this.api('GET', '/stats/attempts?limit=200') || { items:[], unique_ips:0, total_attempts:0 };
+        this.statsAttempts = await this.api('GET', '/stats/attempts?' + p.toString()) || { items:[], unique_ips:0, total_attempts:0, filtered_total:0 };
       } catch(e) { console.warn('attempts', e); }
+    },
+
+    attemptsSearchDebounced() {
+      clearTimeout(this._attemptsTimer);
+      this._attemptsTimer = setTimeout(() => { this.attemptsPage = 0; this.loadAttempts(); }, 350);
     },
 
     async clearAttempts() {
