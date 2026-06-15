@@ -475,6 +475,8 @@ def attempts(
         "server_name": srv_names.get(r.server_id, f"#{r.server_id}"),
         "common_name": r.common_name or "UNDEF",
         "attempts":    r.attempts or 1,
+        "country":     r.country,
+        "country_code": r.country_code,
         "first_seen":  r.first_seen.isoformat() if r.first_seen else None,
         "last_seen":   r.last_seen.isoformat() if r.last_seen else None,
     } for r in rows]

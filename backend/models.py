@@ -257,5 +257,7 @@ class ConnectionAttempt(Base):
     server_id = Column(Integer, nullable=True)
     common_name = Column(String(128), nullable=True)      # обычно UNDEF
     attempts = Column(Integer, default=1)                 # сколько раз стучался
+    country = Column(String(64), nullable=True)           # страна по GeoIP
+    country_code = Column(String(4), nullable=True)       # ISO2 для флага
     first_seen = Column(DateTime, default=datetime.utcnow)
     last_seen = Column(DateTime, default=datetime.utcnow, index=True)

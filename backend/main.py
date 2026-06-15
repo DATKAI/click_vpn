@@ -106,6 +106,29 @@ def _start_background():
     except Exception:
         pass
 
+    # фоновое определение страны для попыток подключения (GeoIP)
+    def _geoip_loop():
+        from services import geoip
+        from models import ConnectionAttempt
+        while True:
+            db = SessionLocal()
+            try:
+                rows = db.query(ConnectionAttempt).filter(
+                    ConnectionAttempt.country_code.is_(None)
+                ).limit(10).all()
+                for r in rows:
+                    country, code = geoip.lookup(r.ip)
+                    r.country = country or "?"
+                    r.country_code = code or "??"
+                    db.commit()
+                    _time.sleep(1.5)   # бережём лимит ip-api
+            except Exception:
+                db.rollback()
+            finally:
+                db.close()
+            _time.sleep(30)
+    threading.Thread(target=_geoip_loop, daemon=True).start()
+
 
 def _migrate_db():
     """Добавляет новые колонки в существующую БД если их нет (safe migrations)."""
@@ -137,6 +160,8 @@ def _migrate_db():
         ("settings",  "autoban_enabled", "BOOLEAN DEFAULT 0"),
         ("settings",  "autoban_threshold", "INTEGER DEFAULT 10"),
         ("vpn_users", "expiry_notified", "INTEGER DEFAULT 0"),
+        ("connection_attempts", "country", "VARCHAR(64)"),
+        ("connection_attempts", "country_code", "VARCHAR(4)"),
         ("vpn_users", "notes",          "TEXT"),
         ("vpn_users", "last_connected_at", "DATETIME"),
         ("vpn_servers", "obfuscation",   "BOOLEAN DEFAULT 0"),

@@ -940,6 +940,7 @@
           <table class="table" style="min-width:600px">
             <thead><tr>
               <th>IP-адрес</th>
+              <th>Страна</th>
               <th>Сервер</th>
               <th>CN</th>
               <th style="text-align:right">Попыток</th>
@@ -951,6 +952,10 @@
               <template x-for="a in statsAttempts.items" :key="a.id">
                 <tr>
                   <td style="font-family:monospace;font-size:13px;font-weight:600;color:#dc2626" x-text="a.ip"></td>
+                  <td style="font-size:13px;white-space:nowrap">
+                    <span x-text="flagEmoji(a.country_code)"></span>
+                    <span style="color:#64748b" x-text="a.country || '—'"></span>
+                  </td>
                   <td style="font-size:13px" x-text="a.server_name"></td>
                   <td style="font-size:12px;color:#94a3b8" x-text="a.common_name"></td>
                   <td style="text-align:right">
@@ -3854,6 +3859,12 @@ function app() {
     async loadSecurity() {
       await Promise.all([this.loadAttempts(), this.loadBans(), this.loadF2bConfig()]);
       this.securityAlert = this.statsAttempts.unique_ips || 0;
+    },
+
+    flagEmoji(cc) {
+      if (!cc || cc.length !== 2 || cc === '??') return '🏴';
+      const A = 0x1F1E6;
+      return String.fromCodePoint(A + cc.charCodeAt(0) - 65) + String.fromCodePoint(A + cc.charCodeAt(1) - 65);
     },
 
     async banByThreshold() {
