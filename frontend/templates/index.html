@@ -1911,14 +1911,15 @@
         <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Название</label>
         <input x-model="serverForm.name" class="input" placeholder="Главный офис"/>
       </div>
-      <div x-show="serverForm.kind==='openvpn' || serverForm.kind==='ikev2'">
-        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">CA</label>
+      <div x-show="(serverForm.kind==='openvpn' || serverForm.kind==='ikev2') && caList.length>0">
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Сертификат (CA)</label>
         <select x-model="serverForm.ca_id" class="input">
-          <option value="">— выберите CA —</option>
+          <option value="">Авто (использовать существующий)</option>
           <template x-for="ca in caList" :key="ca.id">
             <option :value="ca.id" x-text="ca.common_name"></option>
           </template>
         </select>
+        <p style="font-size:11px;color:#94a3b8;margin-top:4px">Если не выбрать — возьмётся существующий CA (или создастся автоматически).</p>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div>
@@ -3413,7 +3414,6 @@ function app() {
 
     async createServer() {
       this.formError = '';
-      if ((this.serverForm.kind === 'openvpn' || this.serverForm.kind === 'ikev2') && !this.serverForm.ca_id) { this.formError = 'Выберите CA'; return; }
       this.serverCreating = true;
       this.serverCreateTimer = 0;
       this._timerInterval = setInterval(() => this.serverCreateTimer++, 1000);

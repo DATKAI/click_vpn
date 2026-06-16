@@ -232,6 +232,20 @@ def _seed_defaults():
         if not db.query(Settings).filter(Settings.id == 1).first():
             db.add(Settings(id=1))
             db.commit()
+
+        # Автосоздание корневого CA при первом запуске (для OpenVPN/IKEv2).
+        from models import CA
+        if not db.query(CA).first():
+            try:
+                from services import pki
+                cert_pem, key_pem, expires_at = pki.create_ca(
+                    common_name="VPN", country="RU", org="Click VPN", valid_days=3650,
+                )
+                db.add(CA(common_name="VPN", cert_pem=cert_pem, key_pem=key_pem,
+                          expires_at=expires_at))
+                db.commit()
+            except Exception:
+                db.rollback()
     finally:
         db.close()
 

@@ -63,6 +63,25 @@ def delete_ca(ca_id: int, db: Session = Depends(get_db), _: AdminUser = Depends(
 
 # ── VPN Servers ───────────────────────────────────────────────────────────────
 
+def _ensure_ca(db, ca_id=None):
+    """Возвращает CA: по id, иначе первый существующий, иначе создаёт дефолтный."""
+    if ca_id:
+        ca = db.query(CA).filter(CA.id == ca_id).first()
+        if ca:
+            return ca
+    ca = db.query(CA).first()
+    if ca:
+        return ca
+    cert_pem, key_pem, expires_at = pki.create_ca(
+        common_name="VPN", country="RU", org="Click VPN", valid_days=3650,
+    )
+    ca = CA(common_name="VPN", cert_pem=cert_pem, key_pem=key_pem, expires_at=expires_at)
+    db.add(ca)
+    db.commit()
+    db.refresh(ca)
+    return ca
+
+
 def _eff_proto(kind: str, protocol: str, obfuscation: bool) -> str:
     if kind in WG_KINDS:
         return "udp"
@@ -133,9 +152,7 @@ def create_server(
     if data.kind == "ikev2":
         from models import Settings
         from services import ikev2
-        ca = db.query(CA).filter(CA.id == data.ca_id).first()
-        if not ca:
-            raise HTTPException(404, "Для IKEv2 нужен CA")
+        ca = _ensure_ca(db, data.ca_id)   # создаётся автоматически, если CA ещё нет
         s = db.query(Settings).filter(Settings.id == 1).first()
         if not s or not s.isp1_host:
             raise HTTPException(400, "Сначала настройте хост провайдера (он попадёт в серверный сертификат)")
@@ -159,9 +176,7 @@ def create_server(
         return _server_out(server, db)
 
     # ── OpenVPN ────────────────────────────────────────────────────────────
-    ca = db.query(CA).filter(CA.id == data.ca_id).first()
-    if not ca:
-        raise HTTPException(404, "CA не найден")
+    ca = _ensure_ca(db, data.ca_id)   # создаётся автоматически, если CA ещё нет
 
     # Серверный сертификат
     ca.serial += 1
