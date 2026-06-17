@@ -3732,7 +3732,9 @@ function app() {
       } catch(e) { this.formError = e.message; }
     },
 
-    openEditUser(u) {
+    async openEditUser(u) {
+      // тарифы должны быть загружены ДО показа, иначе select не выберет plan_id
+      if (this.billingEnabled) await this.loadPlans();
       this.editUserForm = {
         id: u.id, username: u.username, full_name: u.full_name || '',
         email: u.email || '', is_active: u.is_active,
@@ -3749,7 +3751,6 @@ function app() {
       this.connections = [];
       this.showEditUser = true;
       this.loadConnections(u.id);
-      if (this.billingEnabled && !this.plans.length) this.loadPlans();
     },
 
     billingExpired() {
