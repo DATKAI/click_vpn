@@ -2749,6 +2749,35 @@ petrov,Петров Пётр,petrov@co.ru,ЗПК,730,secret</code>
         </div>
       </div>
 
+      <!-- Биллинг (когда модуль включён) -->
+      <div x-show="billingEnabled" style="border-top:1px solid #f1f5f9;padding-top:14px">
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Тариф и оплата</label>
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <select x-model.number="editUserForm.plan_id" class="input" style="flex:1">
+            <option :value="null">— без тарифа —</option>
+            <template x-for="p in plans" :key="p.id"><option :value="p.id" x-text="p.name"></option></template>
+          </select>
+          <button type="button" @click="assignPlan()" class="btn btn-gray btn-sm" :disabled="!editUserForm.plan_id">Назначить</button>
+        </div>
+        <div x-show="editUserForm.plan_id" style="background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:10px;padding:12px;font-size:13px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+            <span style="color:#64748b">Оплачен до:</span>
+            <strong :style="billingExpired() ? 'color:#dc2626' : 'color:#16a34a'" x-text="editUserForm.paid_until ? formatDate(editUserForm.paid_until) : 'не оплачен'"></strong>
+          </div>
+          <div x-show="editUserForm.traffic_quota>0" style="margin-bottom:8px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+              <span style="color:#64748b">Трафик:</span>
+              <span x-text="fmtBytes(editUserForm.traffic_used||0) + ' из ' + fmtBytes(editUserForm.traffic_quota)"></span>
+            </div>
+            <div style="background:#e2e8f0;border-radius:50px;height:6px;overflow:hidden">
+              <div style="height:100%;border-radius:50px" :style="'width:'+Math.min(100,Math.round(100*(editUserForm.traffic_used||0)/editUserForm.traffic_quota))+'%;background:'+((editUserForm.traffic_used||0)>=editUserForm.traffic_quota?'#dc2626':'#4f46e5')"></div>
+            </div>
+          </div>
+          <div x-show="editUserForm.billing_blocked" class="badge badge-red" style="margin-bottom:8px">заблокирован биллингом</div>
+          <button type="button" @click="payUser()" class="btn btn-success btn-sm" style="width:100%;justify-content:center">💳 Отметить оплату (продлить)</button>
+        </div>
+      </div>
+
       <!-- Перевыпуск сертификата (только OpenVPN) -->
       <div x-show="editUserForm.kind==='openvpn'" style="border-top:1px solid #f1f5f9;padding-top:14px">
         <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:4px">Сертификат</label>
@@ -3711,12 +3740,42 @@ function app() {
         cert_expires_at: u.cert_expires_at, notes: u.notes || '',
         eap_password: u.eap_password || '',
         kind: this.userKind(u),
+        plan_id: u.plan_id || null, paid_until: u.paid_until || null,
+        traffic_quota: u.traffic_quota || 0, traffic_used: u.traffic_used || 0,
+        billing_blocked: u.billing_blocked || false,
       };
       this.showEditPassword = false;
       this.formError = '';
       this.connections = [];
       this.showEditUser = true;
       this.loadConnections(u.id);
+      if (this.billingEnabled && !this.plans.length) this.loadPlans();
+    },
+
+    billingExpired() {
+      return this.editUserForm.paid_until && new Date(this.editUserForm.paid_until) < new Date();
+    },
+
+    async assignPlan() {
+      if (!this.editUserForm.plan_id) return;
+      try {
+        await this.api('POST', '/billing/users/' + this.editUserForm.id + '/assign', { plan_id: +this.editUserForm.plan_id });
+        const p = this.plans.find(x => x.id === +this.editUserForm.plan_id);
+        if (p) this.editUserForm.traffic_quota = (p.traffic_gb||0) * 1073741824;
+        alert('✅ Тариф назначен');
+      } catch(e) { alert('❌ ' + e.message); }
+    },
+
+    async payUser() {
+      try {
+        const r = await this.api('POST', '/billing/users/' + this.editUserForm.id + '/pay');
+        this.editUserForm.paid_until = r.paid_until;
+        this.editUserForm.traffic_used = 0;
+        this.editUserForm.billing_blocked = false;
+        this.editUserForm.is_active = true;
+        await this.loadUsers();
+        alert('✅ Оплата отмечена, доступ продлён');
+      } catch(e) { alert('❌ ' + e.message); }
     },
 
     async loadConnections(userId) {

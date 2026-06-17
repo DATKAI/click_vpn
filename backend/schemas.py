@@ -195,6 +195,12 @@ class UserOut(BaseModel):
     notes: Optional[str] = None
     last_connected_at: Optional[datetime] = None
     created_at: datetime
+    # Биллинг
+    plan_id: Optional[int] = None
+    paid_until: Optional[datetime] = None
+    traffic_quota: Optional[int] = 0
+    traffic_used: Optional[int] = 0
+    billing_blocked: Optional[bool] = False
     class Config:
         from_attributes = True
 
