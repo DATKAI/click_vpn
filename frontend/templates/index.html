@@ -3762,6 +3762,7 @@ function app() {
         await this.api('POST', '/billing/users/' + this.editUserForm.id + '/assign', { plan_id: +this.editUserForm.plan_id });
         const p = this.plans.find(x => x.id === +this.editUserForm.plan_id);
         if (p) this.editUserForm.traffic_quota = (p.traffic_gb||0) * 1073741824;
+        await this.loadUsers();   // обновляем список, чтобы plan_id сохранился в кэше
         alert('✅ Тариф назначен');
       } catch(e) { alert('❌ ' + e.message); }
     },
