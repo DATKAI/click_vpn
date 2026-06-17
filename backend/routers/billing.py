@@ -40,6 +40,30 @@ def list_plans(db: Session = Depends(get_db), _: AdminUser = Depends(get_current
     return [_plan_out(p) for p in db.query(Plan).order_by(Plan.id.asc()).all()]
 
 
+@router.get("/summary")
+def summary(db: Session = Depends(get_db), _: AdminUser = Depends(get_current_user)):
+    """Сводка по биллингу: клиенты по статусам + текущий доход (MRR)."""
+    _require_module(db)
+    plans = {p.id: p for p in db.query(Plan).all()}
+    users = db.query(VPNUser).filter(VPNUser.plan_id.isnot(None), VPNUser.archived == False).all()
+    now = datetime.utcnow()
+    total = len(users)
+    paid = expired = unpaid = blocked = revenue = 0
+    for u in users:
+        plan = plans.get(u.plan_id)
+        if u.billing_blocked:
+            blocked += 1
+        if u.paid_until and u.paid_until > now:
+            paid += 1
+            revenue += (plan.price if plan else 0)
+        elif u.paid_until and u.paid_until <= now:
+            expired += 1
+        else:
+            unpaid += 1
+    return {"total": total, "paid": paid, "expired": expired,
+            "unpaid": unpaid, "blocked": blocked, "revenue": revenue}
+
+
 def _plan_out(p: Plan) -> dict:
     return {"id": p.id, "name": p.name, "price": p.price, "traffic_gb": p.traffic_gb,
             "duration_days": p.duration_days, "speed_mbps": p.speed_mbps}

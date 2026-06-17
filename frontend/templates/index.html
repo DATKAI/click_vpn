@@ -826,6 +826,31 @@
           Новый тариф
         </button>
       </div>
+
+      <!-- Сводка -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px">
+        <div class="stat-card">
+          <div style="font-size:22px;font-weight:800;color:#10b981" x-text="billingSummary.revenue + ' ₽'"></div>
+          <div style="color:#94a3b8;font-size:12px;margin-top:4px">Доход (активные)</div>
+        </div>
+        <div class="stat-card">
+          <div style="font-size:22px;font-weight:800;color:#4f46e5" x-text="billingSummary.paid"></div>
+          <div style="color:#94a3b8;font-size:12px;margin-top:4px">Оплачено</div>
+        </div>
+        <div class="stat-card">
+          <div style="font-size:22px;font-weight:800;color:#f59e0b" x-text="billingSummary.unpaid"></div>
+          <div style="color:#94a3b8;font-size:12px;margin-top:4px">Не оплачено</div>
+        </div>
+        <div class="stat-card">
+          <div style="font-size:22px;font-weight:800;color:#dc2626" x-text="billingSummary.expired + billingSummary.blocked"></div>
+          <div style="color:#94a3b8;font-size:12px;margin-top:4px">Просрочено / блок</div>
+        </div>
+        <div class="stat-card">
+          <div style="font-size:22px;font-weight:800;color:#64748b" x-text="billingSummary.total"></div>
+          <div style="color:#94a3b8;font-size:12px;margin-top:4px">Всего с тарифом</div>
+        </div>
+      </div>
+
       <div class="card" style="padding:0;overflow:hidden">
         <table class="table">
           <thead><tr>
@@ -1267,6 +1292,7 @@
             <th>Организация</th>
             <th>Сервер</th>
             <th>Статус</th>
+            <th x-show="billingEnabled">Тариф / оплата</th>
             <th>Последний вход</th>
             <th>Истекает</th>
             <th style="padding-right:20px">Действия</th>
@@ -1298,6 +1324,16 @@
                     <span class="badge-dot"></span>
                     <span x-text="u.is_active ? 'Включён' : 'Выключен'"></span>
                   </span>
+                </td>
+                <td x-show="billingEnabled" style="font-size:12px;white-space:nowrap">
+                  <template x-if="u.plan_id">
+                    <div>
+                      <div style="font-weight:600;color:#334155" x-text="planName(u.plan_id)"></div>
+                      <span class="badge" :class="billingBadge(u).cls" x-text="billingBadge(u).text"></span>
+                      <div x-show="u.traffic_quota>0" style="color:#94a3b8;margin-top:2px" x-text="fmtBytes(u.traffic_used||0)+' / '+fmtBytes(u.traffic_quota)"></div>
+                    </div>
+                  </template>
+                  <span x-show="!u.plan_id" style="color:#cbd5e1">—</span>
                 </td>
                 <td style="color:#94a3b8;font-size:12px;white-space:nowrap" x-text="u.last_connected_at ? formatDateTime(u.last_connected_at) : 'не заходил'"></td>
                 <td style="color:#94a3b8;font-size:12px" x-text="u.cert_expires_at ? formatDate(u.cert_expires_at) : '—'"></td>
@@ -2952,6 +2988,7 @@ function app() {
     moduleBusy: null,
     billingEnabled: false,
     plans: [],
+    billingSummary: { total:0, paid:0, expired:0, unpaid:0, blocked:0, revenue:0 },
     planModal: { open:false, id:null, name:'', price:0, traffic_gb:0, duration_days:30, speed_mbps:0 },
     shareModal: { open:false, user:null, kind:'profile', ttl_hours:72, max_downloads:5, creating:false, url:'', urls:[], isOpenVPN:true },
     sharesModal: { open:false, items:[] },
@@ -3107,7 +3144,8 @@ function app() {
       else { this._stopOnlineRefresh(); }
       if (p === 'security') this.loadSecurity();
       if (p === 'modules') this.loadModules();
-      if (p === 'billing') this.loadPlans();
+      if (p === 'billing') { this.loadPlans(); this.loadBillingSummary(); }
+      if (p === 'users' && this.billingEnabled) this.loadPlans();
       if (p === 'dashboard' && this.pinnedCharts.length) this.loadStats(true);
     },
 
@@ -4177,6 +4215,26 @@ function app() {
     async loadPlans() {
       try { this.plans = await this.api('GET', '/billing/plans') || []; }
       catch(e) { console.warn('plans', e); }
+    },
+
+    async loadBillingSummary() {
+      try { this.billingSummary = await this.api('GET', '/billing/summary') || this.billingSummary; }
+      catch(e) { console.warn('billing-summary', e); }
+    },
+
+    planName(id) {
+      const p = this.plans.find(x => x.id === id);
+      return p ? p.name : ('тариф #' + id);
+    },
+
+    billingBadge(u) {
+      if (u.billing_blocked) return { cls:'badge-red', text:'заблокирован' };
+      if (u.paid_until) {
+        const exp = new Date(u.paid_until);
+        if (exp < new Date()) return { cls:'badge-red', text:'просрочен' };
+        return { cls:'badge-green', text:'до ' + this.formatDate(u.paid_until) };
+      }
+      return { cls:'badge-yellow', text:'не оплачен' };
     },
 
     openPlan(p) {
