@@ -26,5 +26,14 @@ def toggle(name: str, db: Session = Depends(get_db), admin: AdminUser = Depends(
         db.flush()
     m.enabled = not m.enabled
     db.commit()
+
+    # при выключении модуля — снять его эффекты
+    if not m.enabled and name == "billing":
+        try:
+            from services import billing as billing_svc
+            billing_svc.on_disable(db)
+        except Exception:
+            pass
+
     audit.log(db, admin.username, "module.toggle", name, "enabled" if m.enabled else "disabled")
     return {"name": name, "enabled": m.enabled}

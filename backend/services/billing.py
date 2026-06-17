@@ -71,6 +71,45 @@ def _check_once(SessionLocal):
         db.close()
 
 
+def on_disable(db):
+    """Вызывается при выключении модуля: снимает все биллинг-эффекты —
+    разблокирует заблокированных биллингом + снимает шейпинг скорости.
+    Данные (тарифы, оплата) сохраняются для повторного включения."""
+    from models import VPNUser, VPNServer, CertStatus
+    changed_servers = set()
+    for u in db.query(VPNUser).filter(VPNUser.billing_blocked == True).all():
+        u.is_active = True
+        u.cert_status = CertStatus.active
+        u.billing_blocked = False
+        changed_servers.add(u.server_id)
+    db.commit()
+
+    # вернуть доступ (CRL/resync)
+    for sid in changed_servers:
+        server = db.query(VPNServer).filter(VPNServer.id == sid).first()
+        if not server:
+            continue
+        try:
+            from routers.users import _wg_resync, ikev2_resync, WG_KINDS
+            from services.crl import rebuild_crl
+            if server.kind in WG_KINDS:
+                _wg_resync(db, server)
+            elif server.kind == "ikev2":
+                ikev2_resync(db, server)
+            elif server.ca_id:
+                rebuild_crl(db, server.ca_id)
+        except Exception:
+            pass
+
+    # снять шейпинг со всех OpenVPN-интерфейсов
+    try:
+        from services import shaping
+        for s in db.query(VPNServer).filter(VPNServer.kind == "openvpn").all():
+            shaping.clear_all(f"tun{s.id}")
+    except Exception:
+        pass
+
+
 def start_checker(SessionLocal):
     def loop():
         time.sleep(45)
