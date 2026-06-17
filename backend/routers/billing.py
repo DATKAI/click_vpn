@@ -94,6 +94,24 @@ def assign_plan(user_id: int, data: AssignIn, db: Session = Depends(get_db), adm
     user.traffic_quota = (plan.traffic_gb or 0) * 1024 * 1024 * 1024
     db.commit()
     audit.log(db, admin.username, "billing.assign", user.username, plan.name)
+
+    # сразу применяем лимиты (не ждём фоновую проверку)
+    try:
+        from database import SessionLocal
+        from services import billing as billing_svc
+        billing_svc._check_once(SessionLocal)
+    except Exception:
+        pass
+    return {"status": "ok"}
+
+
+@router.post("/recheck")
+def recheck(db: Session = Depends(get_db), _: AdminUser = Depends(get_current_user)):
+    """Принудительно применить лимиты ко всем клиентам сейчас."""
+    _require_module(db)
+    from database import SessionLocal
+    from services import billing as billing_svc
+    billing_svc._check_once(SessionLocal)
     return {"status": "ok"}
 
 

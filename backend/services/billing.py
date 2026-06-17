@@ -10,21 +10,25 @@ from datetime import datetime
 
 
 def _check_once(SessionLocal):
-    from models import Module, VPNUser, CertStatus, VPNServer
+    from models import Module, VPNUser, CertStatus, VPNServer, Plan
     db = SessionLocal()
     try:
         m = db.query(Module).filter(Module.name == "billing").first()
         if not m or not m.enabled:
             return
         now = datetime.utcnow()
+        plans = {p.id: p for p in db.query(Plan).all()}
         users = db.query(VPNUser).filter(
             VPNUser.plan_id.isnot(None), VPNUser.archived == False
         ).all()
         changed_servers = set()
         for u in users:
-            over_time = bool(u.paid_until and u.paid_until < now)
+            plan = plans.get(u.plan_id)
+            # платный тариф (есть срок) и не оплачен/просрочен → блок
+            needs_payment = bool(plan and plan.duration_days)
+            not_paid = needs_payment and (u.paid_until is None or u.paid_until < now)
             over_traffic = bool(u.traffic_quota and (u.traffic_used or 0) >= u.traffic_quota)
-            should_block = over_time or over_traffic
+            should_block = not_paid or over_traffic
 
             if should_block and u.is_active:
                 u.is_active = False
