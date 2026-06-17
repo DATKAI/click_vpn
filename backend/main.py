@@ -11,7 +11,7 @@ from fastapi.responses import HTMLResponse
 from database import engine, SessionLocal, Base
 from models import AdminUser, Settings
 from auth import hash_password
-from routers import auth, settings, servers, users, status, organizations, logs, system, audit, backup, stats, download, modules
+from routers import auth, settings, servers, users, status, organizations, logs, system, audit, backup, stats, download, modules, billing
 
 DATA_DIR = os.getenv("DATA_DIR", "./data")
 os.makedirs(os.path.join(DATA_DIR, "pki"), exist_ok=True)
@@ -106,6 +106,13 @@ def _start_background():
     except Exception:
         pass
 
+    # биллинг: фоновая проверка лимитов (срок/трафик)
+    try:
+        from services import billing as billing_svc
+        billing_svc.start_checker(SessionLocal)
+    except Exception:
+        pass
+
     # фоновое определение страны для попыток + ретеншн старых попыток
     def _geoip_loop():
         from datetime import datetime, timedelta
@@ -173,6 +180,11 @@ def _migrate_db():
         ("vpn_users", "expiry_notified", "INTEGER DEFAULT 0"),
         ("connection_attempts", "country", "VARCHAR(64)"),
         ("connection_attempts", "country_code", "VARCHAR(4)"),
+        ("vpn_users", "plan_id", "INTEGER REFERENCES plans(id)"),
+        ("vpn_users", "paid_until", "DATETIME"),
+        ("vpn_users", "traffic_quota", "INTEGER DEFAULT 0"),
+        ("vpn_users", "traffic_used", "INTEGER DEFAULT 0"),
+        ("vpn_users", "billing_blocked", "BOOLEAN DEFAULT 0"),
         ("vpn_users", "notes",          "TEXT"),
         ("vpn_users", "last_connected_at", "DATETIME"),
         ("vpn_servers", "obfuscation",   "BOOLEAN DEFAULT 0"),
@@ -286,6 +298,7 @@ app.include_router(backup.router)
 app.include_router(stats.router)
 app.include_router(download.router)
 app.include_router(modules.router)
+app.include_router(billing.router)
 
 # Статика и шаблоны
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")

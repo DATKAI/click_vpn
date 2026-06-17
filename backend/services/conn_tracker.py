@@ -274,14 +274,16 @@ def _poll_once(SessionLocal, VPNServer, VPNUser, ConnectionLog):
                 server_tx_delta += dtx
 
                 # история подключений
+                uid = None
                 if key not in _open_sessions:
                     user = db.query(VPNUser).filter(
                         VPNUser.server_id == s.id,
                         VPNUser.username == c["common_name"],
                     ).first()
+                    uid = user.id if user else None
                     now = datetime.utcnow()
                     row = ConnectionLog(
-                        user_id=user.id if user else None,
+                        user_id=uid,
                         common_name=c["common_name"],
                         server_id=s.id,
                         real_address=c["real_address"],
@@ -297,8 +299,18 @@ def _poll_once(SessionLocal, VPNServer, VPNUser, ConnectionLog):
                 else:
                     row = db.query(ConnectionLog).filter(ConnectionLog.id == _open_sessions[key]).first()
                     if row:
+                        uid = row.user_id
                         row.bytes_received = rx
                         row.bytes_sent = tx
+
+                # учёт трафика для биллинга (инкремент по дельте)
+                if uid and (drx + dtx) > 0:
+                    try:
+                        db.query(VPNUser).filter(VPNUser.id == uid).update(
+                            {VPNUser.traffic_used: (VPNUser.traffic_used + (drx + dtx))}
+                        )
+                    except Exception:
+                        pass
                         db.commit()
 
             _add_bucket(s.id, server_rx_delta, server_tx_delta, server_online)

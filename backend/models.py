@@ -176,6 +176,13 @@ class VPNUser(Base):
     last_connected_at = Column(DateTime, nullable=True)  # последнее подключение
     expiry_notified = Column(Integer, default=0)         # порог дней последнего уведомления (30/7/1)
 
+    # Биллинг (модуль)
+    plan_id = Column(Integer, ForeignKey("plans.id"), nullable=True)
+    paid_until = Column(DateTime, nullable=True)          # оплачен до
+    traffic_quota = Column(Integer, default=0)            # квота трафика, байт (0 = безлимит)
+    traffic_used = Column(Integer, default=0)             # израсходовано, байт
+    billing_blocked = Column(Boolean, default=False)      # заблокирован биллингом (не вручную)
+
     ca = relationship("CA", back_populates="users")
     server = relationship("VPNServer", back_populates="users")
     organization = relationship("Organization", back_populates="users")
@@ -243,6 +250,19 @@ class DownloadToken(Base):
     download_count = Column(Integer, default=0)
     max_downloads = Column(Integer, default=5)
     expires_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Plan(Base):
+    """Тариф биллинг-модуля."""
+    __tablename__ = "plans"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(128), nullable=False)
+    price = Column(Integer, default=0)            # цена (справочно)
+    traffic_gb = Column(Integer, default=0)       # лимит трафика, ГБ (0 = безлимит)
+    duration_days = Column(Integer, default=30)   # срок, дней (0 = бессрочно)
+    speed_mbps = Column(Integer, default=0)       # ограничение скорости, Мбит/с (0 = без огр.)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

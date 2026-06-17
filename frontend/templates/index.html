@@ -212,6 +212,10 @@
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
         Модули
       </button>
+      <button class="nav-item" x-show="billingEnabled" :class="{active:page==='billing'}" @click="navigate('billing')">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
+        Биллинг
+      </button>
     </nav>
 
     <div style="padding:12px 8px;border-top:1px solid rgba(255,255,255,.06)">
@@ -807,6 +811,46 @@
         <template x-if="modulesList.length===0">
           <p style="color:#94a3b8;font-size:14px">Модулей нет</p>
         </template>
+      </div>
+    </div>
+
+    <!-- Billing -->
+    <div x-show="page==='billing'" class="fade-in" style="padding:32px">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:24px">
+        <div>
+          <h2 style="font-size:22px;font-weight:700;color:#0f172a;margin:0">Биллинг — тарифы</h2>
+          <p style="color:#94a3b8;font-size:13px;margin-top:4px">Тарифы назначаются клиентам; оплата отмечается вручную</p>
+        </div>
+        <button class="btn btn-primary" @click="openPlan(null)">
+          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+          Новый тариф
+        </button>
+      </div>
+      <div class="card" style="padding:0;overflow:hidden">
+        <table class="table">
+          <thead><tr>
+            <th style="padding-left:20px">Название</th><th>Цена</th><th>Трафик</th><th>Срок</th><th>Скорость</th>
+            <th style="text-align:right;padding-right:20px">Действия</th>
+          </tr></thead>
+          <tbody>
+            <template x-for="p in plans" :key="p.id">
+              <tr>
+                <td style="padding-left:20px;font-weight:600" x-text="p.name"></td>
+                <td x-text="p.price ? p.price + ' ₽' : '—'"></td>
+                <td x-text="p.traffic_gb ? p.traffic_gb + ' ГБ' : 'безлимит'"></td>
+                <td x-text="p.duration_days ? p.duration_days + ' дн.' : 'бессрочно'"></td>
+                <td x-text="p.speed_mbps ? p.speed_mbps + ' Мбит/с' : 'без огр.'"></td>
+                <td style="text-align:right;padding-right:20px">
+                  <button @click="openPlan(p)" class="btn btn-gray btn-sm">Изменить</button>
+                  <button @click="deletePlan(p)" class="btn btn-danger btn-sm">Удалить</button>
+                </td>
+              </tr>
+            </template>
+            <tr x-show="plans.length===0">
+              <td colspan="6" style="text-align:center;padding:40px;color:#94a3b8">Тарифов нет — создайте первый</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
 
@@ -2448,6 +2492,46 @@ petrov,Петров Пётр,petrov@co.ru,ЗПК,730,secret</code>
   </div>
 </div>
 
+<!-- Модалка: тариф -->
+<div x-show="planModal.open" x-cloak class="modal-backdrop">
+  <div class="modal fade-in" style="max-width:440px">
+    <div class="modal-head">
+      <h3 style="font-size:18px;font-weight:700;margin:0" x-text="planModal.id ? 'Редактировать тариф' : 'Новый тариф'"></h3>
+      <button class="modal-x" @click="planModal.open=false" title="Закрыть">
+        <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Название</label>
+        <input x-model="planModal.name" class="input" placeholder="Базовый"/>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Цена, ₽</label>
+          <input x-model.number="planModal.price" type="number" min="0" class="input" placeholder="0"/>
+        </div>
+        <div>
+          <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Трафик, ГБ <span style="color:#94a3b8;font-weight:400">(0=безлимит)</span></label>
+          <input x-model.number="planModal.traffic_gb" type="number" min="0" class="input" placeholder="0"/>
+        </div>
+        <div>
+          <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Срок, дней <span style="color:#94a3b8;font-weight:400">(0=бессрочно)</span></label>
+          <input x-model.number="planModal.duration_days" type="number" min="0" class="input" placeholder="30"/>
+        </div>
+        <div>
+          <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Скорость, Мбит/с <span style="color:#94a3b8;font-weight:400">(0=без огр.)</span></label>
+          <input x-model.number="planModal.speed_mbps" type="number" min="0" class="input" placeholder="0"/>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:4px">
+        <button class="btn btn-gray" style="flex:1;justify-content:center" @click="planModal.open=false">Отмена</button>
+        <button class="btn btn-primary" style="flex:1;justify-content:center" @click="savePlan()" :disabled="!planModal.name.trim()">Сохранить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Модалка: создание ссылки для скачивания -->
 <div x-show="shareModal.open" x-cloak class="modal-backdrop">
   <div class="modal fade-in" style="max-width:480px">
@@ -2837,6 +2921,9 @@ function app() {
     menuPos: { top: 0, left: 0 },
     modulesList: [],
     moduleBusy: null,
+    billingEnabled: false,
+    plans: [],
+    planModal: { open:false, id:null, name:'', price:0, traffic_gb:0, duration_days:30, speed_mbps:0 },
     shareModal: { open:false, user:null, kind:'profile', ttl_hours:72, max_downloads:5, creating:false, url:'', urls:[], isOpenVPN:true },
     sharesModal: { open:false, items:[] },
     expiringModal: { open:false, items:[] },
@@ -2927,6 +3014,7 @@ function app() {
       Promise.all([this.loadSettings(), this.loadServers(), this.loadCA(), this.loadOrgs()])
         .then(() => { this.loadDashboard(); this.loadUsers(); this.availableServers = this.servers; if (this.pinnedCharts.length) this.loadStats(true); });
       this.api('GET', '/stats/attempts?limit=1').then(d => { this.securityAlert = (d && d.unique_ips) || 0; }).catch(() => {});
+      this.loadModules();
       this._startRefresh();
     },
 
@@ -2990,6 +3078,7 @@ function app() {
       else { this._stopOnlineRefresh(); }
       if (p === 'security') this.loadSecurity();
       if (p === 'modules') this.loadModules();
+      if (p === 'billing') this.loadPlans();
       if (p === 'dashboard' && this.pinnedCharts.length) this.loadStats(true);
     },
 
@@ -4009,8 +4098,10 @@ function app() {
     },
 
     async loadModules() {
-      try { this.modulesList = await this.api('GET', '/modules') || []; }
-      catch(e) { console.warn('modules', e); }
+      try {
+        this.modulesList = await this.api('GET', '/modules') || [];
+        this.billingEnabled = !!this.modulesList.find(m => m.name==='billing' && m.enabled);
+      } catch(e) { console.warn('modules', e); }
     },
 
     async toggleModule(name) {
@@ -4020,6 +4111,34 @@ function app() {
         await this.loadModules();
       } catch(e) { alert('❌ ' + e.message); }
       finally { this.moduleBusy = null; }
+    },
+
+    async loadPlans() {
+      try { this.plans = await this.api('GET', '/billing/plans') || []; }
+      catch(e) { console.warn('plans', e); }
+    },
+
+    openPlan(p) {
+      this.planModal = p
+        ? { open:true, id:p.id, name:p.name, price:p.price, traffic_gb:p.traffic_gb, duration_days:p.duration_days, speed_mbps:p.speed_mbps }
+        : { open:true, id:null, name:'', price:0, traffic_gb:0, duration_days:30, speed_mbps:0 };
+    },
+
+    async savePlan() {
+      const m = this.planModal;
+      const body = { name:m.name.trim(), price:m.price||0, traffic_gb:m.traffic_gb||0, duration_days:m.duration_days||0, speed_mbps:m.speed_mbps||0 };
+      try {
+        if (m.id) await this.api('PUT', '/billing/plans/' + m.id, body);
+        else await this.api('POST', '/billing/plans', body);
+        this.planModal.open = false;
+        await this.loadPlans();
+      } catch(e) { alert('❌ ' + e.message); }
+    },
+
+    async deletePlan(p) {
+      if (!confirm('Удалить тариф «' + p.name + '»?')) return;
+      try { await this.api('DELETE', '/billing/plans/' + p.id); await this.loadPlans(); }
+      catch(e) { alert('❌ ' + e.message); }
     },
 
     flagEmoji(cc) {
