@@ -48,6 +48,8 @@
     .badge-red{background:#fee2e2;color:#dc2626}
     .badge-gray{background:#f1f5f9;color:#64748b}
     .badge-yellow{background:#fef9c3;color:#a16207}
+    .badge-purple{background:#ede9fe;color:#6d28d9}
+    .badge-blue{background:#dbeafe;color:#1d4ed8}
     .badge-dot::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:currentColor;margin-right:2px}
 
     /* Inputs */
@@ -190,6 +192,10 @@
       <button class="nav-item" x-show="billingEnabled" :class="{active:page==='billing'}" @click="navigate('billing')">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
         Биллинг
+      </button>
+      <button class="nav-item" x-show="s2sEnabled" :class="{active:page==='s2s'}" @click="navigate('s2s')">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+        Площадки
       </button>
 
       <!-- Группа: Система (раскрывается) -->
@@ -887,6 +893,163 @@
             </tr>
           </tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- Site-to-Site -->
+    <div x-show="page==='s2s'" class="fade-in" style="padding:32px">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:24px">
+        <div>
+          <h2 style="font-size:22px;font-weight:700;color:#0f172a;margin:0">Площадки (Site-to-Site)</h2>
+          <p style="color:#94a3b8;font-size:13px;margin-top:4px">Связь сетей филиалов через хаб. Топология: звезда (hub-and-spoke). Транспорт: WireGuard.</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button @click="s2sApply()" class="btn btn-gray btn-sm" :disabled="s2sBusy">
+            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            Применить топологию
+          </button>
+          <button @click="s2sShowAdd=true;s2sForm={name:'',role:'hub',hub_id:null,endpoint:'',tunnel_network:'10.100.0.0/24',tunnel_port:51900,subnets:''}" class="btn btn-primary btn-sm">+ Добавить площадку</button>
+        </div>
+      </div>
+
+      <!-- Apply result -->
+      <div x-show="s2sApplyResult" class="card" style="margin-bottom:16px;background:#f0fdf4;border:1px solid #bbf7d0">
+        <template x-for="r in (s2sApplyResult||[])" :key="r.hub">
+          <div style="display:flex;align-items:center;gap:8px;font-size:13px">
+            <span :style="r.ok?'color:#16a34a':'color:#dc2626'" x-text="r.ok?'✓':'✗'"></span>
+            <strong x-text="r.hub"></strong>
+            <span style="color:#64748b" x-text="r.msg"></span>
+          </div>
+        </template>
+      </div>
+
+      <!-- Список площадок -->
+      <template x-if="s2sSites.length===0">
+        <div class="card" style="text-align:center;padding:40px">
+          <svg width="48" height="48" fill="none" stroke="#cbd5e1" viewBox="0 0 24 24" style="margin:0 auto 12px"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+          <p style="color:#94a3b8;font-size:14px;margin:0">Площадок нет. Начните с добавления хаба.</p>
+        </div>
+      </template>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px">
+        <template x-for="site in s2sSites" :key="site.id">
+          <div class="card">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:12px">
+              <div style="flex:1;min-width:0">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+                  <span class="badge" :class="site.role==='hub'?'badge-purple':'badge-blue'" x-text="site.role==='hub'?'ХАБ':'Спица'"></span>
+                  <span style="font-weight:700;font-size:15px" x-text="site.name"></span>
+                </div>
+                <div style="font-size:12px;color:#64748b" x-text="site.role==='hub'?('Туннельная сеть: '+(site.tunnel_network||'?')+' | Порт: '+site.tunnel_port):('Туннельный IP: '+(site.tunnel_ip||'?'))"></div>
+                <div x-show="site.endpoint" style="font-size:12px;color:#64748b;margin-top:2px" x-text="'Endpoint: '+site.endpoint"></div>
+                <div x-show="site.role==='hub'" style="font-size:12px;color:#64748b;margin-top:2px">
+                  Спиц: <span x-text="s2sSites.filter(s=>s.hub_id===site.id).length"></span>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+                <span x-show="site.role==='spoke'" class="badge" :class="site.online?'badge-green badge-dot':'badge-gray'" x-text="site.online?'онлайн':'офлайн'"></span>
+              </div>
+            </div>
+
+            <!-- Подсети -->
+            <div x-show="site.subnets&&site.subnets.length" style="margin-bottom:12px">
+              <div style="font-size:11px;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">LAN-подсети</div>
+              <div style="display:flex;flex-wrap:wrap;gap:4px">
+                <template x-for="sn in site.subnets" :key="sn.id">
+                  <span style="font-size:12px;font-family:monospace;background:#f1f5f9;padding:2px 7px;border-radius:5px;color:#334155" x-text="sn.cidr"></span>
+                </template>
+              </div>
+            </div>
+
+            <!-- Хандшейк -->
+            <div x-show="site.role==='spoke'&&site.last_handshake>0" style="font-size:11px;color:#94a3b8;margin-bottom:12px">
+              Последний handshake: <span x-text="s2sFormatHandshake(site.last_handshake)"></span>
+            </div>
+
+            <div style="display:flex;gap:6px;flex-wrap:wrap;border-top:1px solid #f1f5f9;padding-top:12px">
+              <button x-show="site.role==='spoke'" @click="s2sDownloadConfig(site)" class="btn btn-gray btn-sm">
+                <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                Конфиг
+              </button>
+              <button @click="s2sStartEdit(site)" class="btn btn-gray btn-sm">Редактировать</button>
+              <button @click="s2sDeleteSite(site)" class="btn btn-sm" style="background:#fef2f2;color:#dc2626;border:1px solid #fecaca">Удалить</button>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Модалка добавления площадки -->
+      <div x-show="s2sShowAdd" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center" @click.self="s2sShowAdd=false">
+        <div class="card" style="width:480px;max-width:95vw;max-height:90vh;overflow-y:auto">
+          <h3 style="font-size:17px;font-weight:700;margin:0 0 20px">Добавить площадку</h3>
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <label style="font-size:13px;font-weight:600">Название
+              <input x-model="s2sForm.name" placeholder="Офис А" style="display:block;width:100%;margin-top:4px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px">
+            </label>
+            <label style="font-size:13px;font-weight:600">Роль
+              <select x-model="s2sForm.role" style="display:block;width:100%;margin-top:4px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;background:#fff">
+                <option value="hub">Хаб (VPN-сервер, белый IP)</option>
+                <option value="spoke">Спица (роутер филиала)</option>
+              </select>
+            </label>
+            <label x-show="s2sForm.role==='spoke'" style="font-size:13px;font-weight:600">Хаб
+              <select x-model="s2sForm.hub_id" style="display:block;width:100%;margin-top:4px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;background:#fff">
+                <option :value="null">— выберите хаб —</option>
+                <template x-for="s in s2sSites.filter(s=>s.role==='hub')" :key="s.id">
+                  <option :value="s.id" x-text="s.name"></option>
+                </template>
+              </select>
+            </label>
+            <label x-show="s2sForm.role==='hub'" style="font-size:13px;font-weight:600">Туннельная сеть
+              <input x-model="s2sForm.tunnel_network" placeholder="10.100.0.0/24" style="display:block;width:100%;margin-top:4px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px">
+              <span style="font-size:11px;color:#94a3b8">Служебная сеть для туннелей площадок. Не должна пересекаться с LAN.</span>
+            </label>
+            <label x-show="s2sForm.role==='hub'" style="font-size:13px;font-weight:600">Порт WireGuard
+              <input x-model.number="s2sForm.tunnel_port" type="number" placeholder="51900" style="display:block;width:100%;margin-top:4px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px">
+            </label>
+            <label style="font-size:13px;font-weight:600">
+              <span x-text="s2sForm.role==='hub'?'Публичный endpoint хаба (ip:port)':'Публичный endpoint (если есть)'"></span>
+              <input x-model="s2sForm.endpoint" placeholder="203.0.113.1:51900" style="display:block;width:100%;margin-top:4px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px">
+              <span x-show="s2sForm.role==='hub'" style="font-size:11px;color:#94a3b8">Нужен для генерации конфигов спиц</span>
+            </label>
+            <label style="font-size:13px;font-weight:600">LAN-подсети (по одной на строке)
+              <textarea x-model="s2sForm.subnets" placeholder="192.168.10.0/24&#10;10.0.1.0/24" rows="3" style="display:block;width:100%;margin-top:4px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;font-family:monospace;resize:vertical"></textarea>
+            </label>
+          </div>
+          <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:20px">
+            <button @click="s2sShowAdd=false" class="btn btn-gray">Отмена</button>
+            <button @click="s2sCreateSite()" class="btn btn-primary" :disabled="s2sBusy">Создать</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Модалка редактирования площадки -->
+      <div x-show="s2sShowEdit" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center" @click.self="s2sShowEdit=false">
+        <div class="card" style="width:480px;max-width:95vw;max-height:90vh;overflow-y:auto">
+          <h3 style="font-size:17px;font-weight:700;margin:0 0 20px">Редактировать площадку</h3>
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <label style="font-size:13px;font-weight:600">Название
+              <input x-model="s2sForm.name" style="display:block;width:100%;margin-top:4px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px">
+            </label>
+            <label style="font-size:13px;font-weight:600">
+              <span x-text="s2sForm.role==='hub'?'Публичный endpoint хаба':'Endpoint'"></span>
+              <input x-model="s2sForm.endpoint" placeholder="203.0.113.1:51900" style="display:block;width:100%;margin-top:4px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px">
+            </label>
+            <label x-show="s2sForm.role==='hub'" style="font-size:13px;font-weight:600">Туннельная сеть
+              <input x-model="s2sForm.tunnel_network" style="display:block;width:100%;margin-top:4px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px">
+            </label>
+            <label x-show="s2sForm.role==='hub'" style="font-size:13px;font-weight:600">Порт
+              <input x-model.number="s2sForm.tunnel_port" type="number" style="display:block;width:100%;margin-top:4px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px">
+            </label>
+            <label style="font-size:13px;font-weight:600">LAN-подсети (по одной на строке)
+              <textarea x-model="s2sForm.subnets" rows="3" style="display:block;width:100%;margin-top:4px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;font-family:monospace;resize:vertical"></textarea>
+            </label>
+          </div>
+          <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:20px">
+            <button @click="s2sShowEdit=false" class="btn btn-gray">Отмена</button>
+            <button @click="s2sSaveEdit()" class="btn btn-primary" :disabled="s2sBusy">Сохранить</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -2999,6 +3162,14 @@ function app() {
     modulesList: [],
     moduleBusy: null,
     billingEnabled: false,
+    s2sEnabled: false,
+    s2sSites: [],
+    s2sForm: { name:'', role:'hub', hub_id:null, endpoint:'', tunnel_network:'10.100.0.0/24', tunnel_port:51900, subnets:'' },
+    s2sEditId: null,
+    s2sShowAdd: false,
+    s2sShowEdit: false,
+    s2sBusy: false,
+    s2sApplyResult: null,
     plans: [],
     billingSummary: { total:0, paid:0, expired:0, unpaid:0, blocked:0, revenue:0 },
     planModal: { open:false, id:null, name:'', price:0, traffic_gb:0, duration_days:30, speed_mbps:0 },
@@ -3073,7 +3244,7 @@ function app() {
     },
 
     get pageTitle() {
-      const titles = { dashboard:'Дашборд', stats:'Статистика', servers:'Серверы', users:'Клиенты', orgs:'Организации', logs:'Логи', audit:'Журнал', ca:'Сертификаты', settings:'Настройки', security:'Безопасность', modules:'Модули' };
+      const titles = { dashboard:'Дашборд', stats:'Статистика', servers:'Серверы', users:'Клиенты', orgs:'Организации', logs:'Логи', audit:'Журнал', ca:'Сертификаты', settings:'Настройки', security:'Безопасность', modules:'Модули', billing:'Биллинг', s2s:'Площадки' };
       return (titles[this.page] || '') + ' — Click VPN';
     },
     get totalOnline() {
@@ -3158,6 +3329,7 @@ function app() {
       if (p === 'security') this.loadSecurity();
       if (p === 'modules') this.loadModules();
       if (p === 'billing') { this.loadPlans(); this.loadBillingSummary(); }
+      if (p === 's2s') this.loadS2SSites();
       if (p === 'users' && this.billingEnabled) this.loadPlans();
       if (p === 'dashboard' && this.pinnedCharts.length) this.loadStats(true);
     },
@@ -4213,6 +4385,7 @@ function app() {
       try {
         this.modulesList = await this.api('GET', '/modules') || [];
         this.billingEnabled = !!this.modulesList.find(m => m.name==='billing' && m.enabled);
+        this.s2sEnabled = !!this.modulesList.find(m => m.name==='site2site' && m.enabled);
       } catch(e) { console.warn('modules', e); }
     },
 
@@ -4271,6 +4444,101 @@ function app() {
       if (!confirm('Удалить тариф «' + p.name + '»?')) return;
       try { await this.api('DELETE', '/billing/plans/' + p.id); await this.loadPlans(); }
       catch(e) { alert('❌ ' + e.message); }
+    },
+
+    // ──── Site-to-Site ────
+
+    async loadS2SSites() {
+      try { this.s2sSites = await this.api('GET', '/s2s/sites') || []; }
+      catch(e) { console.warn('s2s', e); }
+    },
+
+    async s2sCreateSite() {
+      if (!this.s2sForm.name.trim()) return alert('Введите название');
+      if (this.s2sForm.role === 'spoke' && !this.s2sForm.hub_id) return alert('Выберите хаб');
+      this.s2sBusy = true;
+      try {
+        const subnets = this.s2sForm.subnets.split('\n').map(s=>s.trim()).filter(Boolean);
+        await this.api('POST', '/s2s/sites', {
+          name: this.s2sForm.name.trim(),
+          role: this.s2sForm.role,
+          hub_id: this.s2sForm.hub_id ? +this.s2sForm.hub_id : null,
+          endpoint: this.s2sForm.endpoint.trim() || null,
+          tunnel_network: this.s2sForm.role === 'hub' ? this.s2sForm.tunnel_network.trim() : null,
+          tunnel_port: this.s2sForm.tunnel_port || 51900,
+          subnets,
+        });
+        this.s2sShowAdd = false;
+        await this.loadS2SSites();
+      } catch(e) { alert('❌ ' + e.message); }
+      finally { this.s2sBusy = false; }
+    },
+
+    s2sStartEdit(site) {
+      this.s2sEditId = site.id;
+      this.s2sForm = {
+        name: site.name,
+        role: site.role,
+        hub_id: site.hub_id,
+        endpoint: site.endpoint || '',
+        tunnel_network: site.tunnel_network || '',
+        tunnel_port: site.tunnel_port || 51900,
+        subnets: (site.subnets || []).map(s=>s.cidr).join('\n'),
+      };
+      this.s2sShowEdit = true;
+    },
+
+    async s2sSaveEdit() {
+      if (!this.s2sForm.name.trim()) return alert('Введите название');
+      this.s2sBusy = true;
+      try {
+        const subnets = this.s2sForm.subnets.split('\n').map(s=>s.trim()).filter(Boolean);
+        await this.api('PUT', '/s2s/sites/' + this.s2sEditId, {
+          name: this.s2sForm.name.trim(),
+          endpoint: this.s2sForm.endpoint.trim() || null,
+          tunnel_network: this.s2sForm.tunnel_network.trim() || null,
+          tunnel_port: this.s2sForm.tunnel_port || 51900,
+          subnets,
+        });
+        this.s2sShowEdit = false;
+        await this.loadS2SSites();
+      } catch(e) { alert('❌ ' + e.message); }
+      finally { this.s2sBusy = false; }
+    },
+
+    async s2sDeleteSite(site) {
+      if (!confirm('Удалить площадку «' + site.name + '»?' + (site.role==='hub' ? '\nТуннели хаба будут остановлены.' : ''))) return;
+      try {
+        await this.api('DELETE', '/s2s/sites/' + site.id);
+        await this.loadS2SSites();
+      } catch(e) { alert('❌ ' + e.message); }
+    },
+
+    async s2sApply() {
+      this.s2sBusy = true;
+      this.s2sApplyResult = null;
+      try {
+        const r = await this.api('POST', '/s2s/apply');
+        this.s2sApplyResult = r.results || [];
+        await this.loadS2SSites();
+      } catch(e) { alert('❌ ' + e.message); }
+      finally { this.s2sBusy = false; }
+    },
+
+    s2sDownloadConfig(site) {
+      const a = document.createElement('a');
+      a.href = '/api/s2s/sites/' + site.id + '/config';
+      a.download = site.name + '.conf';
+      a.click();
+    },
+
+    s2sFormatHandshake(ts) {
+      if (!ts || ts === 0) return 'нет';
+      const diff = Math.floor(Date.now() / 1000) - ts;
+      if (diff < 60) return diff + ' сек. назад';
+      if (diff < 3600) return Math.floor(diff/60) + ' мин. назад';
+      if (diff < 86400) return Math.floor(diff/3600) + ' ч. назад';
+      return Math.floor(diff/86400) + ' дн. назад';
     },
 
     flagEmoji(cc) {

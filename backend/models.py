@@ -278,6 +278,48 @@ class Module(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class Site(Base):
+    """Площадка (hub или spoke) в site-to-site топологии."""
+    __tablename__ = "s2s_sites"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(128), nullable=False)
+    role = Column(String(16), default="spoke")         # hub | spoke
+    hub_id = Column(Integer, ForeignKey("s2s_sites.id"), nullable=True)
+    transport = Column(String(32), default="wireguard")
+    endpoint = Column(String(256), nullable=True)      # ip:port (хаб или спица с белым IP)
+    wg_private_key = Column(EncryptedText, nullable=True)
+    wg_public_key = Column(Text, nullable=True)
+    tunnel_ip = Column(String(64), nullable=True)      # адрес в туннельной сети (10.100.0.X)
+    tunnel_network = Column(String(64), nullable=True) # только для hub: 10.100.0.0/24
+    tunnel_port = Column(Integer, default=51900)       # WG listen-port на хабе
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    subnets = relationship("SiteSubnet", back_populates="site", cascade="all, delete-orphan")
+
+
+class SiteSubnet(Base):
+    """LAN-подсеть площадки."""
+    __tablename__ = "s2s_subnets"
+
+    id = Column(Integer, primary_key=True)
+    site_id = Column(Integer, ForeignKey("s2s_sites.id"), nullable=False)
+    cidr = Column(String(64), nullable=False)
+    comment = Column(String(256), nullable=True)
+
+    site = relationship("Site", back_populates="subnets")
+
+
+class AccessRule(Base):
+    """Правило матрицы доступа между площадками."""
+    __tablename__ = "s2s_access_rules"
+
+    id = Column(Integer, primary_key=True)
+    src_site_id = Column(Integer, ForeignKey("s2s_sites.id"), nullable=False)
+    dst_site_id = Column(Integer, ForeignKey("s2s_sites.id"), nullable=False)
+    allow = Column(Boolean, default=True)
+
+
 class ConnectionAttempt(Base):
     """Неудачные/анонимные попытки подключения (CN=UNDEF) — сканеры/боты.
     Агрегируется по (server_id, ip): растёт счётчик, обновляется last_seen.
