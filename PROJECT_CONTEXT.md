@@ -270,3 +270,125 @@ swanctl --list-conns                                # IKEv2 соединения
 cat /opt/click-vpn/.env          # пароль админа
 sqlite3 /var/lib/click-vpn/vpn.db .tables
 ```
+
+---
+
+# 12. АКТУАЛЬНОЕ СОСТОЯНИЕ (последние сессии — июнь 2026)
+
+> Этот раздел отражает всё, что сделано ПОСЛЕ базовых 5 протоколов.
+> Всё в master, применяется через `bash /opt/click-vpn/update.sh`.
+
+## Статистика и мониторинг
+- Страница «Статистика»: табы Обзор / Онлайн / Сессии / Аналитика / Система.
+  Онлайн — все протоколы live (OpenVPN status-log, WG `wg show dump`, IKEv2
+  `swanctl --list-sas`). Аналитика — длительность сессий + heatmap пиковых часов.
+  Система — CPU/RAM/диск/uptime (services/syshealth.py, /proc) + статус серверов.
+- conn_tracker трекает трафик WG + IKEv2-онлайн, пишет TrafficSample (5 мин).
+- БАГ-фикс важный: параметр `range` затенял builtin range() → графики были пусты.
+
+## Безопасность (раздел «Безопасность», в группе «Система»)
+- UNDEF (боты/сканеры, не прошедшие TLS) вынесены из статистики в отдельную
+  таблицу ConnectionAttempt (агрегация по IP). conn_tracker._parse_undef.
+- fail2ban управляется из UI: services/fail2ban.py (jail click-vpn-openvpn),
+  install-fail2ban.sh. Бан/разбан/белый список/параметры (maxretry/bantime).
+- АВТОБАН: при достижении порога попыток IP банится сам (Settings.autoban_*).
+  Массовый бан кнопкой «забанить с ≥N».
+- GeoIP: services/geoip.py (ip-api.com), страна+флаг в журнале попыток,
+  фоновый backfill + ретеншн попыток >30 дней (в main).
+- Навигация: поиск/фильтр/пагинация в попытках и аудит-журнале.
+- Security-чеклист «Защищённость панели»: GET /stats/security-check
+  (HTTPS/дефолт-пароль/fail2ban/автобан/шифрование БД/бэкап/обфускация).
+
+## Шифрование БД
+- services/crypto.py: Fernet + TypeDecorator EncryptedText. Шифруются:
+  ca.key_pem, vpn_users.{key_pem,cert_password,eap_password,wg_private_key},
+  vpn_servers.{wg_private_key,ikev2_key_pem,tls_crypt_key}, settings.smtp_password.
+  Ключ: DB_ENCRYPTION_KEY → fallback SECRET_KEY. Префикс enc:v1:. Миграция
+  _encrypt_existing() в main. НЕЛЬЗЯ менять SECRET_KEY после включения!
+
+## Доставка клиента
+- Windows-установщик: services/win_installer.py (NSIS makensis, OpenVPN MSI,
+  тихая msiexec /qn). install-client-installer.sh ставит nsis + качает MSI
+  (amd64+x86 = универсальный 32/64). Кнопка «.exe» у OpenVPN-клиентов.
+- Email-модалка: mailer.send_client_email() — HTML-письмо с инструкцией
+  (трей, галочка «Запомнить»), вложения профиля/exe, пароль. POST /users/{id}/send-email.
+- Изолированный сервис раздачи ссылок (УРОВЕНЬ 2): share_service.py — ОТДЕЛЬНОЕ
+  FastAPI-приложение (НЕ импортирует БД/PKI), systemd-юнит click-vpn-share
+  под юзером clickvpn-share (порт 8081, доступ только к share/). Landing-страница
+  /s/{token} + /s/{token}/dl. install-share-service.sh (создаёт юзера, юнит,
+  self-signed на WAN IP, ставит+настраивает nginx на свободный порт — 443 занят
+  обфускацией, 8443 панелью → авто 9443; NGINX_PORT= override). nginx-share.conf.example.
+  Управление ссылками: модалка «Ссылки» на стр.Клиенты. Settings.public_url/public_urls
+  (мультипровайдер), share_ttl_hours, share_max_downloads.
+
+## Управление (всё в UI)
+- Админы: Настройки→вкладка «Админы» (создать/пароль/вкл-выкл/удалить, защита себя/последнего).
+- Массовые операции по галочкам: ZIP/включить/выключить/архив/удалить (POST /users/bulk-action).
+- Уведомления об истечении: кнопка «Истекающие» (бейдж) + модалка + массовое
+  продление (POST /users/bulk-extend). services/expiry.py фон 12ч (пороги 30/7/1,
+  Settings.expiry_notify_enabled). VPNUser.expiry_notified.
+- Опция «без пароля на сертификате» при создании OpenVPN-клиента (UserCreate.no_password).
+- Автосоздание CA при первом запуске + при создании сервера (servers._ensure_ca).
+  Раздел «Сертификаты» больше не обязателен.
+- Маршруты сервера: profile_builder.rewrite_pushes() патчит push route/DNS в
+  конфиге БЕЗ перевыпуска сертов + авто-рестарт (раньше update_server менял только БД!).
+  Кнопки «Перезапустить» / «Перезапустить все» (POST /servers/{id}/restart).
+
+## Модульная система
+- models.Module + services/modules.py (REGISTRY/seed/is_enabled/list) +
+  routers/modules.py (list/toggle). Пункт меню «Модули» с переключателями.
+  on_disable модуля снимает его эффекты.
+
+## БИЛЛИНГ-модуль (работает, протестирован)
+- models.Plan (price/traffic_gb/duration_days/speed_mbps) + VPNUser биллинг-поля
+  (plan_id/paid_until/traffic_quota/traffic_used/billing_blocked).
+- routers/billing.py: CRUD тарифов + assign + pay + recheck + summary.
+  Guard на вкл.модуль. services/billing.py: фон 5мин — блок при истечении
+  срока/трафика/неоплате (платный тариф+не оплачен=блок), разблок при оплате;
+  CRL/resync+kill. on_disable разблокирует+снимает шейпинг.
+- СКОРОСТЬ: services/shaping.py (tc HTB), conn_tracker._sync_shaping применяет
+  download-лимит онлайн OpenVPN-клиентам (classid=100+октет IP, u32 по dst).
+  Только download, только OpenVPN. Требует iproute2.
+- conn_tracker считает traffic_used. UI: страница «Биллинг» (тарифы+сводка),
+  биллинг-колонка в списке клиентов, биллинг-секция в карточке (назначить/оплатить).
+- НЕ сделано: онлайн-оплата (шлюз), история платежей, личный кабинет клиента,
+  WG/IKEv2/upload shaping.
+
+## UI/прочее
+- Сайдбар: группа «Система» (раскрывается) — Безопасность/Журнал/Логи/Сертификаты/
+  Модули/Настройки. Контекстное меню действий клиента (один экземпляр, position:fixed
+  через CSS-класс .row-context-menu — :style затирает статический style!).
+- Логотип: щит с фиолетовым курсором-стрелкой (сайдбар/вход/favicon).
+- Настройки — на всю ширину.
+
+## КРИТИЧНЫЕ УРОКИ (грабли Alpine/SQLite/tc)
+- Alpine `:style` ЗАТИРАЕТ статический style → фикс-стили (position:fixed) в CSS-класс.
+- x-show ставит display:block → ломает flex.
+- @apply не работает (Tailwind CDN). Chart.js в нереактивном `_charts`.
+- Контекстные меню: 1 экземпляр на body, position:fixed из класса, закрытие
+  фон-оверлеем (НЕ @click.outside — гонка).
+- Новое поле в существующей таблице → ALTER в _migrate_db() (main.py).
+  SQLite не любит FK в ALTER, но ADD COLUMN ... REFERENCES обычно проходит.
+- Порты: 443=OpenVPN обфускация, 8443=панель HTTPS, 8081=share-сервис, 9443=nginx share.
+
+---
+
+# 13. СЛЕДУЮЩАЯ ЗАДАЧА: Site-to-Site (дизайн готов, код не начат)
+
+Полный дизайн-документ: **docs/SITE2SITE_DESIGN.md** (ПРОЧИТАЙ ЕГО).
+
+Кратко: подсистема связи сетей филиалов (площадок). Топология звезда hub-spoke,
+3 слоя (абстракция транспорта WG/OpenVPN/IPsec/GRE, маршрутизация статическая→
+динамическая BGP/FRR, гибкая матрица доступа). Как управляемый модуль.
+
+РЕШЕНИЯ зафиксированы: multi-hub (в модели; S1=один хаб MVP), туннельная сеть
+настраиваемая, политика матрицы настраиваемая (allow_all/deny_all), динамика BGP,
+только L3.
+
+ПОЭТАПНО: S0 (модуль+модели Site/SiteSubnet/AccessRule+абстракция Transport) →
+S1 (WireGuard-звезда+статика+конфиги площадок+UI = рабочий s2s) → S2 (матрица:
+AllowedIPs+iptables на хабе) → S3 (OpenVPN+IPsec транспорты) → S4 (GRE over IPsec)
+→ S5 (BGP/FRR динамика).
+
+СТАРТ В НОВОМ ЧАТЕ: «Продолжаем Click VPN. Прочитай PROJECT_CONTEXT.md (разделы
+12-13) и docs/SITE2SITE_DESIGN.md. Начинаем реализацию site-to-site с этапа S0+S1.»
