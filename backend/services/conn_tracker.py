@@ -145,6 +145,29 @@ def _maybe_autoban(db, ip, attempts):
             fail2ban.ban(ip)
 
 
+def _sync_shaping(db, server_id, iface, clients, VPNUser):
+    """Применяет ограничение скорости (по тарифу) к онлайн OpenVPN-клиентам."""
+    from models import Plan, Module
+    m = db.query(Module).filter(Module.name == "billing").first()
+    if not m or not m.enabled:
+        return
+    from services import shaping
+    plans = {p.id: p for p in db.query(Plan).all()}
+    limits = {}
+    for c in clients:
+        vip = c.get("virtual_address")
+        if not vip:
+            continue
+        user = db.query(VPNUser).filter(
+            VPNUser.server_id == server_id, VPNUser.username == c["common_name"]
+        ).first()
+        if user and user.plan_id and not user.billing_blocked:
+            plan = plans.get(user.plan_id)
+            if plan and plan.speed_mbps:
+                limits[vip] = plan.speed_mbps
+    shaping.sync(iface, limits)
+
+
 def _poll_once(SessionLocal, VPNServer, VPNUser, ConnectionLog):
     db = SessionLocal()
     try:
@@ -314,6 +337,12 @@ def _poll_once(SessionLocal, VPNServer, VPNUser, ConnectionLog):
                         db.commit()
 
             _add_bucket(s.id, server_rx_delta, server_tx_delta, server_online)
+
+            # ограничение скорости по тарифу (download shaping)
+            try:
+                _sync_shaping(db, s.id, f"tun{s.id}", clients, VPNUser)
+            except Exception:
+                pass
 
         # глобальный online
         gb = _buckets.setdefault(None, {"rx": 0, "tx": 0, "online": 0})
