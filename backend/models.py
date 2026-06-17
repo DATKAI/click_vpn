@@ -246,6 +246,18 @@ class DownloadToken(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class Module(Base):
+    """Управляемый модуль (расширение): включается/выключается из UI.
+    config — JSON с настройками модуля."""
+    __tablename__ = "modules"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(64), unique=True, nullable=False)   # 'billing'
+    enabled = Column(Boolean, default=False)
+    config = Column(Text, nullable=True)                     # JSON-настройки
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class ConnectionAttempt(Base):
     """Неудачные/анонимные попытки подключения (CN=UNDEF) — сканеры/боты.
     Агрегируется по (server_id, ip): растёт счётчик, обновляется last_seen.

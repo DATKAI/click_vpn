@@ -208,6 +208,10 @@
         Настройки
         <span x-show="settingsLoaded && !settings.isp1_host" style="margin-left:auto;background:#f59e0b;color:#fff;font-size:10px;padding:1px 7px;border-radius:50px">!</span>
       </button>
+      <button class="nav-item" :class="{active:page==='modules'}" @click="navigate('modules')">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+        Модули
+      </button>
     </nav>
 
     <div style="padding:12px 8px;border-top:1px solid rgba(255,255,255,.06)">
@@ -772,6 +776,38 @@
         </div>
       </div>
 
+    </div>
+
+    <!-- Modules -->
+    <div x-show="page==='modules'" class="fade-in" style="padding:32px">
+      <div style="margin-bottom:24px">
+        <h2 style="font-size:22px;font-weight:700;color:#0f172a;margin:0">Модули</h2>
+        <p style="color:#94a3b8;font-size:13px;margin-top:4px">Расширения панели — включайте только то, что нужно</p>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px">
+        <template x-for="m in modulesList" :key="m.name">
+          <div class="card">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+              <div style="flex:1">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+                  <div style="width:36px;height:36px;border-radius:10px;background:#eef2ff;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                    <svg width="18" height="18" fill="none" stroke="#4f46e5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-2M9 12h12m0 0l-3-3m3 3l-3 3"/></svg>
+                  </div>
+                  <h3 style="font-size:15px;font-weight:700;margin:0" x-text="m.title"></h3>
+                </div>
+                <p style="font-size:13px;color:#64748b;margin:0;line-height:1.5" x-text="m.description"></p>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;border-top:1px solid #f1f5f9;padding-top:14px">
+              <span class="badge" :class="m.enabled?'badge-green badge-dot':'badge-gray'" x-text="m.enabled?'включён':'выключен'"></span>
+              <button @click="toggleModule(m.name)" class="btn btn-sm" :class="m.enabled?'btn-gray':'btn-primary'" :disabled="moduleBusy===m.name" x-text="m.enabled?'Выключить':'Включить'"></button>
+            </div>
+          </div>
+        </template>
+        <template x-if="modulesList.length===0">
+          <p style="color:#94a3b8;font-size:14px">Модулей нет</p>
+        </template>
+      </div>
     </div>
 
     <!-- Security -->
@@ -2799,6 +2835,8 @@ function app() {
     emailModal: { open:false, user:null, to:'', attach_profile:true, attach_installer:false, include_password:true, include_instructions:true, isOpenVPN:true, sending:false, linking:false },
     menuUser: null,
     menuPos: { top: 0, left: 0 },
+    modulesList: [],
+    moduleBusy: null,
     shareModal: { open:false, user:null, kind:'profile', ttl_hours:72, max_downloads:5, creating:false, url:'', urls:[], isOpenVPN:true },
     sharesModal: { open:false, items:[] },
     expiringModal: { open:false, items:[] },
@@ -2870,7 +2908,7 @@ function app() {
     },
 
     get pageTitle() {
-      const titles = { dashboard:'Дашборд', stats:'Статистика', servers:'Серверы', users:'Клиенты', orgs:'Организации', logs:'Логи', audit:'Журнал', ca:'Сертификаты', settings:'Настройки', security:'Безопасность' };
+      const titles = { dashboard:'Дашборд', stats:'Статистика', servers:'Серверы', users:'Клиенты', orgs:'Организации', logs:'Логи', audit:'Журнал', ca:'Сертификаты', settings:'Настройки', security:'Безопасность', modules:'Модули' };
       return (titles[this.page] || '') + ' — Click VPN';
     },
     get totalOnline() {
@@ -2951,6 +2989,7 @@ function app() {
       if (p === 'stats') { this.statsTab = 'overview'; this.loadStats(); }
       else { this._stopOnlineRefresh(); }
       if (p === 'security') this.loadSecurity();
+      if (p === 'modules') this.loadModules();
       if (p === 'dashboard' && this.pinnedCharts.length) this.loadStats(true);
     },
 
@@ -3967,6 +4006,20 @@ function app() {
       try {
         this.secCheck = await this.api('GET', '/stats/security-check') || this.secCheck;
       } catch(e) { console.warn('security-check', e); }
+    },
+
+    async loadModules() {
+      try { this.modulesList = await this.api('GET', '/modules') || []; }
+      catch(e) { console.warn('modules', e); }
+    },
+
+    async toggleModule(name) {
+      this.moduleBusy = name;
+      try {
+        await this.api('POST', '/modules/' + name + '/toggle');
+        await this.loadModules();
+      } catch(e) { alert('❌ ' + e.message); }
+      finally { this.moduleBusy = null; }
     },
 
     flagEmoji(cc) {

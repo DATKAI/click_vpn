@@ -11,7 +11,7 @@ from fastapi.responses import HTMLResponse
 from database import engine, SessionLocal, Base
 from models import AdminUser, Settings
 from auth import hash_password
-from routers import auth, settings, servers, users, status, organizations, logs, system, audit, backup, stats, download
+from routers import auth, settings, servers, users, status, organizations, logs, system, audit, backup, stats, download, modules
 
 DATA_DIR = os.getenv("DATA_DIR", "./data")
 os.makedirs(os.path.join(DATA_DIR, "pki"), exist_ok=True)
@@ -233,6 +233,13 @@ def _seed_defaults():
             db.add(Settings(id=1))
             db.commit()
 
+        # Регистрация модулей-расширений (выключены по умолчанию)
+        try:
+            from services import modules as _mod
+            _mod.seed(db)
+        except Exception:
+            db.rollback()
+
         # Автосоздание корневого CA при первом запуске (для OpenVPN/IKEv2).
         from models import CA
         if not db.query(CA).first():
@@ -278,6 +285,7 @@ app.include_router(audit.router)
 app.include_router(backup.router)
 app.include_router(stats.router)
 app.include_router(download.router)
+app.include_router(modules.router)
 
 # Статика и шаблоны
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
