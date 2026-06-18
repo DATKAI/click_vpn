@@ -272,8 +272,12 @@ def get_site_config(site_id: int, db: Session = Depends(get_db),
     if not hub:
         raise HTTPException(404, "Хаб площадки не найден")
 
+    # peer_sites: хаб + остальные спицы того же хаба (их LAN → в AllowedIPs)
+    siblings = db.query(Site).filter(Site.hub_id == hub.id, Site.id != site.id).all()
+    peer_sites = [hub] + siblings
+
     transport = tr.get(hub.transport)
-    cfg = transport.site_config(hub, site)
+    cfg = transport.site_config(hub, site, peer_sites)
     return PlainTextResponse(cfg, media_type="text/plain",
                              headers={"Content-Disposition": f'attachment; filename="{site.name}.conf"'})
 

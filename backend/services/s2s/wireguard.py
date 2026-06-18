@@ -98,14 +98,26 @@ def _build_hub_conf(hub_site, spoke_sites: list) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _build_spoke_conf(hub_site, spoke) -> str:
-    """Конфиг для роутера площадки-спицы."""
-    hub_ip = hub_site.tunnel_ip or _hub_tunnel_ip(hub_site.tunnel_network)
+def _build_spoke_conf(hub_site, spoke, peer_sites: list | None = None) -> str:
+    """Конфиг для роутера площадки-спицы.
+
+    peer_sites — другие площадки (хаб + прочие спицы), чьи LAN должны быть
+    доступны этой спице через хаб. Их подсети идут в AllowedIPs, иначе
+    WireGuard не направит трафик к ним в туннель.
+    """
     net = ipaddress.ip_network(hub_site.tunnel_network, strict=False)
 
-    # AllowedIPs для спицы: туннельная сеть + LAN всех других спиц (через хаб)
-    # (S1: разрешаем всю туннельную сеть; матрица доступа — в S2)
+    # AllowedIPs спицы: туннельная сеть + LAN хаба + LAN остальных спиц.
+    # (S1: разрешаем все известные подсети; матрица доступа — в S2)
     allowed = [hub_site.tunnel_network]
+    seen = {hub_site.tunnel_network}
+    for site in (peer_sites or []):
+        if site.id == spoke.id:
+            continue
+        for sn in site.subnets:
+            if sn.cidr not in seen:
+                allowed.append(sn.cidr)
+                seen.add(sn.cidr)
 
     lines = [
         f"# WireGuard конфиг площадки «{spoke.name}»",
@@ -185,8 +197,8 @@ class WireGuardTransport(Transport):
                 os.remove(p)
         subprocess.run(["systemctl", "daemon-reload"], check=False)
 
-    def site_config(self, hub_site, site) -> str:
-        return _build_spoke_conf(hub_site, site)
+    def site_config(self, hub_site, site, peer_sites: list | None = None) -> str:
+        return _build_spoke_conf(hub_site, site, peer_sites)
 
     def status(self, hub_site) -> list[dict]:
         r = subprocess.run(["wg", "show", _iface(hub_site.id), "dump"],

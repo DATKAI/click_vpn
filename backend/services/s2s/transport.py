@@ -18,8 +18,12 @@ class Transport(ABC):
         """Остановить и удалить туннели хаба."""
 
     @abstractmethod
-    def site_config(self, hub_site, site) -> str:
-        """Сгенерировать текстовый конфиг для роутера площадки."""
+    def site_config(self, hub_site, site, peer_sites: list) -> str:
+        """Сгенерировать текстовый конфиг для роутера площадки.
+
+        peer_sites — другие площадки (хаб + прочие спицы), чьи LAN-подсети
+        должны быть доступны этой спице через туннель (попадают в AllowedIPs).
+        """
 
     @abstractmethod
     def status(self, hub_site) -> list[dict]:
