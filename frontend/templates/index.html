@@ -904,6 +904,10 @@
           <p style="color:#94a3b8;font-size:13px;margin-top:4px">Связь сетей филиалов через хаб. Топология: звезда (hub-and-spoke). Транспорт: WireGuard.</p>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button @click="s2sOpenAccess()" class="btn btn-gray btn-sm" :disabled="s2sBusy">
+            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            Матрица доступа
+          </button>
           <button @click="s2sApply()" class="btn btn-gray btn-sm" :disabled="s2sBusy">
             <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
             Применить топологию
@@ -1048,6 +1052,54 @@
           <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:20px">
             <button @click="s2sShowEdit=false" class="btn btn-gray">Отмена</button>
             <button @click="s2sSaveEdit()" class="btn btn-primary" :disabled="s2sBusy">Сохранить</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Модалка матрицы доступа -->
+      <div x-show="s2sShowAccess" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center" @click.self="s2sShowAccess=false">
+        <div class="card" style="width:680px;max-width:95vw;max-height:90vh;overflow:auto">
+          <h3 style="font-size:17px;font-weight:700;margin:0 0 8px">Матрица доступа</h3>
+          <p style="color:#94a3b8;font-size:12px;margin:0 0 16px">Кто из площадок видит сети других. Строка — источник, столбец — назначение. Галочка = доступ разрешён.</p>
+
+          <label style="font-size:13px;font-weight:600;display:block;margin-bottom:16px">Политика по умолчанию
+            <select x-model="s2sAccess.default_policy" style="display:block;margin-top:4px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px">
+              <option value="allow_all">Разрешено всё (все видят всех)</option>
+              <option value="deny_all">Запрещено всё (только явные правила)</option>
+            </select>
+          </label>
+
+          <div x-show="(s2sAccess.sites||[]).length<2" style="color:#94a3b8;font-size:13px;padding:12px 0">Нужно минимум 2 площадки для матрицы.</div>
+
+          <div x-show="(s2sAccess.sites||[]).length>=2" style="overflow-x:auto">
+            <table style="border-collapse:collapse;font-size:13px">
+              <thead>
+                <tr>
+                  <th style="padding:6px 10px;text-align:right;color:#64748b;font-weight:600">из ↓ \ в →</th>
+                  <template x-for="d in s2sAccess.sites" :key="'h'+d.id">
+                    <th style="padding:6px 10px;color:#0f172a;font-weight:600" x-text="d.name"></th>
+                  </template>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="s in s2sAccess.sites" :key="'r'+s.id">
+                  <tr>
+                    <td style="padding:6px 10px;text-align:right;font-weight:600;color:#0f172a;white-space:nowrap" x-text="s.name"></td>
+                    <template x-for="d in s2sAccess.sites" :key="s.id+'-'+d.id">
+                      <td style="padding:6px 10px;text-align:center">
+                        <span x-show="s.id===d.id" style="color:#cbd5e1">—</span>
+                        <input x-show="s.id!==d.id" type="checkbox" :checked="s2sIsAllowed(s.id,d.id)" @change="s2sToggleAccess(s.id,d.id,$event.target.checked)" style="width:16px;height:16px;cursor:pointer">
+                      </td>
+                    </template>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+
+          <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:20px">
+            <button @click="s2sShowAccess=false" class="btn btn-gray">Отмена</button>
+            <button @click="s2sSaveAccess()" class="btn btn-primary" :disabled="s2sBusy">Сохранить и применить</button>
           </div>
         </div>
       </div>
@@ -3168,6 +3220,8 @@ function app() {
     s2sEditId: null,
     s2sShowAdd: false,
     s2sShowEdit: false,
+    s2sShowAccess: false,
+    s2sAccess: { default_policy:'allow_all', sites:[], rules:[] },
     s2sBusy: false,
     s2sApplyResult: null,
     plans: [],
@@ -4520,6 +4574,37 @@ function app() {
       try {
         const r = await this.api('POST', '/s2s/apply');
         this.s2sApplyResult = r.results || [];
+        await this.loadS2SSites();
+      } catch(e) { alert('❌ ' + e.message); }
+      finally { this.s2sBusy = false; }
+    },
+
+    async s2sOpenAccess() {
+      try {
+        this.s2sAccess = await this.api('GET', '/s2s/access');
+        this.s2sShowAccess = true;
+      } catch(e) { alert('❌ ' + e.message); }
+    },
+    s2sIsAllowed(srcId, dstId) {
+      const r = (this.s2sAccess.rules||[]).find(x => x.src_site_id===srcId && x.dst_site_id===dstId);
+      if (r) return r.allow;
+      return this.s2sAccess.default_policy !== 'deny_all';
+    },
+    s2sToggleAccess(srcId, dstId, checked) {
+      const rules = (this.s2sAccess.rules||[]).filter(x => !(x.src_site_id===srcId && x.dst_site_id===dstId));
+      const defAllow = this.s2sAccess.default_policy !== 'deny_all';
+      // храним только правила, отличающиеся от политики по умолчанию
+      if (checked !== defAllow) rules.push({ src_site_id:srcId, dst_site_id:dstId, allow:checked });
+      this.s2sAccess.rules = rules;
+    },
+    async s2sSaveAccess() {
+      this.s2sBusy = true;
+      try {
+        await this.api('PUT', '/s2s/config', { default_policy: this.s2sAccess.default_policy });
+        await this.api('PUT', '/s2s/access', { rules: this.s2sAccess.rules || [] });
+        const r = await this.api('POST', '/s2s/apply');
+        this.s2sApplyResult = r.results || [];
+        this.s2sShowAccess = false;
         await this.loadS2SSites();
       } catch(e) { alert('❌ ' + e.message); }
       finally { this.s2sBusy = false; }

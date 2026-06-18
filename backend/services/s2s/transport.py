@@ -10,19 +10,25 @@ class Transport(ABC):
     name: str
 
     @abstractmethod
-    def hub_apply(self, hub_site, spoke_sites: list) -> tuple[bool, str]:
-        """Поднять/обновить туннели на хабе. Возвращает (ok, message)."""
+    def hub_apply(self, hub_site, spoke_sites: list, is_allowed=None) -> tuple[bool, str]:
+        """Поднять/обновить туннели на хабе. Возвращает (ok, message).
+
+        is_allowed — необязательный callable(src_site_id, dst_site_id) -> bool
+        (матрица доступа). None = разрешено всё (поведение S1).
+        """
 
     @abstractmethod
     def hub_teardown(self, hub_site) -> None:
         """Остановить и удалить туннели хаба."""
 
     @abstractmethod
-    def site_config(self, hub_site, site, peer_sites: list) -> str:
+    def site_config(self, hub_site, site, peer_sites: list, is_allowed=None) -> str:
         """Сгенерировать текстовый конфиг для роутера площадки.
 
         peer_sites — другие площадки (хаб + прочие спицы), чьи LAN-подсети
         должны быть доступны этой спице через туннель (попадают в AllowedIPs).
+        is_allowed — callable(src_site_id, dst_site_id) -> bool; LAN площадки
+        попадает в AllowedIPs только если доступ к ней разрешён. None = всё.
         """
 
     @abstractmethod

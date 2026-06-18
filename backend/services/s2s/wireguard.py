@@ -113,7 +113,8 @@ def _build_hub_conf(hub_site, spoke_sites: list) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _build_spoke_conf(hub_site, spoke, peer_sites: list | None = None) -> str:
+def _build_spoke_conf(hub_site, spoke, peer_sites: list | None = None,
+                      is_allowed=None) -> str:
     """Конфиг для роутера площадки-спицы.
 
     peer_sites — другие площадки (хаб + прочие спицы), чьи LAN должны быть
@@ -122,12 +123,14 @@ def _build_spoke_conf(hub_site, spoke, peer_sites: list | None = None) -> str:
     """
     net = ipaddress.ip_network(hub_site.tunnel_network, strict=False)
 
-    # AllowedIPs спицы: туннельная сеть + LAN хаба + LAN остальных спиц.
-    # (S1: разрешаем все известные подсети; матрица доступа — в S2)
+    # AllowedIPs спицы: туннельная сеть + LAN площадок, к которым доступ разрешён
+    # матрицей (S2). is_allowed=None → разрешено всё (S1).
     allowed = [hub_site.tunnel_network]
     seen = {hub_site.tunnel_network}
     for site in (peer_sites or []):
         if site.id == spoke.id:
+            continue
+        if is_allowed is not None and not is_allowed(spoke.id, site.id):
             continue
         for sn in site.subnets:
             if sn.cidr not in seen:
@@ -213,10 +216,60 @@ def _reconcile_state(hub_site, spoke_sites: list) -> None:
             subprocess.run(["iptables", "-A", *rule], capture_output=True)
 
 
+def _fwd_chain(hub_id: int) -> str:
+    # имя цепочки ≤ 28 символов (лимит iptables)
+    return f"CLICKVPN_S2S_{hub_id}"
+
+
+def _apply_forward_rules(hub_site, spoke_sites: list, is_allowed=None) -> None:
+    """Enforcement матрицы доступа на хабе через отдельную цепочку FORWARD.
+
+    Даже если у площадки есть маршрут (AllowedIPs), хаб дропает межсетевой
+    трафик между парами, которым доступ запрещён (defense-in-depth).
+    Цепочка пересобирается целиком при каждом применении.
+    """
+    chain = _fwd_chain(hub_site.id)
+    sites = [hub_site] + list(spoke_sites)
+
+    # создать цепочку (если нет) и очистить
+    subprocess.run(["iptables", "-N", chain], capture_output=True)
+    subprocess.run(["iptables", "-F", chain], capture_output=True)
+
+    # установленные соединения пропускаем (иначе рвём обратный трафик
+    # разрешённых направлений)
+    subprocess.run(["iptables", "-A", chain, "-m", "conntrack",
+                    "--ctstate", "ESTABLISHED,RELATED", "-j", "ACCEPT"], capture_output=True)
+
+    # DROP для запрещённых пар (направленно src→dst)
+    if is_allowed is not None:
+        for a in sites:
+            for b in sites:
+                if a.id == b.id:
+                    continue
+                if is_allowed(a.id, b.id):
+                    continue
+                for sa in a.subnets:
+                    for sb in b.subnets:
+                        subprocess.run(["iptables", "-A", chain, "-s", sa.cidr,
+                                        "-d", sb.cidr, "-j", "DROP"], capture_output=True)
+
+    # подключить цепочку в начало FORWARD (идемпотентно)
+    if subprocess.run(["iptables", "-C", "FORWARD", "-j", chain],
+                      capture_output=True).returncode != 0:
+        subprocess.run(["iptables", "-I", "FORWARD", "1", "-j", chain], capture_output=True)
+
+
+def _clear_forward_rules(hub_id: int) -> None:
+    chain = _fwd_chain(hub_id)
+    subprocess.run(["iptables", "-D", "FORWARD", "-j", chain], capture_output=True)
+    subprocess.run(["iptables", "-F", chain], capture_output=True)
+    subprocess.run(["iptables", "-X", chain], capture_output=True)
+
+
 class WireGuardTransport(Transport):
     name = "wireguard"
 
-    def hub_apply(self, hub_site, spoke_sites: list) -> tuple[bool, str]:
+    def hub_apply(self, hub_site, spoke_sites: list, is_allowed=None) -> tuple[bool, str]:
         os.makedirs(S2S_DIR, exist_ok=True)
         conf = _build_hub_conf(hub_site, spoke_sites)
         path = _conf_path(hub_site.id)
@@ -238,11 +291,15 @@ class WireGuardTransport(Transport):
             r = subprocess.run(["systemctl", "restart", _unit_name(hub_site.id)],
                                capture_output=True, text=True)
 
+        # enforcement матрицы доступа (FORWARD-цепочка)
+        _apply_forward_rules(hub_site, spoke_sites, is_allowed)
+
         ok = r.returncode == 0
         msg = (r.stderr or r.stdout).strip()
         return ok, msg or ("OK" if ok else "ошибка применения конфига")
 
     def hub_teardown(self, hub_site) -> None:
+        _clear_forward_rules(hub_site.id)
         subprocess.run(["systemctl", "disable", "--now", _unit_name(hub_site.id)],
                        capture_output=True)
         for p in (_unit_path(hub_site.id), _conf_path(hub_site.id)):
@@ -250,8 +307,9 @@ class WireGuardTransport(Transport):
                 os.remove(p)
         subprocess.run(["systemctl", "daemon-reload"], check=False)
 
-    def site_config(self, hub_site, site, peer_sites: list | None = None) -> str:
-        return _build_spoke_conf(hub_site, site, peer_sites)
+    def site_config(self, hub_site, site, peer_sites: list | None = None,
+                    is_allowed=None) -> str:
+        return _build_spoke_conf(hub_site, site, peer_sites, is_allowed)
 
     def status(self, hub_site) -> list[dict]:
         r = subprocess.run(["wg", "show", _iface(hub_site.id), "dump"],

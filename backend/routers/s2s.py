@@ -3,6 +3,7 @@
 Все эндпоинты защищены модулем site2site.
 """
 import ipaddress
+import json
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -11,7 +12,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
 from database import get_db
-from models import AdminUser, Site, SiteSubnet, AccessRule
+from models import AdminUser, Site, SiteSubnet, AccessRule, Module
 from auth import get_current_user
 from services import modules as mod
 from services import audit
@@ -26,6 +27,51 @@ router = APIRouter(prefix="/api/s2s", tags=["site2site"])
 def _require_module(db: Session):
     if not mod.is_enabled(db, "site2site"):
         raise HTTPException(403, "Модуль site2site не включён")
+
+
+DEFAULT_POLICY = "allow_all"   # allow_all | deny_all
+
+
+def _get_config(db: Session) -> dict:
+    """Конфиг модуля site2site (Module.config JSON)."""
+    m = db.query(Module).filter(Module.name == "site2site").first()
+    cfg = {}
+    if m and m.config:
+        try:
+            cfg = json.loads(m.config)
+        except Exception:
+            cfg = {}
+    cfg.setdefault("default_policy", DEFAULT_POLICY)
+    return cfg
+
+
+def _set_config(db: Session, cfg: dict):
+    m = db.query(Module).filter(Module.name == "site2site").first()
+    if not m:
+        m = Module(name="site2site", enabled=True)
+        db.add(m)
+        db.flush()
+    m.config = json.dumps(cfg)
+    db.commit()
+
+
+def _build_is_allowed(db: Session):
+    """Возвращает callable(src_site_id, dst_site_id) -> bool по матрице доступа.
+
+    Явное правило AccessRule переопределяет политику по умолчанию.
+    """
+    policy = _get_config(db).get("default_policy", DEFAULT_POLICY)
+    rules = {(r.src_site_id, r.dst_site_id): r.allow for r in db.query(AccessRule).all()}
+    default_allow = (policy != "deny_all")
+
+    def is_allowed(src_id: int, dst_id: int) -> bool:
+        if src_id == dst_id:
+            return True
+        if (src_id, dst_id) in rules:
+            return rules[(src_id, dst_id)]
+        return default_allow
+
+    return is_allowed
 
 
 def _hub_of_spoke(db: Session, spoke: Site) -> Site | None:
@@ -244,12 +290,13 @@ def apply_topology(db: Session = Depends(get_db), admin: AdminUser = Depends(get
     """Применить топологию: поднять/обновить туннели на всех хабах."""
     _require_module(db)
     hubs = db.query(Site).filter(Site.role == "hub").all()
+    is_allowed = _build_is_allowed(db)
     results = []
     for hub in hubs:
         spokes = db.query(Site).filter(Site.hub_id == hub.id).all()
         try:
             transport = tr.get(hub.transport)
-            ok, msg = transport.hub_apply(hub, spokes)
+            ok, msg = transport.hub_apply(hub, spokes, is_allowed)
             results.append({"hub": hub.name, "ok": ok, "msg": msg})
         except Exception as e:
             results.append({"hub": hub.name, "ok": False, "msg": str(e)})
@@ -277,7 +324,7 @@ def get_site_config(site_id: int, db: Session = Depends(get_db),
     peer_sites = [hub] + siblings
 
     transport = tr.get(hub.transport)
-    cfg = transport.site_config(hub, site, peer_sites)
+    cfg = transport.site_config(hub, site, peer_sites, _build_is_allowed(db))
     return PlainTextResponse(cfg, media_type="text/plain",
                              headers={"Content-Disposition": f'attachment; filename="{site.name}.conf"'})
 
@@ -294,3 +341,70 @@ def get_status(db: Session = Depends(get_db), _: AdminUser = Depends(get_current
         except Exception as e:
             result[hub.id] = {"error": str(e)}
     return result
+
+
+# ──────────────────── Конфиг модуля + матрица доступа (S2) ────────────────────
+
+class ConfigUpdate(BaseModel):
+    default_policy: str   # allow_all | deny_all
+
+
+@router.get("/config")
+def get_config(db: Session = Depends(get_db), _: AdminUser = Depends(get_current_user)):
+    _require_module(db)
+    return _get_config(db)
+
+
+@router.put("/config")
+def update_config(body: ConfigUpdate, db: Session = Depends(get_db),
+                  admin: AdminUser = Depends(get_current_user)):
+    _require_module(db)
+    if body.default_policy not in ("allow_all", "deny_all"):
+        raise HTTPException(400, "default_policy: allow_all | deny_all")
+    cfg = _get_config(db)
+    cfg["default_policy"] = body.default_policy
+    _set_config(db, cfg)
+    audit.log(db, admin.username, "s2s.config", f"default_policy={body.default_policy}")
+    return cfg
+
+
+class AccessRuleItem(BaseModel):
+    src_site_id: int
+    dst_site_id: int
+    allow: bool
+
+
+class AccessUpdate(BaseModel):
+    rules: list[AccessRuleItem]
+
+
+@router.get("/access")
+def get_access(db: Session = Depends(get_db), _: AdminUser = Depends(get_current_user)):
+    """Матрица доступа: политика по умолчанию + явные правила + список площадок."""
+    _require_module(db)
+    sites = db.query(Site).order_by(Site.role.desc(), Site.id).all()
+    rules = db.query(AccessRule).all()
+    return {
+        "default_policy": _get_config(db).get("default_policy", DEFAULT_POLICY),
+        "sites": [{"id": s.id, "name": s.name, "role": s.role} for s in sites],
+        "rules": [{"src_site_id": r.src_site_id, "dst_site_id": r.dst_site_id,
+                   "allow": r.allow} for r in rules],
+    }
+
+
+@router.put("/access")
+def update_access(body: AccessUpdate, db: Session = Depends(get_db),
+                  admin: AdminUser = Depends(get_current_user)):
+    """Перезаписать явные правила матрицы (полная замена)."""
+    _require_module(db)
+    site_ids = {s.id for s in db.query(Site.id).all()}
+    db.query(AccessRule).delete()
+    for r in body.rules:
+        if r.src_site_id not in site_ids or r.dst_site_id not in site_ids:
+            continue
+        if r.src_site_id == r.dst_site_id:
+            continue
+        db.add(AccessRule(src_site_id=r.src_site_id, dst_site_id=r.dst_site_id, allow=r.allow))
+    db.commit()
+    audit.log(db, admin.username, "s2s.access", f"{len(body.rules)} правил")
+    return {"ok": True, "count": len(body.rules)}
