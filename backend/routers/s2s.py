@@ -102,6 +102,7 @@ def _site_dict(site: Site, wg_status: dict | None = None,
         "subnets": [{"id": s.id, "cidr": s.cidr, "comment": s.comment} for s in site.subnets],
         "online": False,
         "last_handshake": 0,
+        "active_transports": [],   # для хаба: транспорты, используемые его спицами
     }
     if site.transport == "wireguard" and wg_status and site.wg_public_key in wg_status:
         peer = wg_status[site.wg_public_key]
@@ -186,7 +187,19 @@ def list_sites(db: Session = Depends(get_db), _: AdminUser = Depends(get_current
             except Exception:
                 pass
 
-    return [_site_dict(s, wg_status, spoke_online) for s in sites]
+    # активные транспорты каждого хаба = транспорты его спиц
+    by_hub: dict[int, set] = {}
+    for s in sites:
+        if s.role == "spoke" and s.hub_id:
+            by_hub.setdefault(s.hub_id, set()).add(s.transport)
+
+    out = []
+    for s in sites:
+        d = _site_dict(s, wg_status, spoke_online)
+        if s.role == "hub":
+            d["active_transports"] = sorted(by_hub.get(s.id, set()))
+        out.append(d)
+    return out
 
 
 @router.post("/sites")
@@ -213,7 +226,8 @@ def create_site(body: SiteCreate, db: Session = Depends(get_db),
         name=body.name,
         role=body.role,
         hub_id=body.hub_id if body.role == "spoke" else None,
-        transport=body.transport,
+        # хаб — мультипротокольный концентратор, не привязан к одному транспорту
+        transport="hub" if body.role == "hub" else body.transport,
         endpoint=body.endpoint,
         tunnel_network=body.tunnel_network if body.role == "hub" else None,
         tunnel_port=body.tunnel_port,
@@ -321,15 +335,21 @@ def apply_topology(db: Session = Depends(get_db), admin: AdminUser = Depends(get
     results = []
     for hub in hubs:
         spokes = db.query(Site).filter(Site.hub_id == hub.id).all()
-        # транспорты, реально используемые спицами этого хаба (+ wireguard всегда,
-        # т.к. хаб поднимает свой WG-интерфейс)
-        used = {"wireguard"} | {s.transport for s in spokes}
-        for tname in used:
-            try:
-                ok, msg = tr.get(tname).hub_apply(hub, spokes, is_allowed)
-                results.append({"hub": f"{hub.name} [{tname}]", "ok": ok, "msg": msg})
-            except Exception as e:
-                results.append({"hub": f"{hub.name} [{tname}]", "ok": False, "msg": str(e)})
+        # хаб поднимает только те транспорты, которые реально используют его спицы;
+        # неиспользуемые сворачиваются (чтобы не висел пустой WG-интерфейс и т.п.)
+        used = {s.transport for s in spokes}
+        for tname in tr.available():
+            if tname in used:
+                try:
+                    ok, msg = tr.get(tname).hub_apply(hub, spokes, is_allowed)
+                    results.append({"hub": f"{hub.name} [{tname}]", "ok": ok, "msg": msg})
+                except Exception as e:
+                    results.append({"hub": f"{hub.name} [{tname}]", "ok": False, "msg": str(e)})
+            else:
+                try:
+                    tr.get(tname).hub_teardown(hub)
+                except Exception:
+                    pass
         # матрица доступа — один раз на хаб, поверх всех транспортов
         try:
             netutil.apply_forward_matrix(hub, spokes, is_allowed)
