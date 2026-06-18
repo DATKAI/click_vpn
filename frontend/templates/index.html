@@ -927,6 +927,23 @@
         </template>
       </div>
 
+      <!-- Как это работает -->
+      <div class="card" x-show="!s2sHelpHide" style="margin-bottom:16px;background:#f8fafc;border:1px solid #e2e8f0">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+          <div style="font-size:13px;color:#475569;line-height:1.6">
+            <div style="font-weight:700;color:#0f172a;margin-bottom:6px">Как это работает</div>
+            <b>Хаб</b> — этот сервер (белый IP), центр звезды и концентратор туннелей. <b>Спицы</b> — сети филиалов, подключаются к хабу. Трафик между филиалами идёт через хаб.
+            <div style="margin-top:8px;display:flex;flex-direction:column;gap:3px">
+              <span>1. Создайте <b>хаб</b> (укажите его публичный endpoint и LAN-подсети).</span>
+              <span>2. Добавьте <b>спицы</b> (филиалы): транспорт (WireGuard / IPsec / GRE) + их LAN-подсети.</span>
+              <span>3. Кнопка <b>«Конфиг»</b> у спицы → залейте на роутер филиала.</span>
+              <span>4. <b>«Применить топологию»</b> на хабе. При необходимости настройте <b>«Матрицу доступа»</b> (кто кого видит).</span>
+            </div>
+          </div>
+          <button @click="s2sHelpHide=true; localStorage.setItem('s2sHelpHide','1')" class="modal-x" title="Скрыть">✕</button>
+        </div>
+      </div>
+
       <!-- Список площадок -->
       <template x-if="s2sSites.length===0">
         <div class="card" style="text-align:center;padding:40px">
@@ -991,8 +1008,8 @@
       </div>
 
       <!-- Модалка добавления площадки -->
-      <div x-show="s2sShowAdd" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center" @click.self="s2sShowAdd=false">
-        <div class="card" style="width:480px;max-width:95vw;max-height:90vh;overflow-y:auto">
+      <div x-show="s2sShowAdd" x-cloak class="modal-backdrop" @click.self="s2sShowAdd=false">
+        <div class="modal" @click.stop>
           <h3 style="font-size:17px;font-weight:700;margin:0 0 20px">Добавить площадку</h3>
           <div style="display:flex;flex-direction:column;gap:14px">
             <label style="font-size:13px;font-weight:600">Название
@@ -1054,8 +1071,8 @@
       </div>
 
       <!-- Модалка редактирования площадки -->
-      <div x-show="s2sShowEdit" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center" @click.self="s2sShowEdit=false">
-        <div class="card" style="width:480px;max-width:95vw;max-height:90vh;overflow-y:auto">
+      <div x-show="s2sShowEdit" x-cloak class="modal-backdrop" @click.self="s2sShowEdit=false">
+        <div class="modal" @click.stop>
           <h3 style="font-size:17px;font-weight:700;margin:0 0 20px">Редактировать площадку</h3>
           <div style="display:flex;flex-direction:column;gap:14px">
             <label style="font-size:13px;font-weight:600">Название
@@ -1087,8 +1104,8 @@
       </div>
 
       <!-- Модалка матрицы доступа -->
-      <div x-show="s2sShowAccess" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center" @click.self="s2sShowAccess=false">
-        <div class="card" style="width:680px;max-width:95vw;max-height:90vh;overflow:auto">
+      <div x-show="s2sShowAccess" x-cloak class="modal-backdrop" @click.self="s2sShowAccess=false">
+        <div class="modal" style="max-width:680px" @click.stop>
           <h3 style="font-size:17px;font-weight:700;margin:0 0 8px">Матрица доступа</h3>
           <p style="color:#94a3b8;font-size:12px;margin:0 0 16px">Кто из площадок видит сети других. Строка — источник, столбец — назначение. Галочка = доступ разрешён.</p>
 
@@ -3251,6 +3268,7 @@ function app() {
     s2sShowAdd: false,
     s2sShowEdit: false,
     s2sShowAccess: false,
+    s2sHelpHide: localStorage.getItem('s2sHelpHide') === '1',
     s2sAccess: { default_policy:'allow_all', sites:[], rules:[] },
     s2sBusy: false,
     s2sApplyResult: null,
