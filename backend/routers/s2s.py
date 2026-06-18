@@ -110,7 +110,7 @@ def _site_dict(site: Site, wg_status: dict | None = None,
         d["last_handshake"] = peer["last_handshake"]
         d["rx"] = peer.get("rx", 0)
         d["tx"] = peer.get("tx", 0)
-    elif site.transport in ("ipsec", "gre") and spoke_online and site.id in spoke_online:
+    elif site.transport in ("ipsec", "gre", "gre_ipsec") and spoke_online and site.id in spoke_online:
         d["online"] = spoke_online[site.id]
     return d
 
@@ -180,7 +180,7 @@ def list_sites(db: Session = Depends(get_db), _: AdminUser = Depends(get_current
                 wg_status[peer["pubkey"]] = peer
         except Exception:
             pass
-        for tname in ("ipsec", "gre"):
+        for tname in ("ipsec", "gre", "gre_ipsec"):
             try:
                 for sa in tr.get(tname).status(hub):
                     spoke_online[sa["spoke_id"]] = sa["online"]
@@ -248,12 +248,15 @@ def create_site(body: SiteCreate, db: Session = Depends(get_db),
         elif body.transport == "ipsec":
             from services.s2s.ipsec import gen_psk
             site.psk = gen_psk()
-        elif body.transport == "gre":
-            # GRE требует публичный IP филиала и не проходит через NAT
+        elif body.transport in ("gre", "gre_ipsec"):
+            # GRE-эндпоинт статичен → нужен публичный IP филиала
             if not body.endpoint:
                 raise HTTPException(400, "Для GRE укажите endpoint (публичный IP филиала)")
             if hub.tunnel_network:
                 site.tunnel_ip = _next_spoke_ip(hub.tunnel_network, _used_tunnel_ips(db))
+            if body.transport == "gre_ipsec":
+                from services.s2s.ipsec import gen_psk
+                site.psk = gen_psk()
 
     db.add(site)
     db.flush()

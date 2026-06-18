@@ -960,7 +960,7 @@
                 <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
                   <span class="badge" :class="site.role==='hub'?'badge-purple':'badge-blue'" x-text="site.role==='hub'?'ХАБ':'Спица'"></span>
                   <span style="font-weight:700;font-size:15px" x-text="site.name"></span>
-                  <span x-show="site.role==='spoke'" class="badge badge-gray" x-text="site.transport==='ipsec'?'IPsec':(site.transport==='gre'?'GRE':'WG')"></span>
+                  <span x-show="site.role==='spoke'" class="badge badge-gray" x-text="{wireguard:'WG',ipsec:'IPsec',gre:'GRE',gre_ipsec:'GRE+IPsec'}[site.transport]||site.transport"></span>
                 </div>
                 <div style="font-size:12px;color:#64748b" x-text="site.role==='hub'?('Туннельная сеть: '+(site.tunnel_network||'?')+' | Порт: '+site.tunnel_port):('Туннельный IP: '+(site.tunnel_ip||'?'))"></div>
                 <div x-show="site.endpoint" style="font-size:12px;color:#64748b;margin-top:2px" x-text="'Endpoint: '+site.endpoint"></div>
@@ -971,7 +971,7 @@
                   <span style="font-size:11px;color:#94a3b8">Транспорты:</span>
                   <template x-if="(site.active_transports||[]).length===0"><span style="font-size:11px;color:#cbd5e1">нет спиц</span></template>
                   <template x-for="t in (site.active_transports||[])" :key="t">
-                    <span class="badge badge-gray" x-text="t==='ipsec'?'IPsec':(t==='gre'?'GRE':'WG')"></span>
+                    <span class="badge badge-gray" x-text="{wireguard:'WG',ipsec:'IPsec',gre:'GRE',gre_ipsec:'GRE+IPsec'}[t]||t"></span>
                   </template>
                 </div>
               </div>
@@ -1034,6 +1034,7 @@
                 <option value="wireguard">WireGuard — рекомендуется (MikroTik/Keenetic с WG)</option>
                 <option value="ipsec">IPsec / IKEv2 — для железа без WireGuard</option>
                 <option value="gre">GRE — простой туннель, без шифрования</option>
+                <option value="gre_ipsec">GRE over IPsec — GRE с шифрованием</option>
               </select>
             </label>
             <!-- Памятка по выбранному транспорту (для спицы) -->
@@ -1041,6 +1042,7 @@
               <template x-if="s2sForm.transport==='wireguard'"><span>🔒 Шифрование WireGuard. Филиал может быть за NAT (серый IP) — он сам подключается к хабу. Endpoint указывать не нужно.</span></template>
               <template x-if="s2sForm.transport==='ipsec'"><span>🔒 Шифрование IPsec/IKEv2 (PSK). Филиал может быть за NAT — сам инициирует туннель. Требует strongSwan на хабе. Endpoint указывать не нужно.</span></template>
               <template x-if="s2sForm.transport==='gre'"><span>⚠️ <b>GRE без шифрования.</b> Не проходит через NAT — у филиала должен быть <b>публичный/статический IP</b>, укажите его в поле ниже. Применять только на доверенных каналах.</span></template>
+              <template x-if="s2sForm.transport==='gre_ipsec'"><span>🔒 <b>GRE поверх IPsec</b> — маршрутизируемый GRE с шифрованием (PSK). Нужен <b>публичный/статический IP</b> филиала (поле ниже). Требует strongSwan на хабе.</span></template>
             </div>
 
             <!-- Параметры хаба -->
@@ -1054,10 +1056,10 @@
             </label>
 
             <!-- Endpoint -->
-            <label x-show="s2sForm.role==='hub' || s2sForm.transport==='gre'" style="font-size:13px;font-weight:600">
+            <label x-show="s2sForm.role==='hub' || s2sForm.transport==='gre' || s2sForm.transport==='gre_ipsec'" style="font-size:13px;font-weight:600">
               <span x-text="s2sForm.role==='hub' ? 'Публичный endpoint хаба (ip:port)' : 'Публичный IP филиала (обязательно для GRE)'"></span>
               <input x-model="s2sForm.endpoint" :placeholder="s2sForm.role==='hub' ? '203.0.113.1:51900' : '203.0.113.5'" style="display:block;width:100%;margin-top:4px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px">
-              <span style="font-size:11px;color:#94a3b8" x-text="s2sForm.role==='hub' ? 'Адрес хаба для генерации конфигов спиц' : 'Публичный/статический IP роутера филиала (GRE не работает за NAT)'"></span>
+              <span style="font-size:11px;color:#94a3b8" x-text="s2sForm.role==='hub' ? 'Адрес хаба для генерации конфигов спиц' : 'Публичный/статический IP роутера филиала (GRE привязан к адресам)'"></span>
             </label>
             <label style="font-size:13px;font-weight:600">LAN-подсети (по одной на строке)
               <textarea x-model="s2sForm.subnets" placeholder="192.168.10.0/24&#10;10.0.1.0/24" rows="3" style="display:block;width:100%;margin-top:4px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;font-family:monospace;resize:vertical"></textarea>
@@ -1079,10 +1081,10 @@
               <input x-model="s2sForm.name" style="display:block;width:100%;margin-top:4px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px">
             </label>
             <div x-show="s2sForm.role==='spoke'" style="font-size:12px;color:#64748b">Транспорт:
-              <b x-text="s2sForm.transport==='ipsec'?'IPsec/IKEv2':(s2sForm.transport==='gre'?'GRE (без шифрования)':'WireGuard')"></b>
+              <b x-text="{wireguard:'WireGuard',ipsec:'IPsec/IKEv2',gre:'GRE (без шифрования)',gre_ipsec:'GRE over IPsec'}[s2sForm.transport]||s2sForm.transport"></b>
               <span style="color:#94a3b8">(не меняется после создания)</span>
             </div>
-            <label x-show="s2sForm.role==='hub' || s2sForm.transport==='gre'" style="font-size:13px;font-weight:600">
+            <label x-show="s2sForm.role==='hub' || s2sForm.transport==='gre' || s2sForm.transport==='gre_ipsec'" style="font-size:13px;font-weight:600">
               <span x-text="s2sForm.role==='hub' ? 'Публичный endpoint хаба (ip:port)' : 'Публичный IP филиала (для GRE)'"></span>
               <input x-model="s2sForm.endpoint" placeholder="203.0.113.1:51900" style="display:block;width:100%;margin-top:4px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px">
             </label>
