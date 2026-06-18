@@ -20,6 +20,7 @@ from services import audit
 # Импортируем транспорты (регистрируют себя при импорте)
 import services.s2s.wireguard  # noqa: F401
 import services.s2s.ipsec      # noqa: F401
+import services.s2s.gre        # noqa: F401
 from services.s2s import transport as tr
 from services.s2s import netutil
 
@@ -85,7 +86,7 @@ def _hub_of_spoke(db: Session, spoke: Site) -> Site | None:
 
 
 def _site_dict(site: Site, wg_status: dict | None = None,
-               ipsec_status: dict | None = None) -> dict:
+               spoke_online: dict | None = None) -> dict:
     d = {
         "id": site.id,
         "name": site.name,
@@ -108,8 +109,8 @@ def _site_dict(site: Site, wg_status: dict | None = None,
         d["last_handshake"] = peer["last_handshake"]
         d["rx"] = peer.get("rx", 0)
         d["tx"] = peer.get("tx", 0)
-    elif site.transport == "ipsec" and ipsec_status and site.id in ipsec_status:
-        d["online"] = ipsec_status[site.id]
+    elif site.transport in ("ipsec", "gre") and spoke_online and site.id in spoke_online:
+        d["online"] = spoke_online[site.id]
     return d
 
 
@@ -169,8 +170,8 @@ def list_sites(db: Session = Depends(get_db), _: AdminUser = Depends(get_current
     sites = db.query(Site).order_by(Site.role.desc(), Site.id).all()
 
     # статус туннелей хабов по всем транспортам
-    wg_status: dict[str, dict] = {}      # pubkey -> peer
-    ipsec_status: dict[int, bool] = {}   # spoke_id -> online
+    wg_status: dict[str, dict] = {}       # pubkey -> peer (WireGuard)
+    spoke_online: dict[int, bool] = {}    # spoke_id -> online (IPsec/GRE)
     hubs = [s for s in sites if s.role == "hub"]
     for hub in hubs:
         try:
@@ -178,13 +179,14 @@ def list_sites(db: Session = Depends(get_db), _: AdminUser = Depends(get_current
                 wg_status[peer["pubkey"]] = peer
         except Exception:
             pass
-        try:
-            for sa in tr.get("ipsec").status(hub):
-                ipsec_status[sa["spoke_id"]] = sa["online"]
-        except Exception:
-            pass
+        for tname in ("ipsec", "gre"):
+            try:
+                for sa in tr.get(tname).status(hub):
+                    spoke_online[sa["spoke_id"]] = sa["online"]
+            except Exception:
+                pass
 
-    return [_site_dict(s, wg_status, ipsec_status) for s in sites]
+    return [_site_dict(s, wg_status, spoke_online) for s in sites]
 
 
 @router.post("/sites")
@@ -232,6 +234,12 @@ def create_site(body: SiteCreate, db: Session = Depends(get_db),
         elif body.transport == "ipsec":
             from services.s2s.ipsec import gen_psk
             site.psk = gen_psk()
+        elif body.transport == "gre":
+            # GRE требует публичный IP филиала и не проходит через NAT
+            if not body.endpoint:
+                raise HTTPException(400, "Для GRE укажите endpoint (публичный IP филиала)")
+            if hub.tunnel_network:
+                site.tunnel_ip = _next_spoke_ip(hub.tunnel_network, _used_tunnel_ips(db))
 
     db.add(site)
     db.flush()
