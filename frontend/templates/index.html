@@ -912,7 +912,7 @@
             <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
             Применить топологию
           </button>
-          <button @click="s2sShowAdd=true;s2sForm={name:'',role:'hub',hub_id:null,transport:'wireguard',endpoint:'',tunnel_network:'10.100.0.0/24',tunnel_port:51900,subnets:''}" class="btn btn-primary btn-sm">+ Добавить площадку</button>
+          <button @click="s2sShowAdd=true;s2sForm={name:'',role:'hub',hub_id:null,transport:'wireguard',endpoint:'',tunnel_network:'10.100.0.0/24',tunnel_port:51900,subnets:'',backup_of:null}" class="btn btn-primary btn-sm">+ Добавить площадку</button>
         </div>
       </div>
 
@@ -961,6 +961,7 @@
                   <span class="badge" :class="site.role==='hub'?'badge-purple':'badge-blue'" x-text="site.role==='hub'?'ХАБ':'Спица'"></span>
                   <span style="font-weight:700;font-size:15px" x-text="site.name"></span>
                   <span x-show="site.role==='spoke'" class="badge badge-gray" x-text="{wireguard:'WG',ipsec:'IPsec',gre:'GRE',gre_ipsec:'GRE+IPsec'}[site.transport]||site.transport"></span>
+                  <span x-show="site.role==='spoke' && site.backup_of" class="badge" style="background:#fef9c3;color:#a16207" x-text="'резерв: '+((s2sSites.find(x=>x.id===site.backup_of)||{}).name||'?')"></span>
                 </div>
                 <div style="font-size:12px;color:#64748b" x-text="site.role==='hub'?('Туннельная сеть: '+(site.tunnel_network||'?')+' | Порт: '+site.tunnel_port):('Туннельный IP: '+(site.tunnel_ip||'?'))"></div>
                 <div x-show="site.endpoint" style="font-size:12px;color:#64748b;margin-top:2px" x-text="'Endpoint: '+site.endpoint"></div>
@@ -1044,6 +1045,15 @@
               <template x-if="s2sForm.transport==='gre'"><span>⚠️ <b>GRE без шифрования.</b> Не проходит через NAT — у филиала должен быть <b>публичный/статический IP</b>, укажите его в поле ниже. Применять только на доверенных каналах.</span></template>
               <template x-if="s2sForm.transport==='gre_ipsec'"><span>🔒 <b>GRE поверх IPsec</b> — маршрутизируемый GRE с шифрованием (PSK). Нужен <b>публичный/статический IP</b> филиала (поле ниже). Требует strongSwan на хабе.</span></template>
             </div>
+            <label x-show="s2sForm.role==='spoke' && s2sForm.hub_id" style="font-size:13px;font-weight:600">Резервный канал для
+              <select x-model="s2sForm.backup_of" style="display:block;width:100%;margin-top:4px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;background:#fff">
+                <option :value="null">— это основной канал —</option>
+                <template x-for="s in s2sSites.filter(s=>s.role==='spoke' && s.hub_id==s2sForm.hub_id && !s.backup_of)" :key="s.id">
+                  <option :value="s.id" x-text="'резерв для: '+s.name"></option>
+                </template>
+              </select>
+              <span style="font-size:11px;color:#94a3b8">Второй туннель к тому же филиалу (другой транспорт/путь). LAN наследуется от основной спицы, активный канал выбирается автоматически по доступности.</span>
+            </label>
 
             <!-- Параметры хаба -->
             <label x-show="s2sForm.role==='hub'" style="font-size:13px;font-weight:600">Туннельная сеть
@@ -1061,9 +1071,10 @@
               <input x-model="s2sForm.endpoint" :placeholder="s2sForm.role==='hub' ? '203.0.113.1:51900' : '203.0.113.5'" style="display:block;width:100%;margin-top:4px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px">
               <span style="font-size:11px;color:#94a3b8" x-text="s2sForm.role==='hub' ? 'Адрес хаба для генерации конфигов спиц' : 'Публичный/статический IP роутера филиала (GRE привязан к адресам)'"></span>
             </label>
-            <label style="font-size:13px;font-weight:600">LAN-подсети (по одной на строке)
+            <label x-show="!(s2sForm.role==='spoke' && s2sForm.backup_of)" style="font-size:13px;font-weight:600">LAN-подсети (по одной на строке)
               <textarea x-model="s2sForm.subnets" placeholder="192.168.10.0/24&#10;10.0.1.0/24" rows="3" style="display:block;width:100%;margin-top:4px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;font-family:monospace;resize:vertical"></textarea>
             </label>
+            <div x-show="s2sForm.role==='spoke' && s2sForm.backup_of" style="font-size:12px;color:#64748b">LAN наследуется от основной спицы — указывать не нужно.</div>
           </div>
           <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:20px">
             <button @click="s2sShowAdd=false" class="btn btn-gray">Отмена</button>
@@ -4568,6 +4579,7 @@ function app() {
           role: this.s2sForm.role,
           hub_id: this.s2sForm.hub_id ? +this.s2sForm.hub_id : null,
           transport: this.s2sForm.role === 'spoke' ? (this.s2sForm.transport || 'wireguard') : 'wireguard',
+          backup_of: (this.s2sForm.role === 'spoke' && this.s2sForm.backup_of) ? +this.s2sForm.backup_of : null,
           endpoint: this.s2sForm.endpoint.trim() || null,
           tunnel_network: this.s2sForm.role === 'hub' ? this.s2sForm.tunnel_network.trim() : null,
           tunnel_port: this.s2sForm.tunnel_port || 51900,

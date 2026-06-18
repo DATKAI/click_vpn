@@ -92,6 +92,7 @@ def _site_dict(site: Site, wg_status: dict | None = None,
         "name": site.name,
         "role": site.role,
         "hub_id": site.hub_id,
+        "backup_of": site.backup_of,
         "transport": site.transport,
         "endpoint": site.endpoint,
         "wg_public_key": site.wg_public_key,
@@ -126,6 +127,7 @@ class SiteCreate(BaseModel):
     tunnel_network: str | None = None   # обязательно для hub
     tunnel_port: int = 51900
     subnets: list[str] = []             # список CIDR
+    backup_of: int | None = None        # резервный канал для спицы (общая LAN)
 
 
 class SiteUpdate(BaseModel):
@@ -219,7 +221,20 @@ def create_site(body: SiteCreate, db: Session = Depends(get_db),
     if body.transport not in tr.available():
         raise HTTPException(400, f"Транспорт '{body.transport}' не поддерживается")
 
-    if body.subnets:
+    # Резервный канал: общая LAN с основной спицей, проверка пересечения снимается.
+    primary = None
+    if body.role == "spoke" and body.backup_of:
+        primary = db.query(Site).filter(Site.id == body.backup_of, Site.role == "spoke").first()
+        if not primary:
+            raise HTTPException(404, "Основная спица для резерва не найдена")
+        if primary.backup_of:
+            raise HTTPException(400, "Резерв нельзя делать для резервного канала")
+        if primary.hub_id != body.hub_id:
+            raise HTTPException(400, "Резерв должен быть на том же хабе, что и основная спица")
+
+    # LAN: у резерва — копия подсетей основной спицы; иначе из тела (с проверкой)
+    eff_subnets = [s.cidr for s in primary.subnets] if primary else body.subnets
+    if not primary and body.subnets:
         _validate_subnets(body.subnets, db)
 
     site = Site(
@@ -231,6 +246,7 @@ def create_site(body: SiteCreate, db: Session = Depends(get_db),
         endpoint=body.endpoint,
         tunnel_network=body.tunnel_network if body.role == "hub" else None,
         tunnel_port=body.tunnel_port,
+        backup_of=body.backup_of if body.role == "spoke" else None,
     )
 
     # Хаб всегда имеет WG-ключи (обслуживает WG-спицы) + адрес в туннельной сети.
@@ -261,7 +277,7 @@ def create_site(body: SiteCreate, db: Session = Depends(get_db),
     db.add(site)
     db.flush()
 
-    for cidr in body.subnets:
+    for cidr in eff_subnets:
         db.add(SiteSubnet(site_id=site.id, cidr=cidr))
 
     db.commit()
@@ -318,6 +334,9 @@ def delete_site(site_id: int, db: Session = Depends(get_db),
             netutil.clear_forward_matrix(site.id)
         except Exception:
             pass
+
+    # резервные каналы этой спицы становятся самостоятельными (не сироты)
+    db.query(Site).filter(Site.backup_of == site_id).update({Site.backup_of: None})
 
     db.query(SiteSubnet).filter(SiteSubnet.site_id == site_id).delete()
     db.query(AccessRule).filter(

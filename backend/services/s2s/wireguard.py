@@ -259,6 +259,9 @@ class WireGuardTransport(Transport):
                     is_allowed=None) -> str:
         return _build_spoke_conf(hub_site, site, peer_sites, is_allowed)
 
+    def link_iface(self, hub_site, spoke) -> str | None:
+        return _iface(hub_site.id)
+
     def status(self, hub_site) -> list[dict]:
         r = subprocess.run(["wg", "show", _iface(hub_site.id), "dump"],
                            capture_output=True, text=True)

@@ -315,6 +315,9 @@ class _BaseGRE(Transport):
             out.append({"spoke_id": int(m.group(1)), "online": True})
         return out
 
+    def link_iface(self, hub_site, spoke) -> str | None:
+        return _iface(self.tag, spoke.id)
+
 
 class GRETransport(_BaseGRE):
     name = "gre"

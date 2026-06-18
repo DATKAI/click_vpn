@@ -147,6 +147,13 @@ def _start_background():
             _time.sleep(30)
     threading.Thread(target=_geoip_loop, daemon=True).start()
 
+    # site-to-site: монитор резервных каналов (входящий failover хаб→филиал)
+    try:
+        from services.s2s import failover as s2s_failover
+        s2s_failover.start_checker(SessionLocal)
+    except Exception:
+        pass
+
 
 def _migrate_db():
     """Добавляет новые колонки в существующую БД если их нет (safe migrations)."""
@@ -200,6 +207,7 @@ def _migrate_db():
         ("vpn_users",   "wg_public_key", "TEXT"),
         ("vpn_users",   "wg_address",    "VARCHAR(64)"),
         ("s2s_sites",   "psk",           "TEXT"),
+        ("s2s_sites",   "backup_of",     "INTEGER"),
     ]
     import sqlalchemy as sa
     with engine.connect() as conn:
