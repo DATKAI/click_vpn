@@ -901,7 +901,7 @@
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:24px">
         <div>
           <h2 style="font-size:22px;font-weight:700;color:#0f172a;margin:0">Площадки (Site-to-Site)</h2>
-          <p style="color:#94a3b8;font-size:13px;margin-top:4px">Связь сетей филиалов через хаб. Топология: звезда (hub-and-spoke). Транспорт: WireGuard.</p>
+          <p style="color:#94a3b8;font-size:13px;margin-top:4px">Связь сетей филиалов через хаб. Топология: звезда (hub-and-spoke). Транспорты: WireGuard, IPsec/IKEv2, GRE.</p>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button @click="s2sOpenAccess()" class="btn btn-gray btn-sm" :disabled="s2sBusy">
@@ -1005,25 +1005,35 @@
                 </template>
               </select>
             </label>
-            <label x-show="s2sForm.role==='spoke'" style="font-size:13px;font-weight:600">Транспорт
+            <label x-show="s2sForm.role==='spoke'" style="font-size:13px;font-weight:600">Транспорт (протокол туннеля)
               <select x-model="s2sForm.transport" style="display:block;width:100%;margin-top:4px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;background:#fff">
-                <option value="wireguard">WireGuard (рекомендуется)</option>
-                <option value="ipsec">IPsec / IKEv2 (Keenetic, аппаратные шлюзы)</option>
-                <option value="gre">GRE (без шифрования, нужен публичный IP филиала)</option>
+                <option value="wireguard">WireGuard — рекомендуется (MikroTik/Keenetic с WG)</option>
+                <option value="ipsec">IPsec / IKEv2 — для железа без WireGuard</option>
+                <option value="gre">GRE — простой туннель, без шифрования</option>
               </select>
-              <span style="font-size:11px;color:#94a3b8">WireGuard — для MikroTik/Keenetic с WG. IPsec — для железа без WG. GRE — простой туннель без шифрования.</span>
             </label>
+            <!-- Памятка по выбранному транспорту (для спицы) -->
+            <div x-show="s2sForm.role==='spoke'" style="font-size:12px;padding:10px 12px;border-radius:8px;background:#f8fafc;border:1px solid #e2e8f0;color:#475569">
+              <template x-if="s2sForm.transport==='wireguard'"><span>🔒 Шифрование WireGuard. Филиал может быть за NAT (серый IP) — он сам подключается к хабу. Endpoint указывать не нужно.</span></template>
+              <template x-if="s2sForm.transport==='ipsec'"><span>🔒 Шифрование IPsec/IKEv2 (PSK). Филиал может быть за NAT — сам инициирует туннель. Требует strongSwan на хабе. Endpoint указывать не нужно.</span></template>
+              <template x-if="s2sForm.transport==='gre'"><span>⚠️ <b>GRE без шифрования.</b> Не проходит через NAT — у филиала должен быть <b>публичный/статический IP</b>, укажите его в поле ниже. Применять только на доверенных каналах.</span></template>
+            </div>
+
+            <!-- Параметры хаба -->
             <label x-show="s2sForm.role==='hub'" style="font-size:13px;font-weight:600">Туннельная сеть
               <input x-model="s2sForm.tunnel_network" placeholder="10.100.0.0/24" style="display:block;width:100%;margin-top:4px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px">
-              <span style="font-size:11px;color:#94a3b8">Служебная сеть для туннелей площадок. Не должна пересекаться с LAN.</span>
+              <span style="font-size:11px;color:#94a3b8">Служебная сеть для туннельных адресов (WireGuard и GRE). Не должна пересекаться с LAN.</span>
             </label>
-            <label x-show="s2sForm.role==='hub'" style="font-size:13px;font-weight:600">Порт WireGuard
+            <label x-show="s2sForm.role==='hub'" style="font-size:13px;font-weight:600">Порт WireGuard на хабе
               <input x-model.number="s2sForm.tunnel_port" type="number" placeholder="51900" style="display:block;width:100%;margin-top:4px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px">
+              <span style="font-size:11px;color:#94a3b8">UDP-порт WG-интерфейса хаба (откройте снаружи). IPsec использует 500/4500, GRE — без портов.</span>
             </label>
-            <label style="font-size:13px;font-weight:600">
-              <span x-text="s2sForm.role==='hub'?'Публичный endpoint хаба (ip:port)':'Публичный endpoint (если есть)'"></span>
-              <input x-model="s2sForm.endpoint" placeholder="203.0.113.1:51900" style="display:block;width:100%;margin-top:4px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px">
-              <span x-show="s2sForm.role==='hub'" style="font-size:11px;color:#94a3b8">Нужен для генерации конфигов спиц</span>
+
+            <!-- Endpoint -->
+            <label x-show="s2sForm.role==='hub' || s2sForm.transport==='gre'" style="font-size:13px;font-weight:600">
+              <span x-text="s2sForm.role==='hub' ? 'Публичный endpoint хаба (ip:port)' : 'Публичный IP филиала (обязательно для GRE)'"></span>
+              <input x-model="s2sForm.endpoint" :placeholder="s2sForm.role==='hub' ? '203.0.113.1:51900' : '203.0.113.5'" style="display:block;width:100%;margin-top:4px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px">
+              <span style="font-size:11px;color:#94a3b8" x-text="s2sForm.role==='hub' ? 'Адрес хаба для генерации конфигов спиц' : 'Публичный/статический IP роутера филиала (GRE не работает за NAT)'"></span>
             </label>
             <label style="font-size:13px;font-weight:600">LAN-подсети (по одной на строке)
               <textarea x-model="s2sForm.subnets" placeholder="192.168.10.0/24&#10;10.0.1.0/24" rows="3" style="display:block;width:100%;margin-top:4px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;font-family:monospace;resize:vertical"></textarea>
@@ -1044,8 +1054,12 @@
             <label style="font-size:13px;font-weight:600">Название
               <input x-model="s2sForm.name" style="display:block;width:100%;margin-top:4px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px">
             </label>
-            <label style="font-size:13px;font-weight:600">
-              <span x-text="s2sForm.role==='hub'?'Публичный endpoint хаба':'Endpoint'"></span>
+            <div x-show="s2sForm.role==='spoke'" style="font-size:12px;color:#64748b">Транспорт:
+              <b x-text="s2sForm.transport==='ipsec'?'IPsec/IKEv2':(s2sForm.transport==='gre'?'GRE (без шифрования)':'WireGuard')"></b>
+              <span style="color:#94a3b8">(не меняется после создания)</span>
+            </div>
+            <label x-show="s2sForm.role==='hub' || s2sForm.transport==='gre'" style="font-size:13px;font-weight:600">
+              <span x-text="s2sForm.role==='hub' ? 'Публичный endpoint хаба (ip:port)' : 'Публичный IP филиала (для GRE)'"></span>
               <input x-model="s2sForm.endpoint" placeholder="203.0.113.1:51900" style="display:block;width:100%;margin-top:4px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px">
             </label>
             <label x-show="s2sForm.role==='hub'" style="font-size:13px;font-weight:600">Туннельная сеть
@@ -4544,6 +4558,7 @@ function app() {
         name: site.name,
         role: site.role,
         hub_id: site.hub_id,
+        transport: site.transport || 'wireguard',
         endpoint: site.endpoint || '',
         tunnel_network: site.tunnel_network || '',
         tunnel_port: site.tunnel_port || 51900,
