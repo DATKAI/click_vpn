@@ -69,16 +69,29 @@ def _build_hub_conf(hub_site, spoke_sites: list) -> str:
     hub_ip = hub_site.tunnel_ip or _hub_tunnel_ip(hub_site.tunnel_network)
     iface = _default_iface()
 
+    # Источники, которые надо маскарадить при выходе в LAN хаба (default iface):
+    # туннельная сеть + LAN всех спиц. Иначе хосты в LAN хаба не знают обратного
+    # маршрута к подсетям филиалов и доступ к сети хаба не работает «из коробки».
+    masq_srcs = [hub_site.tunnel_network]
+    for spoke in spoke_sites:
+        for sn in spoke.subnets:
+            if sn.cidr not in masq_srcs:
+                masq_srcs.append(sn.cidr)
+
+    up = ["sysctl -w net.ipv4.ip_forward=1",
+          "iptables -A FORWARD -i %i -j ACCEPT", "iptables -A FORWARD -o %i -j ACCEPT"]
+    down = ["iptables -D FORWARD -i %i -j ACCEPT", "iptables -D FORWARD -o %i -j ACCEPT"]
+    for src in masq_srcs:
+        up.append(f"iptables -t nat -A POSTROUTING -s {src} -o {iface} -j MASQUERADE")
+        down.append(f"iptables -t nat -D POSTROUTING -s {src} -o {iface} -j MASQUERADE")
+
     lines = [
         "[Interface]",
         f"Address = {hub_ip}/{net.prefixlen}",
         f"ListenPort = {hub_site.tunnel_port}",
         f"PrivateKey = {hub_site.wg_private_key}",
-        f"PostUp = sysctl -w net.ipv4.ip_forward=1; "
-        f"iptables -A FORWARD -i %i -j ACCEPT; iptables -A FORWARD -o %i -j ACCEPT; "
-        f"iptables -t nat -A POSTROUTING -s {hub_site.tunnel_network} -o {iface} -j MASQUERADE",
-        f"PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACCEPT; "
-        f"iptables -t nat -D POSTROUTING -s {hub_site.tunnel_network} -o {iface} -j MASQUERADE",
+        f"PostUp = {'; '.join(up)}",
+        f"PostDown = {'; '.join(down)}",
         "",
     ]
     for spoke in spoke_sites:
