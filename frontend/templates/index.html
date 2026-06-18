@@ -4525,11 +4525,26 @@ function app() {
       finally { this.s2sBusy = false; }
     },
 
-    s2sDownloadConfig(site) {
-      const a = document.createElement('a');
-      a.href = '/api/s2s/sites/' + site.id + '/config';
-      a.download = site.name + '.conf';
-      a.click();
+    async s2sDownloadConfig(site) {
+      try {
+        const res = await fetch('/api/s2s/sites/' + site.id + '/config', {
+          headers: { 'Authorization': 'Bearer ' + this.token }
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          alert('Ошибка: ' + (err.detail || 'Не удалось скачать конфиг'));
+          return;
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = site.name + '.conf';
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch(e) {
+        alert('Ошибка скачивания: ' + e.message);
+      }
     },
 
     s2sFormatHandshake(ts) {
