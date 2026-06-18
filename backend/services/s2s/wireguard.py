@@ -177,18 +177,40 @@ def _is_running(hub_id: int) -> bool:
     return r.returncode == 0
 
 
-def _sync_routes(hub_id: int, spoke_sites: list) -> None:
-    """Добавить маршруты к LAN спиц через туннель.
+def _reconcile_state(hub_site, spoke_sites: list) -> None:
+    """Привести маршруты/NAT/rp_filter в соответствие при syncconf.
 
-    wg syncconf обновляет пиров, но НЕ ставит маршруты ядра (их ставит только
+    wg syncconf обновляет пиров, но НЕ выполняет PostUp (маршруты ставит только
     wg-quick up). Поэтому при «Применить топологию» на работающем интерфейсе
-    маршруты к подсетям новых спиц надо добавить вручную (идемпотентно).
+    надо вручную (идемпотентно) добавить:
+      - маршруты к LAN спиц через туннель,
+      - MASQUERADE для туннельной сети и LAN спиц при выходе в LAN хаба,
+      - сброс rp_filter (иначе LXC дропает обратные пакеты из туннеля).
     """
-    iface = _iface(hub_id)
+    iface = _iface(hub_site.id)
+    out_if = _default_iface()
+
+    # rp_filter
+    for k in ("all", iface, out_if):
+        subprocess.run(["sysctl", "-w", f"net.ipv4.conf.{k}.rp_filter=0"],
+                       capture_output=True)
+
+    # маршруты к LAN спиц
     for spoke in spoke_sites:
         for sn in spoke.subnets:
             subprocess.run(["ip", "route", "replace", sn.cidr, "dev", iface],
                            capture_output=True)
+
+    # MASQUERADE: туннельная сеть + LAN всех спиц (идемпотентно через -C)
+    srcs = [hub_site.tunnel_network]
+    for spoke in spoke_sites:
+        for sn in spoke.subnets:
+            if sn.cidr not in srcs:
+                srcs.append(sn.cidr)
+    for src in srcs:
+        rule = ["-t", "nat", "POSTROUTING", "-s", src, "-o", out_if, "-j", "MASQUERADE"]
+        if subprocess.run(["iptables", "-C", *rule], capture_output=True).returncode != 0:
+            subprocess.run(["iptables", "-A", *rule], capture_output=True)
 
 
 class WireGuardTransport(Transport):
@@ -208,8 +230,8 @@ class WireGuardTransport(Transport):
                 ["bash", "-c", f"wg syncconf {_iface(hub_site.id)} <(wg-quick strip {path})"],
                 capture_output=True, text=True,
             )
-            # syncconf не ставит маршруты — добавляем их к LAN спиц вручную
-            _sync_routes(hub_site.id, spoke_sites)
+            # syncconf не выполняет PostUp — сверяем маршруты/NAT/rp_filter
+            _reconcile_state(hub_site, spoke_sites)
         else:
             _create_unit(hub_site.id)
             subprocess.run(["systemctl", "enable", _unit_name(hub_site.id)], capture_output=True)
