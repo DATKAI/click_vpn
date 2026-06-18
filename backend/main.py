@@ -199,6 +199,7 @@ def _migrate_db():
         ("vpn_users",   "wg_private_key","TEXT"),
         ("vpn_users",   "wg_public_key", "TEXT"),
         ("vpn_users",   "wg_address",    "VARCHAR(64)"),
+        ("s2s_sites",   "psk",           "TEXT"),
     ]
     import sqlalchemy as sa
     with engine.connect() as conn:

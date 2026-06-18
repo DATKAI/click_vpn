@@ -912,7 +912,7 @@
             <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
             Применить топологию
           </button>
-          <button @click="s2sShowAdd=true;s2sForm={name:'',role:'hub',hub_id:null,endpoint:'',tunnel_network:'10.100.0.0/24',tunnel_port:51900,subnets:''}" class="btn btn-primary btn-sm">+ Добавить площадку</button>
+          <button @click="s2sShowAdd=true;s2sForm={name:'',role:'hub',hub_id:null,transport:'wireguard',endpoint:'',tunnel_network:'10.100.0.0/24',tunnel_port:51900,subnets:''}" class="btn btn-primary btn-sm">+ Добавить площадку</button>
         </div>
       </div>
 
@@ -943,6 +943,7 @@
                 <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
                   <span class="badge" :class="site.role==='hub'?'badge-purple':'badge-blue'" x-text="site.role==='hub'?'ХАБ':'Спица'"></span>
                   <span style="font-weight:700;font-size:15px" x-text="site.name"></span>
+                  <span x-show="site.role==='spoke'" class="badge badge-gray" x-text="site.transport==='ipsec'?'IPsec':'WG'"></span>
                 </div>
                 <div style="font-size:12px;color:#64748b" x-text="site.role==='hub'?('Туннельная сеть: '+(site.tunnel_network||'?')+' | Порт: '+site.tunnel_port):('Туннельный IP: '+(site.tunnel_ip||'?'))"></div>
                 <div x-show="site.endpoint" style="font-size:12px;color:#64748b;margin-top:2px" x-text="'Endpoint: '+site.endpoint"></div>
@@ -1003,6 +1004,13 @@
                   <option :value="s.id" x-text="s.name"></option>
                 </template>
               </select>
+            </label>
+            <label x-show="s2sForm.role==='spoke'" style="font-size:13px;font-weight:600">Транспорт
+              <select x-model="s2sForm.transport" style="display:block;width:100%;margin-top:4px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;background:#fff">
+                <option value="wireguard">WireGuard (рекомендуется)</option>
+                <option value="ipsec">IPsec / IKEv2 (Keenetic, аппаратные шлюзы)</option>
+              </select>
+              <span style="font-size:11px;color:#94a3b8">WireGuard — для MikroTik/Keenetic с WG. IPsec — для железа без WireGuard.</span>
             </label>
             <label x-show="s2sForm.role==='hub'" style="font-size:13px;font-weight:600">Туннельная сеть
               <input x-model="s2sForm.tunnel_network" placeholder="10.100.0.0/24" style="display:block;width:100%;margin-top:4px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px">
@@ -4517,6 +4525,7 @@ function app() {
           name: this.s2sForm.name.trim(),
           role: this.s2sForm.role,
           hub_id: this.s2sForm.hub_id ? +this.s2sForm.hub_id : null,
+          transport: this.s2sForm.role === 'spoke' ? (this.s2sForm.transport || 'wireguard') : 'wireguard',
           endpoint: this.s2sForm.endpoint.trim() || null,
           tunnel_network: this.s2sForm.role === 'hub' ? this.s2sForm.tunnel_network.trim() : null,
           tunnel_port: this.s2sForm.tunnel_port || 51900,
@@ -4624,7 +4633,7 @@ function app() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = site.name + '.conf';
+        a.download = site.name + (site.transport === 'wireguard' ? '.conf' : '.txt');
         a.click();
         URL.revokeObjectURL(url);
       } catch(e) {

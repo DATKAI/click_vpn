@@ -19,7 +19,9 @@ from services import audit
 
 # Импортируем транспорты (регистрируют себя при импорте)
 import services.s2s.wireguard  # noqa: F401
+import services.s2s.ipsec      # noqa: F401
 from services.s2s import transport as tr
+from services.s2s import netutil
 
 router = APIRouter(prefix="/api/s2s", tags=["site2site"])
 
@@ -82,7 +84,8 @@ def _hub_of_spoke(db: Session, spoke: Site) -> Site | None:
     return None
 
 
-def _site_dict(site: Site, status_map: dict | None = None) -> dict:
+def _site_dict(site: Site, wg_status: dict | None = None,
+               ipsec_status: dict | None = None) -> dict:
     d = {
         "id": site.id,
         "name": site.name,
@@ -99,12 +102,14 @@ def _site_dict(site: Site, status_map: dict | None = None) -> dict:
         "online": False,
         "last_handshake": 0,
     }
-    if status_map and site.wg_public_key and site.wg_public_key in status_map:
-        peer = status_map[site.wg_public_key]
+    if site.transport == "wireguard" and wg_status and site.wg_public_key in wg_status:
+        peer = wg_status[site.wg_public_key]
         d["online"] = peer["online"]
         d["last_handshake"] = peer["last_handshake"]
         d["rx"] = peer.get("rx", 0)
         d["tx"] = peer.get("tx", 0)
+    elif site.transport == "ipsec" and ipsec_status and site.id in ipsec_status:
+        d["online"] = ipsec_status[site.id]
     return d
 
 
@@ -163,18 +168,23 @@ def list_sites(db: Session = Depends(get_db), _: AdminUser = Depends(get_current
     _require_module(db)
     sites = db.query(Site).order_by(Site.role.desc(), Site.id).all()
 
-    # статус туннелей хабов
-    status_map: dict[str, dict] = {}
+    # статус туннелей хабов по всем транспортам
+    wg_status: dict[str, dict] = {}      # pubkey -> peer
+    ipsec_status: dict[int, bool] = {}   # spoke_id -> online
     hubs = [s for s in sites if s.role == "hub"]
     for hub in hubs:
         try:
-            transport = tr.get(hub.transport)
-            for peer in transport.status(hub):
-                status_map[peer["pubkey"]] = peer
+            for peer in tr.get("wireguard").status(hub):
+                wg_status[peer["pubkey"]] = peer
+        except Exception:
+            pass
+        try:
+            for sa in tr.get("ipsec").status(hub):
+                ipsec_status[sa["spoke_id"]] = sa["online"]
         except Exception:
             pass
 
-    return [_site_dict(s, status_map) for s in sites]
+    return [_site_dict(s, wg_status, ipsec_status) for s in sites]
 
 
 @router.post("/sites")
@@ -191,12 +201,11 @@ def create_site(body: SiteCreate, db: Session = Depends(get_db),
         if not hub:
             raise HTTPException(404, "Хаб не найден")
 
+    if body.transport not in tr.available():
+        raise HTTPException(400, f"Транспорт '{body.transport}' не поддерживается")
+
     if body.subnets:
         _validate_subnets(body.subnets, db)
-
-    # генерация ключевой пары WG
-    from services.s2s.wireguard import gen_keypair
-    priv, pub = gen_keypair()
 
     site = Site(
         name=body.name,
@@ -204,19 +213,25 @@ def create_site(body: SiteCreate, db: Session = Depends(get_db),
         hub_id=body.hub_id if body.role == "spoke" else None,
         transport=body.transport,
         endpoint=body.endpoint,
-        wg_private_key=priv,
-        wg_public_key=pub,
         tunnel_network=body.tunnel_network if body.role == "hub" else None,
         tunnel_port=body.tunnel_port,
     )
 
-    # назначение tunnel_ip
-    if body.role == "hub" and body.tunnel_network:
-        from services.s2s.wireguard import _hub_tunnel_ip
-        site.tunnel_ip = _hub_tunnel_ip(body.tunnel_network)
-    elif body.role == "spoke" and hub.tunnel_network:
-        from services.s2s.wireguard import _next_spoke_ip
-        site.tunnel_ip = _next_spoke_ip(hub.tunnel_network, _used_tunnel_ips(db))
+    # Хаб всегда имеет WG-ключи (обслуживает WG-спицы) + адрес в туннельной сети.
+    # Спица: WG-ключи для wireguard, PSK для ipsec.
+    from services.s2s.wireguard import gen_keypair, _hub_tunnel_ip, _next_spoke_ip
+    if body.role == "hub":
+        site.wg_private_key, site.wg_public_key = gen_keypair()
+        if body.tunnel_network:
+            site.tunnel_ip = _hub_tunnel_ip(body.tunnel_network)
+    else:  # spoke
+        if body.transport == "wireguard":
+            site.wg_private_key, site.wg_public_key = gen_keypair()
+            if hub.tunnel_network:
+                site.tunnel_ip = _next_spoke_ip(hub.tunnel_network, _used_tunnel_ips(db))
+        elif body.transport == "ipsec":
+            from services.s2s.ipsec import gen_psk
+            site.psk = gen_psk()
 
     db.add(site)
     db.flush()
@@ -267,11 +282,15 @@ def delete_site(site_id: int, db: Session = Depends(get_db),
     if not site:
         raise HTTPException(404, "Площадка не найдена")
 
-    # для хаба — сначала остановить туннель
+    # для хаба — остановить все транспорты + снять матрицу
     if site.role == "hub":
+        for tname in tr.available():
+            try:
+                tr.get(tname).hub_teardown(site)
+            except Exception:
+                pass
         try:
-            transport = tr.get(site.transport)
-            transport.hub_teardown(site)
+            netutil.clear_forward_matrix(site.id)
         except Exception:
             pass
 
@@ -294,12 +313,20 @@ def apply_topology(db: Session = Depends(get_db), admin: AdminUser = Depends(get
     results = []
     for hub in hubs:
         spokes = db.query(Site).filter(Site.hub_id == hub.id).all()
+        # транспорты, реально используемые спицами этого хаба (+ wireguard всегда,
+        # т.к. хаб поднимает свой WG-интерфейс)
+        used = {"wireguard"} | {s.transport for s in spokes}
+        for tname in used:
+            try:
+                ok, msg = tr.get(tname).hub_apply(hub, spokes, is_allowed)
+                results.append({"hub": f"{hub.name} [{tname}]", "ok": ok, "msg": msg})
+            except Exception as e:
+                results.append({"hub": f"{hub.name} [{tname}]", "ok": False, "msg": str(e)})
+        # матрица доступа — один раз на хаб, поверх всех транспортов
         try:
-            transport = tr.get(hub.transport)
-            ok, msg = transport.hub_apply(hub, spokes, is_allowed)
-            results.append({"hub": hub.name, "ok": ok, "msg": msg})
+            netutil.apply_forward_matrix(hub, spokes, is_allowed)
         except Exception as e:
-            results.append({"hub": hub.name, "ok": False, "msg": str(e)})
+            results.append({"hub": f"{hub.name} [matrix]", "ok": False, "msg": str(e)})
     audit.log(db, admin.username, "s2s.apply", f"{len(hubs)} hub(s)")
     return {"results": results}
 
@@ -323,10 +350,11 @@ def get_site_config(site_id: int, db: Session = Depends(get_db),
     siblings = db.query(Site).filter(Site.hub_id == hub.id, Site.id != site.id).all()
     peer_sites = [hub] + siblings
 
-    transport = tr.get(hub.transport)
+    transport = tr.get(site.transport)
     cfg = transport.site_config(hub, site, peer_sites, _build_is_allowed(db))
+    ext = "conf" if site.transport == "wireguard" else "txt"
     return PlainTextResponse(cfg, media_type="text/plain",
-                             headers={"Content-Disposition": f'attachment; filename="{site.name}.conf"'})
+                             headers={"Content-Disposition": f'attachment; filename="{site.name}.{ext}"'})
 
 
 @router.get("/status")
@@ -335,11 +363,12 @@ def get_status(db: Session = Depends(get_db), _: AdminUser = Depends(get_current
     hubs = db.query(Site).filter(Site.role == "hub").all()
     result = {}
     for hub in hubs:
-        try:
-            transport = tr.get(hub.transport)
-            result[hub.id] = transport.status(hub)
-        except Exception as e:
-            result[hub.id] = {"error": str(e)}
+        result[hub.id] = {}
+        for tname in tr.available():
+            try:
+                result[hub.id][tname] = tr.get(tname).status(hub)
+            except Exception as e:
+                result[hub.id][tname] = {"error": str(e)}
     return result
 
 

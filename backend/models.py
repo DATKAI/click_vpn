@@ -290,6 +290,7 @@ class Site(Base):
     endpoint = Column(String(256), nullable=True)      # ip:port (хаб или спица с белым IP)
     wg_private_key = Column(EncryptedText, nullable=True)
     wg_public_key = Column(Text, nullable=True)
+    psk = Column(EncryptedText, nullable=True)         # PSK для IPsec-транспорта (шифруется)
     tunnel_ip = Column(String(64), nullable=True)      # адрес в туннельной сети (10.100.0.X)
     tunnel_network = Column(String(64), nullable=True) # только для hub: 10.100.0.0/24
     tunnel_port = Column(Integer, default=51900)       # WG listen-port на хабе
