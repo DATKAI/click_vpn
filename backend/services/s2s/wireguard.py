@@ -79,6 +79,8 @@ def _build_hub_conf(hub_site, spoke_sites: list) -> str:
                 masq_srcs.append(sn.cidr)
 
     up = ["sysctl -w net.ipv4.ip_forward=1",
+          "sysctl -w net.ipv4.conf.all.rp_filter=0",
+          f"sysctl -w net.ipv4.conf.{iface}.rp_filter=0",
           "iptables -A FORWARD -i %i -j ACCEPT", "iptables -A FORWARD -o %i -j ACCEPT"]
     down = ["iptables -D FORWARD -i %i -j ACCEPT", "iptables -D FORWARD -o %i -j ACCEPT"]
     for src in masq_srcs:
@@ -175,6 +177,20 @@ def _is_running(hub_id: int) -> bool:
     return r.returncode == 0
 
 
+def _sync_routes(hub_id: int, spoke_sites: list) -> None:
+    """Добавить маршруты к LAN спиц через туннель.
+
+    wg syncconf обновляет пиров, но НЕ ставит маршруты ядра (их ставит только
+    wg-quick up). Поэтому при «Применить топологию» на работающем интерфейсе
+    маршруты к подсетям новых спиц надо добавить вручную (идемпотентно).
+    """
+    iface = _iface(hub_id)
+    for spoke in spoke_sites:
+        for sn in spoke.subnets:
+            subprocess.run(["ip", "route", "replace", sn.cidr, "dev", iface],
+                           capture_output=True)
+
+
 class WireGuardTransport(Transport):
     name = "wireguard"
 
@@ -192,6 +208,8 @@ class WireGuardTransport(Transport):
                 ["bash", "-c", f"wg syncconf {_iface(hub_site.id)} <(wg-quick strip {path})"],
                 capture_output=True, text=True,
             )
+            # syncconf не ставит маршруты — добавляем их к LAN спиц вручную
+            _sync_routes(hub_site.id, spoke_sites)
         else:
             _create_unit(hub_site.id)
             subprocess.run(["systemctl", "enable", _unit_name(hub_site.id)], capture_output=True)
