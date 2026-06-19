@@ -1524,7 +1524,7 @@
             <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
             Импорт CSV
           </button>
-          <button class="btn btn-primary" @click="availableServers=[]; showCreateUser=true">
+          <button class="btn btn-primary" @click="availableServers=[]; showCreateUser=true; if(routesEnabled && !routeProfiles.length) loadRouteProfiles()">
             <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
             Новый клиент
           </button>
@@ -2796,6 +2796,15 @@ petrov,Петров Пётр,petrov@co.ru,ЗПК,730,secret</code>
           </button>
         </div>
       </div>
+      <div x-show="routesEnabled && isWgKind(clientKind())">
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Профиль маршрутов (split tunnel)</label>
+        <select x-model="userForm.route_profile_id" class="input">
+          <option :value="null">— весь трафик в туннель (по умолчанию) —</option>
+          <template x-for="rp in routeProfiles" :key="rp.id">
+            <option :value="rp.id" x-text="rp.name + ' (' + rp.mode + ')'"></option>
+          </template>
+        </select>
+      </div>
       <div>
         <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Комментарий (необязательно)</label>
         <textarea x-model="userForm.notes" class="input" placeholder="Заметка для администратора" style="min-height:60px"></textarea>
@@ -3608,7 +3617,7 @@ function app() {
     serverCreateTimer: 0,
     _timerInterval: null,
     serverForm: { name:'', kind:'openvpn', ca_id:'', network:'10.8.0.0', netmask:'255.255.255.0', port:1194, protocol:'udp', dns_servers:'8.8.8.8,8.8.4.4', push_routes:'', obfuscation:false },
-    userForm: { username:'', full_name:'', email:'', server_id:'', org_id:'', valid_days:365, password:'', no_password:false, notes:'' },
+    userForm: { username:'', full_name:'', email:'', server_id:'', org_id:'', valid_days:365, password:'', no_password:false, notes:'', route_profile_id:null },
     showPassword: false,
     caForm: { common_name:'', country:'RU', org:'', valid_days:3650 },
     userFilter: { server_id:'', org_id:'', search:'', sort:'created', archived:false },
@@ -4492,8 +4501,8 @@ function app() {
           org_id: this.editUserForm.org_id ? +this.editUserForm.org_id : null,
           notes: this.editUserForm.notes || null,
         });
-        // Смена пароля если заполнено
-        if (this.editUserForm.new_password !== undefined) {
+        // Смена пароля — только для OpenVPN (у WG/IKEv2 нет сертификата с паролем)
+        if (this.editUserForm.kind === 'openvpn' && this.editUserForm.new_password !== undefined) {
           await this.api('POST', '/users/' + this.editUserForm.id + '/change-password', {
             new_password: this.editUserForm.new_password || null,
           });
@@ -4550,10 +4559,14 @@ function app() {
           payload.server_id = +this.userForm.server_id;
         }
         const u = await this.api('POST', '/users', payload);
+        // профиль маршрутов (до скачивания конфига, чтобы AllowedIPs уже учли его)
+        if (this.routesEnabled && this.userForm.route_profile_id) {
+          await this.routeAssignUser(u.id, this.userForm.route_profile_id);
+        }
         await this.loadUsers();
         this.showCreateUser = false;
         this.showPassword = false;
-        this.userForm = { username:'', full_name:'', email:'', server_id:'', org_id:'', valid_days:365, password:'', no_password:false, notes:'' };
+        this.userForm = { username:'', full_name:'', email:'', server_id:'', org_id:'', valid_days:365, password:'', no_password:false, notes:'', route_profile_id:null };
         this.availableServers = [];
         // Автоскачивание .ovpn
         await this.downloadOvpn(u.id, u.username);
