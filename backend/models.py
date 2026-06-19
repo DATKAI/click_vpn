@@ -182,6 +182,7 @@ class VPNUser(Base):
     traffic_quota = Column(Integer, default=0)            # квота трафика, байт (0 = безлимит)
     traffic_used = Column(Integer, default=0)             # израсходовано, байт
     billing_blocked = Column(Boolean, default=False)      # заблокирован биллингом (не вручную)
+    route_profile_id = Column(Integer, ForeignKey("route_profiles.id"), nullable=True)  # селективная маршрутизация
 
     ca = relationship("CA", back_populates="users")
     server = relationship("VPNServer", back_populates="users")
@@ -263,7 +264,38 @@ class Plan(Base):
     traffic_gb = Column(Integer, default=0)       # лимит трафика, ГБ (0 = безлимит)
     duration_days = Column(Integer, default=30)   # срок, дней (0 = бессрочно)
     speed_mbps = Column(Integer, default=0)       # ограничение скорости, Мбит/с (0 = без огр.)
+    route_profile_id = Column(Integer, ForeignKey("route_profiles.id"), nullable=True)  # профиль маршрутов тарифа
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class RouteProfile(Base):
+    """Профиль селективной маршрутизации (split tunnel)."""
+    __tablename__ = "route_profiles"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(128), nullable=False)
+    mode = Column(String(16), default="selective")    # selective | full | exclude
+    dns_through_tunnel = Column(Boolean, default=False)
+    dns_server = Column(String(64), nullable=True)     # резолвер (если dns_through_tunnel)
+    prefix_count = Column(Integer, default=0)          # сколько CIDR в скомпилированном наборе
+    compiled_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    sources = relationship("RouteSource", back_populates="profile",
+                           cascade="all, delete-orphan")
+
+
+class RouteSource(Base):
+    """Источник маршрутов в профиле."""
+    __tablename__ = "route_sources"
+
+    id = Column(Integer, primary_key=True)
+    profile_id = Column(Integer, ForeignKey("route_profiles.id"), nullable=False)
+    kind = Column(String(16), nullable=False)          # provider|asn|url_list|domain|cidr
+    value = Column(String(512), nullable=False)        # имя провайдера|ASN|URL|домен|CIDR
+    enabled = Column(Boolean, default=True)
+
+    profile = relationship("RouteProfile", back_populates="sources")
 
 
 class Module(Base):

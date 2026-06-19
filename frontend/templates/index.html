@@ -197,6 +197,10 @@
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
         Площадки
       </button>
+      <button class="nav-item" x-show="routesEnabled" :class="{active:page==='routes'}" @click="navigate('routes')">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h8m-8 6h16"/></svg>
+        Маршруты
+      </button>
 
       <!-- Группа: Система (раскрывается) -->
       <button class="nav-item" @click="sysOpen=!sysOpen" :class="{active:['ca','logs','audit','security','modules','settings'].includes(page) && !sysOpen}">
@@ -1902,6 +1906,96 @@
       </div>
     </div>
 
+    <!-- Routes (selective routing) -->
+    <div x-show="page==='routes'" class="fade-in" style="padding:32px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:20px;flex-wrap:wrap">
+        <div>
+          <h2 style="font-size:22px;font-weight:700;color:#0f172a;margin:0">Маршруты (split tunnel)</h2>
+          <p style="color:#94a3b8;font-size:13px;margin-top:4px">Профили селективной маршрутизации: в туннель идут только выбранные сети. Назначаются клиенту или тарифу. Источники → CIDR → AllowedIPs.</p>
+        </div>
+        <button @click="routeOpenNew()" class="btn btn-primary btn-sm">+ Профиль</button>
+      </div>
+
+      <template x-if="routeProfiles.length===0">
+        <div class="card" style="text-align:center;padding:40px;color:#94a3b8;font-size:14px">Профилей нет. Создайте профиль и добавьте источники (CIDR / домен / список по URL / провайдер / ASN).</div>
+      </template>
+
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <template x-for="p in routeProfiles" :key="p.id">
+          <div class="card">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px">
+              <div>
+                <div style="font-weight:700;font-size:15px" x-text="p.name"></div>
+                <div style="font-size:12px;color:#64748b;margin-top:2px">
+                  Режим: <b x-text="{selective:'только эти сети',full:'весь трафик',exclude:'всё, кроме этих'}[p.mode]"></b>
+                  · CIDR: <span x-text="p.prefix_count"></span>
+                  <span x-show="p.dns_through_tunnel"> · DNS через туннель</span>
+                  <span x-show="p.compiled_at" style="color:#94a3b8"> · собран <span x-text="(p.compiled_at||'').replace('T',' ').slice(0,16)"></span></span>
+                </div>
+              </div>
+              <div style="display:flex;gap:6px;flex-shrink:0">
+                <button @click="routeCompile(p)" class="btn btn-primary btn-sm" :disabled="routeBusy">Пересобрать</button>
+                <button @click="routeEdit(p)" class="btn btn-gray btn-sm">Изменить</button>
+                <button @click="routeDelete(p)" class="btn btn-sm" style="background:#fef2f2;color:#dc2626;border:1px solid #fecaca">Удалить</button>
+              </div>
+            </div>
+            <!-- источники -->
+            <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:10px">
+              <template x-for="s in p.sources" :key="s.id">
+                <div style="display:flex;align-items:center;gap:8px;font-size:13px;padding:5px 8px;background:#f8fafc;border-radius:6px">
+                  <span class="badge badge-gray" x-text="{provider:'провайдер',asn:'ASN',url_list:'URL-список',domain:'домен',cidr:'CIDR'}[s.kind]"></span>
+                  <span style="font-family:monospace;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="s.value"></span>
+                  <button @click="routeDelSource(p,s)" style="background:none;border:none;color:#dc2626;cursor:pointer">✕</button>
+                </div>
+              </template>
+              <template x-if="p.sources.length===0"><div style="font-size:12px;color:#94a3b8">Источников нет — добавьте ниже.</div></template>
+            </div>
+            <!-- добавить источник -->
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+              <select x-model="p._k" style="padding:6px 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;background:#fff">
+                <option value="cidr">CIDR</option>
+                <option value="domain">Домен</option>
+                <option value="url_list">URL-список</option>
+                <option value="provider">Провайдер</option>
+                <option value="asn">ASN</option>
+              </select>
+              <input x-model="p._v" :placeholder="{cidr:'1.2.3.0/24',domain:'example.com',url_list:'https://.../list.txt',provider:'cloudflare | google',asn:'AS15169'}[p._k||'cidr']" style="flex:1;min-width:160px;padding:6px 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:monospace">
+              <button @click="routeAddSource(p)" class="btn btn-gray btn-sm">Добавить источник</button>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Модалка профиля -->
+      <div x-show="routeForm.open" x-cloak class="modal-backdrop" @click.self="routeForm.open=false">
+        <div class="modal" @click.stop>
+          <h3 style="font-size:17px;font-weight:700;margin:0 0 16px" x-text="routeForm.id?'Изменить профиль':'Новый профиль'"></h3>
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <label style="font-size:13px;font-weight:600">Название
+              <input x-model="routeForm.name" placeholder="Обход блокировок" style="display:block;width:100%;margin-top:4px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px">
+            </label>
+            <label style="font-size:13px;font-weight:600">Режим
+              <select x-model="routeForm.mode" style="display:block;width:100%;margin-top:4px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;background:#fff">
+                <option value="selective">selective — в туннель только эти сети</option>
+                <option value="exclude">exclude — весь трафик, кроме этих сетей</option>
+                <option value="full">full — весь трафик в туннель</option>
+              </select>
+            </label>
+            <label style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px">
+              <input type="checkbox" x-model="routeForm.dns_through_tunnel"> DNS через туннель
+            </label>
+            <label x-show="routeForm.dns_through_tunnel" style="font-size:13px;font-weight:600">DNS-сервер
+              <input x-model="routeForm.dns_server" placeholder="1.1.1.1" style="display:block;width:100%;margin-top:4px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px">
+            </label>
+          </div>
+          <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:20px">
+            <button @click="routeForm.open=false" class="btn btn-gray">Отмена</button>
+            <button @click="routeSave()" class="btn btn-primary" :disabled="routeBusy">Сохранить</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Updates -->
     <div x-show="page==='updates'" class="fade-in" style="padding:32px">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:20px;flex-wrap:wrap">
@@ -2918,6 +3012,15 @@ petrov,Петров Пётр,petrov@co.ru,ЗПК,730,secret</code>
           <input x-model.number="planModal.speed_mbps" type="number" min="0" class="input" placeholder="0"/>
         </div>
       </div>
+      <div x-show="routesEnabled">
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Профиль маршрутов <span style="color:#94a3b8;font-weight:400">(split tunnel, назначается при выдаче тарифа)</span></label>
+        <select x-model="planModal.route_profile_id" class="input">
+          <option :value="null">— не задан —</option>
+          <template x-for="rp in routeProfiles" :key="rp.id">
+            <option :value="rp.id" x-text="rp.name"></option>
+          </template>
+        </select>
+      </div>
       <div style="display:flex;gap:10px;margin-top:4px">
         <button class="btn btn-gray" style="flex:1;justify-content:center" @click="planModal.open=false">Отмена</button>
         <button class="btn btn-primary" style="flex:1;justify-content:center" @click="savePlan()" :disabled="!planModal.name.trim()">Сохранить</button>
@@ -3116,6 +3219,18 @@ petrov,Петров Пётр,petrov@co.ru,ЗПК,730,secret</code>
       <div style="display:flex;align-items:center;gap:10px;padding:14px;background:#f8fafc;border-radius:10px;border:1.5px solid #e2e8f0">
         <input type="checkbox" x-model="editUserForm.is_active" id="userActive" style="width:16px;height:16px;accent-color:#4f46e5"/>
         <label for="userActive" style="font-size:13px;font-weight:600;color:#475569;cursor:pointer">Клиент активен</label>
+      </div>
+
+      <!-- Профиль маршрутов (split tunnel) -->
+      <div x-show="routesEnabled">
+        <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:6px">Профиль маршрутов (split tunnel)</label>
+        <select x-model="editUserForm.route_profile_id" @change="routeAssignUser(editUserForm.id, editUserForm.route_profile_id)" class="input">
+          <option :value="null">— весь трафик в туннель (по умолчанию) —</option>
+          <template x-for="rp in routeProfiles" :key="rp.id">
+            <option :value="rp.id" x-text="rp.name + ' (' + rp.mode + ')'"></option>
+          </template>
+        </select>
+        <p style="font-size:11px;color:#94a3b8;margin:4px 0 0">Клиенту нужно перекачать конфиг после смены профиля.</p>
       </div>
 
       <!-- IKEv2 логин/пароль -->
@@ -3347,6 +3462,11 @@ function app() {
     moduleBusy: null,
     billingEnabled: false,
     s2sEnabled: false,
+    routesEnabled: false,
+    routeProfiles: [],
+    routeForm: { open:false, id:null, name:'', mode:'selective', dns_through_tunnel:false, dns_server:'' },
+    routeSrcForm: { kind:'cidr', value:'' },
+    routeBusy: false,
     s2sSites: [],
     s2sForm: { name:'', role:'hub', hub_id:null, endpoint:'', tunnel_network:'10.100.0.0/24', tunnel_port:51900, subnets:'' },
     s2sEditId: null,
@@ -3362,7 +3482,7 @@ function app() {
     s2sApplyResult: null,
     plans: [],
     billingSummary: { total:0, paid:0, expired:0, unpaid:0, blocked:0, revenue:0 },
-    planModal: { open:false, id:null, name:'', price:0, traffic_gb:0, duration_days:30, speed_mbps:0 },
+    planModal: { open:false, id:null, name:'', price:0, traffic_gb:0, duration_days:30, speed_mbps:0, route_profile_id:null },
     shareModal: { open:false, user:null, kind:'profile', ttl_hours:72, max_downloads:5, creating:false, url:'', urls:[], isOpenVPN:true },
     sharesModal: { open:false, items:[] },
     expiringModal: { open:false, items:[] },
@@ -3434,7 +3554,7 @@ function app() {
     },
 
     get pageTitle() {
-      const titles = { dashboard:'Дашборд', stats:'Статистика', servers:'Серверы', users:'Клиенты', orgs:'Организации', logs:'Логи', audit:'Журнал', ca:'Сертификаты', settings:'Настройки', security:'Безопасность', modules:'Модули', billing:'Биллинг', s2s:'Площадки', updates:'Обновления' };
+      const titles = { dashboard:'Дашборд', stats:'Статистика', servers:'Серверы', users:'Клиенты', orgs:'Организации', logs:'Логи', audit:'Журнал', ca:'Сертификаты', settings:'Настройки', security:'Безопасность', modules:'Модули', billing:'Биллинг', s2s:'Площадки', routes:'Маршруты', updates:'Обновления' };
       return (titles[this.page] || '') + ' — Click VPN';
     },
     get totalOnline() {
@@ -3522,6 +3642,7 @@ function app() {
       if (p === 'modules') this.loadModules();
       if (p === 'billing') { this.loadPlans(); this.loadBillingSummary(); }
       if (p === 's2s') this.loadS2SSites();
+      if (p === 'routes') this.loadRouteProfiles();
       if (p === 'users' && this.billingEnabled) this.loadPlans();
       if (p === 'dashboard' && this.pinnedCharts.length) this.loadStats(true);
     },
@@ -4148,8 +4269,9 @@ function app() {
     },
 
     async openEditUser(u) {
-      // тарифы должны быть загружены ДО показа, иначе select не выберет plan_id
+      // тарифы/профили должны быть загружены ДО показа, иначе select не выберет значение
       if (this.billingEnabled) await this.loadPlans();
+      if (this.routesEnabled && !this.routeProfiles.length) await this.loadRouteProfiles();
       this.editUserForm = {
         id: u.id, username: u.username, full_name: u.full_name || '',
         email: u.email || '', is_active: u.is_active,
@@ -4160,6 +4282,7 @@ function app() {
         plan_id: u.plan_id || null, paid_until: u.paid_until || null,
         traffic_quota: u.traffic_quota || 0, traffic_used: u.traffic_used || 0,
         billing_blocked: u.billing_blocked || false,
+        route_profile_id: u.route_profile_id || null,
       };
       this.showEditPassword = false;
       this.formError = '';
@@ -4578,6 +4701,7 @@ function app() {
         this.modulesList = await this.api('GET', '/modules') || [];
         this.billingEnabled = !!this.modulesList.find(m => m.name==='billing' && m.enabled);
         this.s2sEnabled = !!this.modulesList.find(m => m.name==='site2site' && m.enabled);
+        this.routesEnabled = !!this.modulesList.find(m => m.name==='selective_routing' && m.enabled);
       } catch(e) { console.warn('modules', e); }
     },
 
@@ -4616,14 +4740,15 @@ function app() {
     },
 
     openPlan(p) {
+      if (this.routesEnabled && !this.routeProfiles.length) this.loadRouteProfiles();
       this.planModal = p
-        ? { open:true, id:p.id, name:p.name, price:p.price, traffic_gb:p.traffic_gb, duration_days:p.duration_days, speed_mbps:p.speed_mbps }
-        : { open:true, id:null, name:'', price:0, traffic_gb:0, duration_days:30, speed_mbps:0 };
+        ? { open:true, id:p.id, name:p.name, price:p.price, traffic_gb:p.traffic_gb, duration_days:p.duration_days, speed_mbps:p.speed_mbps, route_profile_id:p.route_profile_id||null }
+        : { open:true, id:null, name:'', price:0, traffic_gb:0, duration_days:30, speed_mbps:0, route_profile_id:null };
     },
 
     async savePlan() {
       const m = this.planModal;
-      const body = { name:m.name.trim(), price:m.price||0, traffic_gb:m.traffic_gb||0, duration_days:m.duration_days||0, speed_mbps:m.speed_mbps||0 };
+      const body = { name:m.name.trim(), price:m.price||0, traffic_gb:m.traffic_gb||0, duration_days:m.duration_days||0, speed_mbps:m.speed_mbps||0, route_profile_id:m.route_profile_id||null };
       try {
         if (m.id) await this.api('PUT', '/billing/plans/' + m.id, body);
         else await this.api('POST', '/billing/plans', body);
@@ -4718,6 +4843,55 @@ function app() {
         await this.loadS2SSites();
       } catch(e) { alert('❌ ' + e.message); }
       finally { this.s2sBusy = false; }
+    },
+
+    async routeAssignUser(userId, profileId) {
+      try { await this.api('POST', '/routes/assign', { user_id:userId, profile_id: profileId || null }); }
+      catch(e) { alert('❌ '+e.message); }
+    },
+    async loadRouteProfiles() {
+      try {
+        const list = await this.api('GET', '/routes/profiles') || [];
+        list.forEach(p => { p._k = 'cidr'; p._v = ''; });
+        this.routeProfiles = list;
+      } catch(e) { /* модуль выкл */ }
+    },
+    routeOpenNew() {
+      this.routeForm = { open:true, id:null, name:'', mode:'selective', dns_through_tunnel:false, dns_server:'' };
+    },
+    routeEdit(p) {
+      this.routeForm = { open:true, id:p.id, name:p.name, mode:p.mode, dns_through_tunnel:p.dns_through_tunnel, dns_server:p.dns_server||'' };
+    },
+    async routeSave() {
+      this.routeBusy = true;
+      try {
+        const body = { name:this.routeForm.name.trim(), mode:this.routeForm.mode, dns_through_tunnel:this.routeForm.dns_through_tunnel, dns_server:this.routeForm.dns_server.trim()||null };
+        if (this.routeForm.id) await this.api('PUT', '/routes/profiles/'+this.routeForm.id, body);
+        else await this.api('POST', '/routes/profiles', body);
+        this.routeForm.open = false;
+        await this.loadRouteProfiles();
+      } catch(e) { alert('❌ '+e.message); }
+      finally { this.routeBusy = false; }
+    },
+    async routeDelete(p) {
+      if (!confirm('Удалить профиль «'+p.name+'»? У клиентов он будет снят.')) return;
+      try { await this.api('DELETE', '/routes/profiles/'+p.id); await this.loadRouteProfiles(); }
+      catch(e) { alert('❌ '+e.message); }
+    },
+    async routeAddSource(p) {
+      if (!p._v || !p._v.trim()) return;
+      try { await this.api('POST', '/routes/profiles/'+p.id+'/sources', { kind:p._k||'cidr', value:p._v.trim() }); p._v=''; await this.loadRouteProfiles(); }
+      catch(e) { alert('❌ '+e.message); }
+    },
+    async routeDelSource(p, s) {
+      try { await this.api('DELETE', '/routes/sources/'+s.id); await this.loadRouteProfiles(); }
+      catch(e) { alert('❌ '+e.message); }
+    },
+    async routeCompile(p) {
+      this.routeBusy = true;
+      try { const r = await this.api('POST', '/routes/profiles/'+p.id+'/compile'); alert('Собрано CIDR: '+r.prefix_count); await this.loadRouteProfiles(); }
+      catch(e) { alert('❌ '+e.message); }
+      finally { this.routeBusy = false; }
     },
 
     async updLoad() {

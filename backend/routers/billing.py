@@ -28,6 +28,7 @@ class PlanIn(BaseModel):
     traffic_gb: int = 0
     duration_days: int = 30
     speed_mbps: int = 0
+    route_profile_id: int | None = None   # профиль селективной маршрутизации
 
 
 class AssignIn(BaseModel):
@@ -66,14 +67,16 @@ def summary(db: Session = Depends(get_db), _: AdminUser = Depends(get_current_us
 
 def _plan_out(p: Plan) -> dict:
     return {"id": p.id, "name": p.name, "price": p.price, "traffic_gb": p.traffic_gb,
-            "duration_days": p.duration_days, "speed_mbps": p.speed_mbps}
+            "duration_days": p.duration_days, "speed_mbps": p.speed_mbps,
+            "route_profile_id": p.route_profile_id}
 
 
 @router.post("/plans")
 def create_plan(data: PlanIn, db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_user)):
     _require_module(db)
     p = Plan(name=data.name.strip(), price=data.price, traffic_gb=data.traffic_gb,
-             duration_days=data.duration_days, speed_mbps=data.speed_mbps)
+             duration_days=data.duration_days, speed_mbps=data.speed_mbps,
+             route_profile_id=data.route_profile_id)
     db.add(p); db.commit(); db.refresh(p)
     audit.log(db, admin.username, "billing.plan_create", p.name)
     return _plan_out(p)
@@ -87,6 +90,7 @@ def update_plan(plan_id: int, data: PlanIn, db: Session = Depends(get_db), admin
         raise HTTPException(404, "Тариф не найден")
     p.name = data.name.strip(); p.price = data.price; p.traffic_gb = data.traffic_gb
     p.duration_days = data.duration_days; p.speed_mbps = data.speed_mbps
+    p.route_profile_id = data.route_profile_id
     db.commit()
     audit.log(db, admin.username, "billing.plan_update", p.name)
     return _plan_out(p)
@@ -116,6 +120,9 @@ def assign_plan(user_id: int, data: AssignIn, db: Session = Depends(get_db), adm
         raise HTTPException(404, "Тариф не найден")
     user.plan_id = plan.id
     user.traffic_quota = (plan.traffic_gb or 0) * 1024 * 1024 * 1024
+    # профиль маршрутов тарифа → клиенту (если задан в тарифе)
+    if getattr(plan, "route_profile_id", None):
+        user.route_profile_id = plan.route_profile_id
     db.commit()
     audit.log(db, admin.username, "billing.assign", user.username, plan.name)
 

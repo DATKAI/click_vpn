@@ -11,7 +11,7 @@ from fastapi.responses import HTMLResponse
 from database import engine, SessionLocal, Base
 from models import AdminUser, Settings
 from auth import hash_password
-from routers import auth, settings, servers, users, status, organizations, logs, system, audit, backup, stats, download, modules, billing, s2s, updates
+from routers import auth, settings, servers, users, status, organizations, logs, system, audit, backup, stats, download, modules, billing, s2s, updates, routes as routes_router
 
 DATA_DIR = os.getenv("DATA_DIR", "./data")
 os.makedirs(os.path.join(DATA_DIR, "pki"), exist_ok=True)
@@ -208,6 +208,8 @@ def _migrate_db():
         ("vpn_users",   "wg_address",    "VARCHAR(64)"),
         ("s2s_sites",   "psk",           "TEXT"),
         ("s2s_sites",   "backup_of",     "INTEGER"),
+        ("vpn_users",   "route_profile_id", "INTEGER REFERENCES route_profiles(id)"),
+        ("plans",       "route_profile_id", "INTEGER REFERENCES route_profiles(id)"),
     ]
     import sqlalchemy as sa
     with engine.connect() as conn:
@@ -310,6 +312,7 @@ app.include_router(modules.router)
 app.include_router(billing.router)
 app.include_router(s2s.router)
 app.include_router(updates.router)
+app.include_router(routes_router.router)
 
 # Статика и шаблоны
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")

@@ -201,6 +201,7 @@ class UserOut(BaseModel):
     traffic_quota: Optional[int] = 0
     traffic_used: Optional[int] = 0
     billing_blocked: Optional[bool] = False
+    route_profile_id: Optional[int] = None
     class Config:
         from_attributes = True
 

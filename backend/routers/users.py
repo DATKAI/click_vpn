@@ -17,6 +17,7 @@ from services.profile_builder import build_ovpn_profile
 from services import mailer
 from services import audit
 from services import ovpn_mgmt
+from services import modules as mod
 
 DATA_DIR = os.getenv("DATA_DIR", "./data")
 
@@ -561,6 +562,13 @@ def _build_wg_conf(db: Session, user: VPNUser, server) -> str:
     if not routes:
         import ipaddress
         routes = [str(ipaddress.ip_network(f"{server.network}/{server.netmask}", strict=False))]
+    # Селективная маршрутизация: профиль клиента переопределяет AllowedIPs
+    if user.route_profile_id and mod.is_enabled(db, "selective_routing"):
+        from models import RouteProfile
+        prof = db.query(RouteProfile).filter(RouteProfile.id == user.route_profile_id).first()
+        if prof:
+            from services import routelists
+            routes = routelists.allowed_ips_for(prof, routes)
     allowed = ", ".join(routes)
     awg = None
     if server.awg_params:
