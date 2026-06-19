@@ -11,7 +11,7 @@ from fastapi.responses import HTMLResponse
 from database import engine, SessionLocal, Base
 from models import AdminUser, Settings
 from auth import hash_password
-from routers import auth, settings, servers, users, status, organizations, logs, system, audit, backup, stats, download, modules, billing, s2s, updates, routes as routes_router, components
+from routers import auth, settings, servers, users, status, organizations, logs, system, audit, backup, stats, download, modules, billing, s2s, updates, routes as routes_router, components, share_public
 
 DATA_DIR = os.getenv("DATA_DIR", "./data")
 os.makedirs(os.path.join(DATA_DIR, "pki"), exist_ok=True)
@@ -323,6 +323,7 @@ app.include_router(s2s.router)
 app.include_router(updates.router)
 app.include_router(routes_router.router)
 app.include_router(components.router)
+app.include_router(share_public.router)   # /s/{token} — раздача ссылок панелью (до catch-all)
 
 # Статика и шаблоны
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
