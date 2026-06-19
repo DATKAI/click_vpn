@@ -9,7 +9,7 @@ import json
 from database import get_db
 from models import AdminUser, RouteProfile, RouteSource, VPNUser
 from auth import get_current_user
-from services import audit, modules as mod, routelists
+from services import audit, modules as mod, routelists, catalog
 
 router = APIRouter(prefix="/api/routes", tags=["selective_routing"])
 
@@ -127,6 +127,36 @@ def del_source(sid: int, db: Session = Depends(get_db),
     pid = s.profile_id
     db.delete(s)
     db.commit()
+    return _profile_dict(db.query(RouteProfile).filter(RouteProfile.id == pid).first())
+
+
+@router.get("/catalog")
+def get_catalog(_: AdminUser = Depends(get_current_user)):
+    return catalog.list_catalog()
+
+
+class PresetReq(BaseModel):
+    preset_id: str
+
+
+@router.post("/profiles/{pid}/add-preset")
+def add_preset(pid: int, body: PresetReq, db: Session = Depends(get_db),
+               admin: AdminUser = Depends(get_current_user)):
+    _require(db)
+    p = db.query(RouteProfile).filter(RouteProfile.id == pid).first()
+    if not p:
+        raise HTTPException(404, "Профиль не найден")
+    preset = catalog.get(body.preset_id)
+    if not preset:
+        raise HTTPException(404, "Сервис не найден в каталоге")
+    existing = {(s.kind, s.value) for s in p.sources}
+    added = 0
+    for kind, value in preset["sources"]:
+        if (kind, value) not in existing:
+            db.add(RouteSource(profile_id=pid, kind=kind, value=value, enabled=True))
+            added += 1
+    db.commit()
+    audit.log(db, admin.username, "routes.add_preset", f"{p.name} ← {preset['name']}")
     return _profile_dict(db.query(RouteProfile).filter(RouteProfile.id == pid).first())
 
 

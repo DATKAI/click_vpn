@@ -1967,6 +1967,7 @@
               </select>
               <input x-model="p._v" :placeholder="{cidr:'1.2.3.0/24',domain:'example.com',url_list:'https://.../list.txt',provider:'cloudflare | google',asn:'AS15169'}[p._k||'cidr']" style="flex:1;min-width:160px;padding:6px 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:monospace">
               <button @click="routeAddSource(p)" class="btn btn-gray btn-sm">Добавить источник</button>
+              <button @click="routeOpenCatalog(p)" class="btn btn-primary btn-sm">+ Из каталога</button>
             </div>
           </div>
         </template>
@@ -1978,7 +1979,7 @@
           <h3 style="font-size:17px;font-weight:700;margin:0 0 16px" x-text="routeForm.id?'Изменить профиль':'Новый профиль'"></h3>
           <div style="display:flex;flex-direction:column;gap:14px">
             <label style="font-size:13px;font-weight:600">Название
-              <input x-model="routeForm.name" placeholder="Обход блокировок" style="display:block;width:100%;margin-top:4px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px">
+              <input x-model="routeForm.name" placeholder="Зарубежные сервисы" style="display:block;width:100%;margin-top:4px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px">
             </label>
             <label style="font-size:13px;font-weight:600">Режим
               <select x-model="routeForm.mode" style="display:block;width:100%;margin-top:4px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;background:#fff">
@@ -2011,6 +2012,28 @@
             <button @click="routeForm.open=false" class="btn btn-gray">Отмена</button>
             <button @click="routeSave()" class="btn btn-primary" :disabled="routeBusy">Сохранить</button>
           </div>
+        </div>
+      </div>
+
+      <!-- Модалка каталога сервисов -->
+      <div x-show="routeCatalog.open" x-cloak class="modal-backdrop" @click.self="routeCatalog.open=false">
+        <div class="modal" style="max-width:640px" @click.stop>
+          <h3 style="font-size:17px;font-weight:700;margin:0 0 4px">Каталог сервисов</h3>
+          <p style="font-size:12px;color:#94a3b8;margin:0 0 14px">Готовые наборы диапазонов (ASN/CDN). Добавляются в профиль; после — нажмите «Пересобрать».</p>
+          <template x-for="grp in routeCatalogGrouped()" :key="grp.region">
+            <div style="margin-bottom:14px">
+              <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px" x-text="grp.region==='ru'?'Российские сервисы':'Зарубежные сервисы'"></div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px">
+                <template x-for="c in grp.items" :key="c.id">
+                  <button @click="routeAddPreset(c)" style="text-align:left;padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;cursor:pointer">
+                    <div style="font-size:13px;font-weight:600;color:#0f172a" x-text="c.name"></div>
+                    <div style="font-size:11px;color:#94a3b8" x-text="c.category"></div>
+                  </button>
+                </template>
+              </div>
+            </div>
+          </template>
+          <div style="display:flex;justify-content:flex-end;margin-top:12px"><button @click="routeCatalog.open=false" class="btn btn-gray">Готово</button></div>
         </div>
       </div>
     </div>
@@ -3490,6 +3513,7 @@ function app() {
     routeProfiles: [],
     routeForm: { open:false, id:null, name:'', mode:'selective', dns_through_tunnel:false, dns_server:'', auto_update:false, update_interval_hours:24 },
     routeSrcForm: { kind:'cidr', value:'' },
+    routeCatalog: { open:false, pid:null, items:[] },
     routeBusy: false,
     s2sSites: [],
     s2sForm: { name:'', role:'hub', hub_id:null, endpoint:'', tunnel_network:'10.100.0.0/24', tunnel_port:51900, subnets:'' },
@@ -4923,6 +4947,23 @@ function app() {
     async routeDelSource(p, s) {
       try { await this.api('DELETE', '/routes/sources/'+s.id); await this.loadRouteProfiles(); }
       catch(e) { alert('❌ '+e.message); }
+    },
+    async routeOpenCatalog(p) {
+      this.routeCatalog = { open:true, pid:p.id, items: this.routeCatalog.items };
+      if (!this.routeCatalog.items.length) {
+        try { this.routeCatalog.items = await this.api('GET', '/routes/catalog') || []; } catch(e) {}
+      }
+    },
+    routeCatalogGrouped() {
+      const g = {};
+      (this.routeCatalog.items||[]).forEach(c => { (g[c.region] = g[c.region] || []).push(c); });
+      return Object.keys(g).sort().map(r => ({ region:r, items:g[r] }));
+    },
+    async routeAddPreset(c) {
+      try {
+        await this.api('POST', '/routes/profiles/'+this.routeCatalog.pid+'/add-preset', { preset_id:c.id });
+        await this.loadRouteProfiles();
+      } catch(e) { alert('❌ '+e.message); }
     },
     async routeCompile(p) {
       this.routeBusy = true;
