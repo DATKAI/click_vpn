@@ -123,7 +123,10 @@ def create_server(
         try:
             priv, pub = wireguard.gen_keypair(data.kind)
         except Exception as e:
-            raise HTTPException(500, f"WireGuard/AmneziaWG не установлен: {e}")
+            hint = ("bash /opt/click-vpn/install-amneziawg.sh"
+                    if data.kind.startswith("amnez") else
+                    "apt install wireguard-tools")
+            raise HTTPException(500, f"Не установлен бинарь для {data.kind}: {e}. Выполните: {hint}")
 
         awg = None
         if data.kind == "amneziawg":

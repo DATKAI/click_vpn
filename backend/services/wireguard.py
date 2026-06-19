@@ -203,9 +203,12 @@ def remove(server_id: int):
 
 
 def is_running(server_id: int) -> bool:
-    # пробуем обоими бинарями
+    # пробуем обоими бинарями; awg может быть не установлен — это не ошибка
     for wg in ("wg", "awg"):
-        r = subprocess.run([wg, "show", _iface(server_id)], capture_output=True)
+        try:
+            r = subprocess.run([wg, "show", _iface(server_id)], capture_output=True)
+        except FileNotFoundError:
+            continue
         if r.returncode == 0:
             return True
     return False
