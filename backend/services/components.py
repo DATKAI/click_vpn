@@ -80,6 +80,14 @@ def install(cid: str) -> dict:
     # обёртка: пишет лог и убирает флаг running по завершении
     wrapper = (f"bash {script} > {_log_path(cid)} 2>&1; "
                f"rm -f {_running_path(cid)}")
+    # systemd-run — чистый root-юнит вне песочницы сервиса (иначе apt не может
+    # сбросить привилегии до _apt: setgroups/seteuid Operation not permitted).
+    if shutil.which("systemd-run"):
+        r = subprocess.run(["systemd-run", "--collect", "--quiet",
+                            f"--unit=clickvpn-install-{cid}", "bash", "-c", wrapper],
+                           capture_output=True, text=True)
+        if r.returncode == 0:
+            return {"started": True}
     subprocess.Popen(["bash", "-c", wrapper], cwd=INSTALL_DIR, start_new_session=True)
     return {"started": True}
 
