@@ -60,6 +60,10 @@ ensure_go() {
 ensure_go
 info "Go: $($GO version)"
 export GOTOOLCHAIN=local   # не пытаться качать другую версию тулчейна
+# systemd-run/чистое окружение без HOME → задаём пути Go явно
+export HOME="${HOME:-/root}"
+export GOPATH="$BUILD/go" GOCACHE="$BUILD/gocache" GOMODCACHE="$BUILD/go/pkg/mod"
+mkdir -p "$GOPATH" "$GOCACHE" "$GOMODCACHE"
 
 # ── amneziawg-go (userspace демон) ────────────────────────────────────────────
 info "Сборка amneziawg-go (userspace)..."
