@@ -38,6 +38,12 @@ def get_status(_: AdminUser = Depends(get_current_user)):
     return updater.status()
 
 
+@router.post("/clear-status")
+def clear_status(_: AdminUser = Depends(get_current_user)):
+    updater.clear_status()
+    return {"ok": True}
+
+
 class ApplyReq(BaseModel):
     ref: str   # тег, коммит или "latest"
 

@@ -2046,9 +2046,14 @@
 
       <!-- Статус выполнения -->
       <div x-show="updStatus.state && updStatus.state!=='idle' && updStatus.state!=='ok'" class="card" style="margin-bottom:16px;background:#fffbeb;border:1px solid #fde68a">
-        <div style="font-size:13px;color:#92400e">
-          Состояние обновления: <b x-text="updStatus.state"></b> <span x-text="updStatus.message||''"></span>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <div style="font-size:13px;color:#92400e">
+            Состояние обновления: <b x-text="{running:'выполняется',rolled_back:'выполнен авто-откат',error:'ошибка'}[updStatus.state]||updStatus.state"></b>
+            <span x-text="updStatus.message||''"></span>
+          </div>
+          <button @click="updClearStatus()" class="btn btn-gray btn-sm">Скрыть</button>
         </div>
+        <div x-show="updStatus.state==='running'" style="font-size:11px;color:#a16207;margin-top:6px">Если статус «выполняется» завис после успешного обновления — нажмите «Скрыть».</div>
       </div>
 
       <!-- Список версий -->
@@ -4938,6 +4943,10 @@ function app() {
     },
     async updCheckBadge() {
       try { const d = await this.api('GET', '/updates/versions'); this.updatesAvailable = !!(d && d.update_available); }
+      catch(e) {}
+    },
+    async updClearStatus() {
+      try { await this.api('POST', '/updates/clear-status'); this.updStatus = { state:'idle' }; }
       catch(e) {}
     },
     async updShowChangelog(v) {

@@ -6,7 +6,9 @@ update.sh ОТДЕЛЬНЫМ (detached) процессом: сервис при 
 """
 import json
 import os
+import shutil
 import subprocess
+import time
 
 # repo root = .../click-vpn (backend/services/updater.py → ../../..)
 REPO_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -35,9 +37,18 @@ def current() -> dict:
     }
 
 
+def _is_shallow() -> bool:
+    return _git("rev-parse", "--is-shallow-repository") == "true"
+
+
 def fetch() -> None:
-    subprocess.run(["git", "-C", INSTALL_DIR, "fetch", "origin", "--tags", "-q"],
-                   capture_output=True, timeout=60)
+    # расширяем историю, если репозиторий был склонирован с --depth 1
+    if _is_shallow():
+        subprocess.run(["git", "-C", INSTALL_DIR, "fetch", "--unshallow", "--tags", "-q"],
+                       capture_output=True, timeout=120)
+    else:
+        subprocess.run(["git", "-C", INSTALL_DIR, "fetch", "origin", "--tags", "-q"],
+                       capture_output=True, timeout=60)
 
 
 def list_versions(limit: int = 30) -> dict:
@@ -101,11 +112,28 @@ def apply(ref: str) -> dict:
     else:
         _safe_ref(ref)
         args = [UPDATE_SH, "--ref", ref]
+    # ВАЖНО: запускать ВНЕ cgroup сервиса, иначе systemctl restart click-vpn
+    # убьёт апдейтер на полпути. systemd-run создаёт отдельный transient-юнит.
+    if shutil.which("systemd-run"):
+        unit = f"clickvpn-update-{int(time.time())}"
+        cmd = ["systemd-run", "--collect", "--quiet", f"--unit={unit}",
+               "bash", *args]
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        if r.returncode == 0:
+            return {"started": True, "ref": ref, "unit": unit}
+        # если systemd-run недоступен/запрещён — фолбэк ниже
     log = open(os.path.join(DATA_DIR, "update.log"), "ab", buffering=0)
-    # detached: своя сессия, чтобы пережить рестарт click-vpn
     subprocess.Popen(["bash", *args], cwd=INSTALL_DIR,
                      stdout=log, stderr=log, start_new_session=True)
     return {"started": True, "ref": ref}
+
+
+def clear_status() -> None:
+    try:
+        with open(STATUS_FILE, "w") as f:
+            json.dump({"state": "idle"}, f)
+    except Exception:
+        pass
 
 
 def status() -> dict:

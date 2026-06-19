@@ -50,7 +50,12 @@ if [ -f "$DATA_DIR/vpn.db" ]; then
   cp "$DATA_DIR/vpn.db" "$DATA_DIR/backups/vpn-pre-update-$(date +%Y%m%d-%H%M%S).db" || warn "не удалось сделать бэкап БД"
 fi
 
-git fetch origin --tags -q
+# расширяем историю, если репозиторий shallow (--depth 1) — иначе нет версий/отката
+if [ "$(git rev-parse --is-shallow-repository 2>/dev/null)" = "true" ]; then
+  git fetch --unshallow --tags -q || git fetch origin --tags -q
+else
+  git fetch origin --tags -q
+fi
 
 if [ "$MODE" = "latest" ]; then
   TARGET="origin/master"
