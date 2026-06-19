@@ -231,6 +231,10 @@
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
           Модули
         </button>
+        <button class="nav-item" :class="{active:page==='components'}" @click="navigate('components')" style="font-size:13px;padding:8px 12px">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+          Компоненты
+        </button>
         <button class="nav-item" :class="{active:page==='updates'}" @click="navigate('updates')" style="font-size:13px;padding:8px 12px">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
           Обновления
@@ -2038,6 +2042,48 @@
       </div>
     </div>
 
+    <!-- Components -->
+    <div x-show="page==='components'" class="fade-in" style="padding:32px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:20px;flex-wrap:wrap">
+        <div>
+          <h2 style="font-size:22px;font-weight:700;color:#0f172a;margin:0">Компоненты сервера</h2>
+          <p style="color:#94a3b8;font-size:13px;margin-top:4px">Установка опциональных частей системы. Установка идёт в фоне (1–5 мин) — обновите статус или смотрите лог.</p>
+        </div>
+        <button @click="loadComponents()" class="btn btn-gray btn-sm" :disabled="compBusy">Обновить статус</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <template x-for="c in componentsList" :key="c.id">
+          <div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+            <div style="min-width:0">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-weight:700;font-size:15px" x-text="c.name"></span>
+                <span x-show="c.installed" class="badge badge-green">установлен</span>
+                <span x-show="!c.installed && !c.running" class="badge badge-gray">не установлен</span>
+                <span x-show="c.running" class="badge badge-yellow">устанавливается…</span>
+              </div>
+              <div style="font-size:12px;color:#64748b;margin-top:2px" x-text="c.desc"></div>
+            </div>
+            <div style="display:flex;gap:6px;flex-shrink:0">
+              <button @click="compShowLog(c)" class="btn btn-gray btn-sm">Лог</button>
+              <button @click="compInstall(c)" class="btn btn-primary btn-sm" :disabled="c.running" x-text="c.installed?'Переустановить':'Установить'"></button>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Лог установки -->
+      <div x-show="compLog.open" x-cloak class="modal-backdrop" @click.self="compLog.open=false">
+        <div class="modal" style="max-width:720px" @click.stop>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <h3 style="font-size:16px;font-weight:700;margin:0" x-text="'Лог: '+compLog.name"></h3>
+            <button @click="compShowLog({id:compLog.id,name:compLog.name})" class="btn btn-gray btn-sm">Обновить</button>
+          </div>
+          <pre style="background:#0f172a;color:#e2e8f0;font-size:12px;padding:12px;border-radius:8px;max-height:60vh;overflow:auto;white-space:pre-wrap" x-text="compLog.text||'(пусто)'"></pre>
+          <div style="display:flex;justify-content:flex-end;margin-top:12px"><button @click="compLog.open=false" class="btn btn-gray">Закрыть</button></div>
+        </div>
+      </div>
+    </div>
+
     <!-- Updates -->
     <div x-show="page==='updates'" class="fade-in" style="padding:32px">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:20px;flex-wrap:wrap">
@@ -3525,6 +3571,8 @@ function app() {
     updCurrent: {}, updData: {}, updStatus: {}, updBusy: false,
     updatesAvailable: false,
     updChangelog: { open:false, title:'', commits:[] },
+    componentsList: [], compBusy: false,
+    compLog: { open:false, id:null, name:'', text:'' },
     s2sAccess: { default_policy:'allow_all', sites:[], rules:[] },
     s2sBusy: false,
     s2sApplyResult: null,
@@ -3602,7 +3650,7 @@ function app() {
     },
 
     get pageTitle() {
-      const titles = { dashboard:'Дашборд', stats:'Статистика', servers:'Серверы', users:'Клиенты', orgs:'Организации', logs:'Логи', audit:'Журнал', ca:'Сертификаты', settings:'Настройки', security:'Безопасность', modules:'Модули', billing:'Биллинг', s2s:'Площадки', routes:'Маршруты', updates:'Обновления' };
+      const titles = { dashboard:'Дашборд', stats:'Статистика', servers:'Серверы', users:'Клиенты', orgs:'Организации', logs:'Логи', audit:'Журнал', ca:'Сертификаты', settings:'Настройки', security:'Безопасность', modules:'Модули', billing:'Биллинг', s2s:'Площадки', routes:'Маршруты', components:'Компоненты', updates:'Обновления' };
       return (titles[this.page] || '') + ' — Click VPN';
     },
     get totalOnline() {
@@ -3673,8 +3721,9 @@ function app() {
 
     navigate(p) {
       this.page = p;
-      if (['ca','logs','audit','security','modules','updates','settings'].includes(p)) this.sysOpen = true;
+      if (['ca','logs','audit','security','modules','components','updates','settings'].includes(p)) this.sysOpen = true;
       if (p === 'updates') this.updLoad();
+      if (p === 'components') this.loadComponents();
       if (p === 'dashboard') this.loadDashboard();
       if (p === 'servers') this.loadServers();
       if (p === 'users') this.loadUsers();
@@ -4970,6 +5019,27 @@ function app() {
       try { const r = await this.api('POST', '/routes/profiles/'+p.id+'/compile'); alert('Собрано CIDR: '+r.prefix_count); await this.loadRouteProfiles(); }
       catch(e) { alert('❌ '+e.message); }
       finally { this.routeBusy = false; }
+    },
+
+    async loadComponents() {
+      this.compBusy = true;
+      try { this.componentsList = await this.api('GET', '/components') || []; }
+      catch(e) {}
+      finally { this.compBusy = false; }
+    },
+    async compInstall(c) {
+      if (!confirm((c.installed?'Переустановить':'Установить')+' «'+c.name+'»? Установка идёт в фоне.')) return;
+      try {
+        await this.api('POST', '/components/'+c.id+'/install');
+        await this.loadComponents();
+        // мягкий автоопрос статуса
+        let n = 0; const t = setInterval(async () => { await this.loadComponents(); if (++n>20 || !(this.componentsList.find(x=>x.id===c.id)||{}).running) clearInterval(t); }, 5000);
+      } catch(e) { alert('❌ '+e.message); }
+    },
+    async compShowLog(c) {
+      this.compLog = { open:true, id:c.id, name:c.name, text:'(загрузка...)' };
+      try { const r = await this.api('GET', '/components/'+c.id+'/log'); this.compLog.text = r.log || '(пусто)'; }
+      catch(e) { this.compLog.text = 'Ошибка: '+e.message; }
     },
 
     async updLoad() {
