@@ -23,12 +23,43 @@ BUILD=/tmp/awg-build
 rm -rf "$BUILD"; mkdir -p "$BUILD"
 
 # ── Зависимости ───────────────────────────────────────────────────────────────
-info "Установка зависимостей (git, make, golang)..."
+info "Установка зависимостей (git, make, gcc, libmnl)..."
 apt-get update -qq
-apt-get install -y -qq git make gcc libmnl-dev golang-go iproute2 iptables
+apt-get install -y -qq git make gcc libmnl-dev iproute2 iptables curl ca-certificates
 
-GO=$(command -v go) || err "go не установлен"
+# ── Go нужной версии (amneziawg-go требует Go >= 1.24) ────────────────────────
+# Дистрибутивный golang часто слишком старый — ставим официальный с go.dev.
+GO_VER="1.24.4"
+ensure_go() {
+  local cur=""
+  if command -v go >/dev/null 2>&1; then
+    cur=$(go version | grep -oE 'go[0-9]+\.[0-9]+' | head -1 | sed 's/go//')
+  fi
+  local need_minor=24
+  local cur_minor=$(echo "${cur:-0.0}" | cut -d. -f2)
+  if [ -n "$cur" ] && [ "$(echo "$cur" | cut -d. -f1)" = "1" ] && [ "$cur_minor" -ge "$need_minor" ] 2>/dev/null; then
+    GO=$(command -v go); return
+  fi
+  info "Устанавливаю Go $GO_VER с go.dev (системный Go отсутствует или устарел)..."
+  local arch; arch=$(uname -m)
+  case "$arch" in
+    x86_64|amd64) arch=amd64 ;;
+    aarch64|arm64) arch=arm64 ;;
+    armv7l) arch=armv6l ;;
+    *) err "Неподдерживаемая архитектура: $arch" ;;
+  esac
+  local tgz="/tmp/go${GO_VER}.tar.gz"
+  curl -fSL "https://go.dev/dl/go${GO_VER}.linux-${arch}.tar.gz" -o "$tgz" \
+    || err "Не удалось скачать Go $GO_VER"
+  rm -rf /usr/local/go
+  tar -C /usr/local -xzf "$tgz"
+  rm -f "$tgz"
+  GO=/usr/local/go/bin/go
+  export PATH="/usr/local/go/bin:$PATH"
+}
+ensure_go
 info "Go: $($GO version)"
+export GOTOOLCHAIN=local   # не пытаться качать другую версию тулчейна
 
 # ── amneziawg-go (userspace демон) ────────────────────────────────────────────
 info "Сборка amneziawg-go (userspace)..."
