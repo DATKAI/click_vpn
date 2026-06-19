@@ -143,6 +143,42 @@ def compile_profile(db, profile) -> int:
     return len(cidrs)
 
 
+def refresh_due(SessionLocal) -> int:
+    """Пересобирает профили с включённым автообновлением, у которых вышел срок."""
+    from datetime import timedelta
+    from models import RouteProfile
+    db = SessionLocal()
+    done = 0
+    try:
+        for p in db.query(RouteProfile).filter(RouteProfile.auto_update == True).all():  # noqa: E712
+            interval = max(1, p.update_interval_hours or 24)
+            due = (not p.compiled_at) or \
+                  (datetime.utcnow() - p.compiled_at >= timedelta(hours=interval))
+            if due:
+                try:
+                    compile_profile(db, p)
+                    done += 1
+                except Exception:
+                    db.rollback()
+    finally:
+        db.close()
+    return done
+
+
+def start_checker(SessionLocal, tick_seconds: int = 1800):
+    import threading
+    import time
+
+    def _loop():
+        while True:
+            try:
+                refresh_due(SessionLocal)
+            except Exception:
+                pass
+            time.sleep(tick_seconds)
+    threading.Thread(target=_loop, daemon=True).start()
+
+
 def load_cidrs(profile_id: int) -> list[str]:
     try:
         with open(list_path(profile_id)) as f:

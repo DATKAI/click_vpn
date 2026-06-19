@@ -279,6 +279,8 @@ class RouteProfile(Base):
     dns_server = Column(String(64), nullable=True)     # резолвер (если dns_through_tunnel)
     prefix_count = Column(Integer, default=0)          # сколько CIDR в скомпилированном наборе
     compiled_at = Column(DateTime, nullable=True)
+    auto_update = Column(Boolean, default=False)       # автопересборка списков
+    update_interval_hours = Column(Integer, default=24)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     sources = relationship("RouteSource", back_populates="profile",

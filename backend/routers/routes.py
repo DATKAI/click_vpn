@@ -1,7 +1,10 @@
 """Селективная маршрутизация: профили маршрутов + источники. Модуль selective_routing."""
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
+import ipaddress
+import json
 
 from database import get_db
 from models import AdminUser, RouteProfile, RouteSource, VPNUser
@@ -22,6 +25,7 @@ def _profile_dict(p: RouteProfile) -> dict:
         "dns_through_tunnel": p.dns_through_tunnel, "dns_server": p.dns_server,
         "prefix_count": p.prefix_count,
         "compiled_at": p.compiled_at.isoformat() if p.compiled_at else None,
+        "auto_update": p.auto_update, "update_interval_hours": p.update_interval_hours,
         "sources": [{"id": s.id, "kind": s.kind, "value": s.value, "enabled": s.enabled}
                     for s in p.sources],
     }
@@ -32,6 +36,8 @@ class ProfileReq(BaseModel):
     mode: str = "selective"
     dns_through_tunnel: bool = False
     dns_server: str | None = None
+    auto_update: bool = False
+    update_interval_hours: int = 24
 
 
 class SourceReq(BaseModel):
@@ -53,7 +59,9 @@ def create_profile(body: ProfileReq, db: Session = Depends(get_db),
     if body.mode not in ("selective", "full", "exclude"):
         raise HTTPException(400, "mode: selective|full|exclude")
     p = RouteProfile(name=body.name, mode=body.mode,
-                     dns_through_tunnel=body.dns_through_tunnel, dns_server=body.dns_server)
+                     dns_through_tunnel=body.dns_through_tunnel, dns_server=body.dns_server,
+                     auto_update=body.auto_update,
+                     update_interval_hours=max(1, body.update_interval_hours or 24))
     db.add(p)
     db.commit()
     db.refresh(p)
@@ -72,6 +80,8 @@ def update_profile(pid: int, body: ProfileReq, db: Session = Depends(get_db),
     p.mode = body.mode
     p.dns_through_tunnel = body.dns_through_tunnel
     p.dns_server = body.dns_server
+    p.auto_update = body.auto_update
+    p.update_interval_hours = max(1, body.update_interval_hours or 24)
     db.commit()
     audit.log(db, admin.username, "routes.profile.update", body.name)
     return _profile_dict(p)
@@ -136,6 +146,38 @@ def compile_profile(pid: int, db: Session = Depends(get_db),
 def preview(pid: int, db: Session = Depends(get_db), _: AdminUser = Depends(get_current_user)):
     _require(db)
     return {"cidrs": routelists.load_cidrs(pid)[:500]}
+
+
+@router.get("/profiles/{pid}/export", response_class=PlainTextResponse)
+def export(pid: int, format: str = "txt", db: Session = Depends(get_db),
+           _: AdminUser = Depends(get_current_user)):
+    """Скачать скомпилированный список CIDR: txt | json | bat (Windows route add)."""
+    _require(db)
+    p = db.query(RouteProfile).filter(RouteProfile.id == pid).first()
+    if not p:
+        raise HTTPException(404, "Профиль не найден")
+    cidrs = routelists.load_cidrs(pid)
+    safe = "".join(c if c.isalnum() else "_" for c in (p.name or f"profile{pid}"))
+
+    if format == "json":
+        body = json.dumps({"name": p.name, "mode": p.mode, "count": len(cidrs),
+                           "cidrs": cidrs}, ensure_ascii=False, indent=2)
+        media, fn = "application/json", f"{safe}.json"
+    elif format == "bat":
+        lines = ["@echo off",
+                 "REM Маршруты Click VPN — задайте шлюз VPN-интерфейса в GW",
+                 'set GW=10.8.0.1', ""]
+        for c in cidrs:
+            if ":" in c:
+                continue   # bat route add — только IPv4
+            net = ipaddress.ip_network(c, strict=False)
+            lines.append(f"route ADD {net.network_address} MASK {net.netmask} %GW%")
+        body, media, fn = "\r\n".join(lines) + "\r\n", "application/bat", f"{safe}.bat"
+    else:  # txt
+        body, media, fn = "\n".join(cidrs) + ("\n" if cidrs else ""), "text/plain", f"{safe}.txt"
+
+    return PlainTextResponse(body, media_type=media,
+                             headers={"Content-Disposition": f'attachment; filename="{fn}"'})
 
 
 class AssignReq(BaseModel):

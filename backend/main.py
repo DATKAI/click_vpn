@@ -154,6 +154,13 @@ def _start_background():
     except Exception:
         pass
 
+    # селективная маршрутизация: автообновление списков CIDR
+    try:
+        from services import routelists
+        routelists.start_checker(SessionLocal)
+    except Exception:
+        pass
+
 
 def _migrate_db():
     """Добавляет новые колонки в существующую БД если их нет (safe migrations)."""
@@ -210,6 +217,8 @@ def _migrate_db():
         ("s2s_sites",   "backup_of",     "INTEGER"),
         ("vpn_users",   "route_profile_id", "INTEGER REFERENCES route_profiles(id)"),
         ("plans",       "route_profile_id", "INTEGER REFERENCES route_profiles(id)"),
+        ("route_profiles", "auto_update", "BOOLEAN DEFAULT 0"),
+        ("route_profiles", "update_interval_hours", "INTEGER DEFAULT 24"),
     ]
     import sqlalchemy as sa
     with engine.connect() as conn:

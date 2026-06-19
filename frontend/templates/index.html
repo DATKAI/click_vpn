@@ -1930,11 +1930,17 @@
                   Режим: <b x-text="{selective:'только эти сети',full:'весь трафик',exclude:'всё, кроме этих'}[p.mode]"></b>
                   · CIDR: <span x-text="p.prefix_count"></span>
                   <span x-show="p.dns_through_tunnel"> · DNS через туннель</span>
+                  <span x-show="p.auto_update" style="color:#16a34a"> · автообновление каждые <span x-text="p.update_interval_hours"></span>ч</span>
                   <span x-show="p.compiled_at" style="color:#94a3b8"> · собран <span x-text="(p.compiled_at||'').replace('T',' ').slice(0,16)"></span></span>
                 </div>
               </div>
-              <div style="display:flex;gap:6px;flex-shrink:0">
+              <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap">
                 <button @click="routeCompile(p)" class="btn btn-primary btn-sm" :disabled="routeBusy">Пересобрать</button>
+                <div style="display:flex;gap:2px" x-show="p.prefix_count>0">
+                  <button @click="routeExport(p,'txt')" class="btn btn-gray btn-sm" title="Скачать список CIDR">.txt</button>
+                  <button @click="routeExport(p,'json')" class="btn btn-gray btn-sm">.json</button>
+                  <button @click="routeExport(p,'bat')" class="btn btn-gray btn-sm" title="Windows route add">.bat</button>
+                </div>
                 <button @click="routeEdit(p)" class="btn btn-gray btn-sm">Изменить</button>
                 <button @click="routeDelete(p)" class="btn btn-sm" style="background:#fef2f2;color:#dc2626;border:1px solid #fecaca">Удалить</button>
               </div>
@@ -1986,6 +1992,19 @@
             </label>
             <label x-show="routeForm.dns_through_tunnel" style="font-size:13px;font-weight:600">DNS-сервер
               <input x-model="routeForm.dns_server" placeholder="1.1.1.1" style="display:block;width:100%;margin-top:4px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px">
+            </label>
+            <label style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px">
+              <input type="checkbox" x-model="routeForm.auto_update"> Автообновление списков
+            </label>
+            <label x-show="routeForm.auto_update" style="font-size:13px;font-weight:600">Периодичность
+              <select x-model.number="routeForm.update_interval_hours" style="display:block;width:100%;margin-top:4px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;background:#fff">
+                <option :value="6">каждые 6 часов</option>
+                <option :value="12">каждые 12 часов</option>
+                <option :value="24">раз в сутки</option>
+                <option :value="72">раз в 3 дня</option>
+                <option :value="168">раз в неделю</option>
+              </select>
+              <span style="font-size:11px;color:#94a3b8">Списки (провайдеры/ASN/URL/домены) пересобираются автоматически — актуальные диапазоны CDN.</span>
             </label>
           </div>
           <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:20px">
@@ -3464,7 +3483,7 @@ function app() {
     s2sEnabled: false,
     routesEnabled: false,
     routeProfiles: [],
-    routeForm: { open:false, id:null, name:'', mode:'selective', dns_through_tunnel:false, dns_server:'' },
+    routeForm: { open:false, id:null, name:'', mode:'selective', dns_through_tunnel:false, dns_server:'', auto_update:false, update_interval_hours:24 },
     routeSrcForm: { kind:'cidr', value:'' },
     routeBusy: false,
     s2sSites: [],
@@ -4845,6 +4864,16 @@ function app() {
       finally { this.s2sBusy = false; }
     },
 
+    async downloadAuth(url, filename) {
+      try {
+        const res = await fetch(url, { headers: { 'Authorization':'Bearer '+this.token } });
+        if (!res.ok) { const e = await res.json().catch(()=>({})); alert('Ошибка: '+(e.detail||'не удалось скачать')); return; }
+        const blob = await res.blob();
+        const u = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = u; a.download = filename; a.click();
+        URL.revokeObjectURL(u);
+      } catch(e) { alert('Ошибка скачивания: '+e.message); }
+    },
     async routeAssignUser(userId, profileId) {
       try { await this.api('POST', '/routes/assign', { user_id:userId, profile_id: profileId || null }); }
       catch(e) { alert('❌ '+e.message); }
@@ -4857,15 +4886,18 @@ function app() {
       } catch(e) { /* модуль выкл */ }
     },
     routeOpenNew() {
-      this.routeForm = { open:true, id:null, name:'', mode:'selective', dns_through_tunnel:false, dns_server:'' };
+      this.routeForm = { open:true, id:null, name:'', mode:'selective', dns_through_tunnel:false, dns_server:'', auto_update:false, update_interval_hours:24 };
     },
     routeEdit(p) {
-      this.routeForm = { open:true, id:p.id, name:p.name, mode:p.mode, dns_through_tunnel:p.dns_through_tunnel, dns_server:p.dns_server||'' };
+      this.routeForm = { open:true, id:p.id, name:p.name, mode:p.mode, dns_through_tunnel:p.dns_through_tunnel, dns_server:p.dns_server||'', auto_update:!!p.auto_update, update_interval_hours:p.update_interval_hours||24 };
+    },
+    routeExport(p, fmt) {
+      this.downloadAuth('/api/routes/profiles/'+p.id+'/export?format='+fmt, p.name+'.'+fmt);
     },
     async routeSave() {
       this.routeBusy = true;
       try {
-        const body = { name:this.routeForm.name.trim(), mode:this.routeForm.mode, dns_through_tunnel:this.routeForm.dns_through_tunnel, dns_server:this.routeForm.dns_server.trim()||null };
+        const body = { name:this.routeForm.name.trim(), mode:this.routeForm.mode, dns_through_tunnel:this.routeForm.dns_through_tunnel, dns_server:this.routeForm.dns_server.trim()||null, auto_update:this.routeForm.auto_update, update_interval_hours:+this.routeForm.update_interval_hours||24 };
         if (this.routeForm.id) await this.api('PUT', '/routes/profiles/'+this.routeForm.id, body);
         else await this.api('POST', '/routes/profiles', body);
         this.routeForm.open = false;
