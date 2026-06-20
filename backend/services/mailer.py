@@ -196,6 +196,27 @@ def send_ovpn_email(
             server.send_message(msg)
 
 
+def send_feedback(
+    smtp_host: str, smtp_port: int, smtp_user: str | None,
+    smtp_password: str | None, smtp_from: str, smtp_tls: bool,
+    to_email: str, subject: str, message: str,
+    contact: str | None = None, admin: str = "", server_name: str = "Click VPN",
+) -> None:
+    """Письмо обратной связи разработчику."""
+    msg = EmailMessage()
+    msg["Subject"] = f"[{server_name}] Обратная связь: {subject or 'без темы'}"
+    msg["From"] = smtp_from or smtp_user
+    msg["To"] = to_email
+    if contact and "@" in contact:
+        msg["Reply-To"] = contact
+    body = (f"Сообщение от панели {server_name}\n"
+            f"Администратор: {admin or '—'}\n"
+            f"Контакт для ответа: {contact or '—'}\n"
+            f"{'-' * 40}\n\n{message}\n")
+    msg.set_content(body)
+    _send(msg, smtp_host, smtp_port, smtp_user, smtp_password, smtp_tls)
+
+
 def send_test_email(
     smtp_host: str, smtp_port: int, smtp_user: str | None,
     smtp_password: str | None, smtp_from: str, smtp_tls: bool,

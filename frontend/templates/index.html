@@ -249,6 +249,10 @@
     </nav>
 
     <div style="padding:12px 8px;border-top:1px solid rgba(255,255,255,.06)">
+      <button class="nav-item" :class="{active:page==='developer'}" @click="navigate('developer')" style="font-size:13px">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
+        Разработчик
+      </button>
       <button class="nav-item" @click="logout" style="color:#f87171">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
         Выйти
@@ -2156,6 +2160,52 @@
       </div>
     </div>
 
+    <!-- Developer -->
+    <div x-show="page==='developer'" class="fade-in" style="padding:32px">
+      <h2 style="font-size:22px;font-weight:700;color:#0f172a;margin:0 0 4px">Разработчик</h2>
+      <p style="color:#94a3b8;font-size:13px;margin:0 0 20px">Обратная связь, предложения и сообщения об ошибках.</p>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:900px" class="dev-grid">
+        <!-- О разработчике -->
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
+            <div style="width:56px;height:56px;border-radius:16px;background:linear-gradient(135deg,#6366f1,#4f46e5);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:22px">S</div>
+            <div>
+              <div style="font-size:18px;font-weight:700;color:#0f172a">SanX</div>
+              <div style="font-size:13px;color:#64748b">Компания DATKAI</div>
+            </div>
+          </div>
+          <div style="font-size:13px;color:#475569;line-height:1.7">
+            Click VPN — система управления VPN: OpenVPN, WireGuard/AmneziaWG, IKEv2,
+            site-to-site, селективная маршрутизация, биллинг.
+          </div>
+          <div style="margin-top:14px;font-size:13px;color:#64748b">
+            Почта: <a href="mailto:sanxzet@gmail.com" style="color:#4f46e5">sanxzet@gmail.com</a>
+          </div>
+        </div>
+
+        <!-- Форма обратной связи -->
+        <div class="card">
+          <h3 style="font-size:16px;font-weight:700;margin:0 0 14px">Обратная связь</h3>
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <label style="font-size:13px;font-weight:600;color:#475569">Тема
+              <input x-model="fbForm.subject" class="input" placeholder="Например: предложение по интерфейсу" style="margin-top:4px">
+            </label>
+            <label style="font-size:13px;font-weight:600;color:#475569">Контакт для ответа (необязательно)
+              <input x-model="fbForm.contact" class="input" placeholder="email или телеграм" style="margin-top:4px">
+            </label>
+            <label style="font-size:13px;font-weight:600;color:#475569">Сообщение
+              <textarea x-model="fbForm.message" class="input" placeholder="Опишите вопрос, идею или проблему" style="margin-top:4px;min-height:120px"></textarea>
+            </label>
+            <button @click="fbSend()" class="btn btn-primary" :disabled="fbBusy || !fbForm.message.trim()" style="justify-content:center">
+              <span x-text="fbBusy?'Отправка...':'Отправить'"></span>
+            </button>
+            <p style="font-size:11px;color:#94a3b8;margin:0">Письмо уходит разработчику на sanxzet@gmail.com через ваш SMTP (Настройки → SMTP).</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Settings -->
     <div x-show="page==='settings'" class="fade-in" style="padding:32px">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:20px;flex-wrap:wrap">
@@ -3582,6 +3632,7 @@ function app() {
     updChangelog: { open:false, title:'', commits:[] },
     componentsList: [], compBusy: false,
     compLog: { open:false, id:null, name:'', text:'' },
+    fbForm: { subject:'', contact:'', message:'' }, fbBusy: false,
     s2sAccess: { default_policy:'allow_all', sites:[], rules:[] },
     s2sBusy: false,
     s2sApplyResult: null,
@@ -3659,7 +3710,7 @@ function app() {
     },
 
     get pageTitle() {
-      const titles = { dashboard:'Дашборд', stats:'Статистика', servers:'Серверы', users:'Клиенты', orgs:'Организации', logs:'Логи', audit:'Журнал', ca:'Сертификаты', settings:'Настройки', security:'Безопасность', modules:'Модули', billing:'Биллинг', s2s:'Площадки', routes:'Маршруты', components:'Компоненты', updates:'Обновления' };
+      const titles = { dashboard:'Дашборд', stats:'Статистика', servers:'Серверы', users:'Клиенты', orgs:'Организации', logs:'Логи', audit:'Журнал', ca:'Сертификаты', settings:'Настройки', security:'Безопасность', modules:'Модули', billing:'Биллинг', s2s:'Площадки', routes:'Маршруты', components:'Компоненты', updates:'Обновления', developer:'Разработчик' };
       return (titles[this.page] || '') + ' — Click VPN';
     },
     get totalOnline() {
@@ -5034,6 +5085,15 @@ function app() {
       finally { this.routeBusy = false; }
     },
 
+    async fbSend() {
+      this.fbBusy = true;
+      try {
+        await this.api('POST', '/feedback', { subject:this.fbForm.subject.trim(), contact:this.fbForm.contact.trim()||null, message:this.fbForm.message.trim() });
+        alert('Спасибо! Сообщение отправлено разработчику.');
+        this.fbForm = { subject:'', contact:'', message:'' };
+      } catch(e) { alert('❌ '+e.message); }
+      finally { this.fbBusy = false; }
+    },
     async loadComponents() {
       this.compBusy = true;
       try { this.componentsList = await this.api('GET', '/components') || []; }
