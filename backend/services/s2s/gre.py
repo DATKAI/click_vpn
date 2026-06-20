@@ -90,7 +90,8 @@ def _build_scripts(tag: str, hub_site, gre_spokes: list) -> tuple[str, str]:
         rwan = _host(spoke)
         up += [
             f"ip link del {ifc} 2>/dev/null || true",
-            f"ip link add {ifc} type gre local {hub_wan} remote {rwan} key {spoke.id} ttl 255",
+            # без GRE key: MikroTik не поддерживает ключи; туннели демультиплексируются по remote IP
+            f"ip link add {ifc} type gre local {hub_wan} remote {rwan} ttl 255",
             f"ip addr add {hub_tip}/32 peer {spoke.tunnel_ip} dev {ifc}",
             f"ip link set {ifc} up",
             f"sysctl -w net.ipv4.conf.{ifc}.rp_filter=0 || true",
@@ -225,7 +226,6 @@ def _build_generic_sheet(encrypted: bool, hub_site, spoke, remote_lans: list[str
         f"Тип               : GRE (IP protocol 47){' внутри IPsec transport-mode' if encrypted else ', без шифрования'}\n"
         f"Локальный адрес   : {_host(spoke)}  (публичный IP филиала)\n"
         f"Удалённый адрес   : {host}  (хаб)\n"
-        f"GRE key           : {spoke.id}\n"
         f"Туннельный IP филиала: {spoke.tunnel_ip}\n"
         f"Туннельный IP хаба   : {hub_site.tunnel_ip}\n"
     )
