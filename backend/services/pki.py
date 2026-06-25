@@ -238,7 +238,9 @@ def build_crl(
         x509.CertificateRevocationListBuilder()
         .issuer_name(ca_cert.subject)
         .last_update(now)
-        .next_update(now + timedelta(days=7))
+        # длинный срок: иначе при отсутствии перевыпусков CRL протухает и
+        # OpenVPN (crl-verify) начинает отвергать ВСЕХ клиентов
+        .next_update(now + timedelta(days=3650))
     )
     for serial in revoked_serials:
         revoked = (
