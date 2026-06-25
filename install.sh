@@ -3,7 +3,8 @@
 # Использование: bash install.sh
 set -e
 
-REPO="https://github.com/DATKAI/click_vpn.git"
+# Репозиторий перенесён на GitVerse (GitHub режут в РФ). Можно переопределить: REPO=... bash install.sh
+REPO="${REPO:-https://gitverse.ru/DATKAI/click_vpn.git}"
 INSTALL_DIR="/opt/click-vpn"
 SERVICE_NAME="click-vpn"
 DATA_DIR="/var/lib/click-vpn"

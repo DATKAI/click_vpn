@@ -42,7 +42,7 @@
 
 ```bash
 apt-get install -y git
-git clone https://github.com/DATKAI/click_vpn.git /opt/click-vpn
+git clone https://gitverse.ru/DATKAI/click_vpn.git /opt/click-vpn
 bash /opt/click-vpn/install.sh
 ```
 
